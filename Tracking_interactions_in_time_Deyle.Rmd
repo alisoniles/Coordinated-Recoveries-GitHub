@@ -1,0 +1,236 @@
+---
+title: "When are top-down interactions strong?"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button above a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Modified code From Deyle et al. 2016
+
+Deyle ER, May RM, Munch SB, Sugihara G. 2016 Tracking and forecasting ecosystem interactions in real time. Proc. R. Soc. B 283: 20152258. http://dx.doi.org/10.1098/rspb.2015.2258
+
+This code will reproduce the core S-map calculations for a 4-species food web where a top Predator (P) feeds on two consumers (C1, C2), which in turn feed on a resource (R). This model structure was based of a model by Post et al. 2000. 
+
+Post, D. M., M. E. Conners, D. S. Goldberg. 2000. Prey preference by a top predator and the stability of linked food chains. Ecology 81(1), 8-14.
+
+The core S-map calculations reduce to simply calculating weighted linear regression, so keep in mind that the majority of the code will simply be set-up.
+
+First, we load the necessary packages. Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code.
+
+```{r, echo=FALSE}
+library(Matrix)
+library(quantreg)
+```
+
+Now we run the 4 species coupled food-chain model to generate the time series for study. We define the model equations and parameters here. While the structure of the equations is identical between the two chains, the coefficients differ to prevent synchronization between C1 and C2. 
+
+The mass-specific metabolic rates (xp and xc) scale the body size difference between the predator and consumer. Parameter values for consumer and predator can be specified to match empirical P:C body mass ratios (10-10^3; Peters 1983, Cohen et al. 1993).
+
+The ingestion rates (yp and yc) constrain the metabolic type of the consumer and predaor (endotherm max value 1.6, vertebrate ectotherm max value 3.9, and invertebrate ectotherm max value 19.4; Yodzis & Innes 1992, McCann & Yodzies 1994). 
+
+The model uses a type II functional response for the consumers preying on the resours and the predator preying on the consumers.
+
+Prey selection is incorporated into the model. 
+
+
+```{r}
+params <- list(xp=0.08,  #Mass-specific metabolic rate of the predator
+               yp=1.6, #Ingestion rate per unit metabolic rate of predator
+               pp=0.5, #Prey preference of predator (0 <= pp <= 1).  At pp=1, P preys only on C1, at pp=0.5, P preys on C1 and C2 in proportion to their biomass (i.e. no preference), and at pp=0, P preys only on C2
+               C1star=0.5, #Half-saturation density of consumer 1
+               C2star=0.5, #Half-saturation density of consumer 2
+               xc1=0.15, # Mass-specific metabolic rates of consumers , measured relative to the                             production-to-biomass ratio of the resource population
+               xc2=0.15,
+               yc1=3.9, #Ingestion rate per unit metabolic rate of consumers 
+               yc2=3.9,
+               Rstar=0.3, #Half-saturation density of the resource
+               k=1.2) #Carrying capacity
+
+dR <- function(R,C1,C2,P) R*(1-R/params$k) -
+  params$xc1*params$yc1*(C1*R)/(R+params$Rstar) -
+  params$xc2*params$yc2*(C2*R)/(R+params$Rstar)
+
+dC1 <- function(R,C1,C2,P) params$xc1*params$yc1*(C1*R)/(R+params$Rstar) -
+    (params$pp*C1/(params$pp*C1+(1-params$pp)*C2))*params$xp*params$yp*(P*C1)/(C1+params$C1star) - params$xc1*C1
+
+dC2 <- function(R,C1,C2,P) params$xc2*params$yc2*(C2*R)/(R+params$Rstar) -
+    ((1-params$pp)*C2/(params$pp*C1+(1-params$pp)*C2))*params$xp*params$yp*(P*C2)/(C2+params$C2star) - params$xc2*C2
+
+dP <- function(R,C1,C2,P) (params$pp*C1/(params$pp*C1+(1-params$pp)*C2))*params$xp*params$yp*(P*C1)/(C1+params$C1star) + 
+  ((1-params$pp)*C2/(params$pp*C1+(1-params$pp)*C2))*params$xp*params$yp*(P*C2)/(C2+params$C2star) -
+    params$xp*P
+
+dF <- function(R,C1,C2,P) c(dR(R,C1,C2,P), dC1(R,C1,C2,P), dC2(R,C1,C2,P), dP(R,C1,C2,P))
+```
+And the simulation parameters. The equations were solved using the basic Euler method with step size Δt = 0.01. The time series of all five variables were decimated to every 5th time point, then normalized to have a mean of 0 and standard deviation of 1 before analysis with S-maps.
+```{r}
+tmax <- 10000; tau <- 5; dt <- 1/100; burn <- 200 
+d <- array(data = 0, dim = c(tmax/tau,4)) 
+colnames(d) <- c( 'R' , 'C1' , 'C2' , 'P' )
+```
+We run the model with initial conditions (R, C1, C2, P) = (1, 0.5, 0.8, 0.7). Note that we start with a burn period to insure the dynamics relax to the attractor manifold.
+```{r}
+Xi <- c(1,.5,.8,.7)  #initial conditions for the 4 species (R, C1, C2, P)
+
+#>>>RUN BURN<<<  start with a burn period to insure the dynamics relax to the attractor manifold
+idex <- 0
+while(idex< burn*(1/dt)){
+    idex  <- idex+1;
+Xi <- Xi + dt*do.call(dF,as.list(Xi)) }
+
+#>>>RUN MODEL<<<
+d[1,] <- Xi
+idex <- 0; tdex <- 2
+while(idex<tmax*(1/dt)){
+idex <- idex+1;
+Xi <- Xi + dt*do.call(dF,as.list(Xi))
+    if( (idex*dt) %% tau == 0 && tdex < tmax/tau){
+        d[tdex,] <- Xi
+        tdex <- tdex+1
+    }
+}
+```
+Here, we are going to focus on the effects on consumer C1.
+```{r}
+targ_col <- 2
+```
+The effect of predator P2 on C1 is very indirect, and we find can in fact be safely ignored. Thus, we only need to consider the four-dimensional space given by R, C1, C2, and P1.
+```{r}
+Embedding <- c("R","C1","C2","P") 
+Edim <- length(Embedding)
+
+d <- d[,Embedding]
+
+coeff_names <- sapply(colnames(d),function(x) paste("d", colnames(d)[targ_col], "d", x, sep = ""))
+```
+For the weighted linear regression, we will be
+```{r}
+block <- cbind(d[2:dim(d)[1],targ_col],d[1:(dim(d)[1]-1),]) 
+norm_consts <- apply(block, 2, function(x) sd(x))
+block <- as.data.frame(apply(block, 2, function(x) (x-mean(x))/sd(x)))
+ 
+```
+We have a few final parameters to set for the S-map regression.
+```{r}
+lib <- 1:dim(block)[1] 
+pred <- 1:dim(block)[1] 
+theta <- 8
+ 
+```
+and we need to set up output.
+```{r}
+coeff <- array(0,dim=c(length(pred),Edim)) 
+colnames(coeff) <- coeff_names
+coeff <- as.data.frame(coeff)
+ 
+```
+Finally, to stay consistent with prior applications of S-maps, we will use SVD to solve the weighted linear regression. For ease, we put this into a single function that is similar to the basic lm() function in R. The lm() function could be used instead, but it computes the regression using QR instead of SVD.
+```{r}
+lm_svdsolve <- function(y, x, ws, subset = seq_along(y)){ 
+  x <- x[subset,]
+  y <- y[subset]
+  ws <- ws[subset]
+  
+  # prepended column of 1s for constant term in linear model
+  A <- cbind(1, x) * ws 
+  A_svd <- svd(A)
+  
+  # >>REMOVE SMALL SINGULAR VALUES<<
+  s <- A_svd$d
+  s_inv <- matrix(0, nrow = dim(x)[2]+1, ncol = dim(x)[2]+1) 
+  for(i in seq_along(s))
+  {
+    if(s[i] >= max(s) * 1e-5) s_inv[i,i] <- 1/s[i]
+  }
+
+  coeff <- A_svd$v %*% s_inv %*% t(A_svd$u) %*% (ws * y)
+  coeff <- t(coeff)
+  
+  colnames(coeff) <- c("const",colnames(x))
+  return(coeff) 
+}
+```
+Now, all the preceding code was just to set up the calculation. We now loop over each prediction point to actually calculate the S-map locally weighted regression for each prediction point. This calculation is quite simple. (1) We calculate the (normalized) Euclidian distance from the target point to the other points on the attractor. (2) These distances then become the weights for a weighted linear regression, which we solve using singular value decomposition (SVD).
+```{r}
+# >>CALCULATE COEFFICIENTS<<
+for (ipred in 1:length(pred)){
+
+  #target point is excluded from the fitting procedure
+  libs = lib[-pred[ipred]]
+  
+  # >>CALCULATE WEIGHTS<<
+  q <- matrix(as.numeric(block[pred[ipred],2:dim(block)[2]]), 
+              ncol=Edim, nrow=length(libs), byrow = T)
+  distances <- sqrt(rowSums((block[libs,2:dim(block)[2]] - q)^2)) 
+  dbar <- mean(distances)
+  Ws <- exp(-theta*distances/dbar)
+  
+  # >>REGRESS<<
+  svd_fit <- lm_svdsolve(block[libs,1],block[libs,2:dim(block)[2]],Ws) 
+  coeff[ipred,] <- svd_fit[-1]
+}
+
+coeff <- cbind(pred,coeff) 
+colnames(coeff)[1] <- "t"
+```
+We can plot a time series of these coeffcients over a span of time.
+```{r}
+par(mfrow = c(1,1))
+trange <- 1:500
+
+plot(coeff[trange,"t"],coeff[trange,"dC1dR"],type="l",col="green",xlab="time", 
+     ylab=expression(partialdiff*C[1] / partialdiff*R), 
+     ylim=range(coeff[trange,"dC1dR"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+```{r}
+plot(coeff[trange,"t"],coeff[trange,"dC1dC2"],type="l",col="blue",xlab="time", 
+     ylab=expression(partialdiff*C[1] / partialdiff*C[2]), 
+     ylim=range(coeff[trange,"dC1dC2"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+
+```{r}
+plot(coeff[trange,"t"],coeff[trange,"dC1dP"],type="l",col="red",xlab="time",
+     ylab=expression(partialdiff*C[1] / partialdiff*P[1]), 
+     ylim=range(coeff[trange,"dC1dP"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+
+We can also plot the predation coeffcient to show how predation on C1 changes with resource-limitation for C1.
+```{r}
+qL <- rq(coeff$dC1dP ~ coeff$dC1dR,.05) 
+qU <- rq(coeff$dC1dP ~ coeff$dC1dR,.95)
+plot(coeff[1001:1999, 'dC1dR' ],coeff[1001:1999, 'dC1dP' ], 
+     xlab=expression(partialdiff*C[1] / partialdiff*R), 
+     ylab=expression(partialdiff*C[1] / partialdiff*P), 
+     xlim=range(coeff[trange,"dC1dR"]),ylim=range(coeff[trange,"dC1dP"]),pch=8)
+abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
+```
+
+We can also plot the predation coefficient of P on C1 with respect to the competition coeffiction with species C2
+
+```{r}
+qL <- rq(coeff$dC1dP ~ coeff$dC1dC2,.05) 
+qU <- rq(coeff$dC1dP ~ coeff$dC1dC2,.95)
+plot(coeff[1001:1999, 'dC1dC2' ],coeff[1001:1999, 'dC1dP' ], 
+     xlab=expression(partialdiff*C[1] / partialdiff*C2), 
+     ylab=expression(partialdiff*C[1] / partialdiff*P), 
+     xlim=range(coeff[trange,"dC1dC2"]),ylim=range(coeff[trange,"dC1dP"]),pch=8)
+abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
+```
+
