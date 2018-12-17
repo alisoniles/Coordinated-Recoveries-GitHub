@@ -261,6 +261,7 @@ Significant effect of PDO on IHR Spring/Summer chinook population size (monotoni
 sealion.csv$FChnk <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1974 & IHR_Fall_Chinook.csv$year<2015)]
 sealion.csv$SChnk <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1974 & IHR_SprSum_Chinook.csv$year<2015)]
 sealion.csv$PDO <- PDO.csv$PDOya[which(PDO.csv$Year>1974 & PDO.csv$Year<2015)]
+sealion.csv$SR_Orca <- PDO.csv$PDOya[which(PDO.csv$Year>1974 & PDO.csv$Year<2015)]
 
 # Fall Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of Fall chinook)
 
@@ -441,6 +442,71 @@ legend(25,0.83,c("Fall Chinook xmap male sea lion","Male sea lion xmap Fall Chin
 
 ```
 Significant 2-way interaction between Fall Chinook and male sea lion population estimates!
+
+```{r}
+# Orca cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of Orca dynamics)
+SRKW <- NULL
+SRKW$Male <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+SRKW$SR_Orca <- SRKW.csv$SR_Orca[which(SRKW.csv$Year>1975 & SRKW.csv$Year<2015)]
+SRKW <- data.frame(SRKW)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(SRKW, E = E.t, lib_column = "SR_Orca", target_column = "Male", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SR_Orca_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SR_Orca_ccmE_SLM*2,40,2))
+
+# CCM analysis with varying library size (L)
+SR_Orca_ccm_SLM <- ccm(SRKW, E=E_SR_Orca_ccmE_SLM,lib_column="SR_Orca", target_column="Male",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nKW_SLMq=as.matrix(aggregate(SR_Orca_ccm_SLM[,c('rho')],by = list(as.factor(SR_Orca_ccm_SLM$lib_size)), quantile)[,'x'])
+apply(nKW_SLMq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# Orca cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of Orca dynamics)
+
+plot(nKW_SLMq[,3]~libs,type="l",col="red",ylim=c(0.4,0.9),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nKW_SLMq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nKW_SLMq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+
+###########################################################
+# Male sea lion cross-mapping Orcas (i.e. testing Orcas as a cause of male sea lions)
+
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(SRKW, E = E.t, lib_column = "Male", target_column = "SR_Orca", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SLM_ccmE_SR_Orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SLM_ccmE_SR_Orca*2,40,2))
+
+# CCM analysis with varying library size (L)
+SLM_ccm_SR_Orca <- ccm(SRKW, E=E_SLM_ccmE_SR_Orca,lib_column="Male", target_column="SR_Orca",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSLM_KWq=as.matrix(aggregate(SLM_ccm_SR_Orca[,c('rho')],by = list(as.factor(SLM_ccm_SR_Orca$lib_size)), quantile)[,'x'])
+apply(nSLM_KWq[,2:5],2,MannKendall)
+
+# Male sea lion cross-mapping Orcas (i.e. testing Orcas as a cause of male sea lions)
+lines(nSLM_KWq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nSLM_KWq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nSLM_KWq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(20,0.55,c("Orca xmap male sea lion","Male sea lion xmap Orca"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
+
+```
 
 ```{r}
 # Spring/Summer Chinook cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of S/S chinook)
@@ -691,7 +757,7 @@ apply(nSL_PDOq[,2:5],2,MannKendall)
 lines(nSL_PDOq[,3]~libs,col="blue",lwd=1,lty=1) # median 
 lines(nSL_PDOq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(nSL_PDOq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(18,0.3,c("PDO cross-mapping sea lions","Sea lions cross-mapping PDO"),lty=c(1,1),col=c("red","blue"))
+legend(18,0.3,c("PDO cross-mapping sea lion pup counts","Sea lion pup counts cross-mapping PDO"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'PDO'],dat[,'PDO']),lty=3)
 ```
 No significant effect of PDO on sea lion populations
@@ -829,6 +895,11 @@ The SRKW time series: 43 years from 1976 to 2018
 Sea kuib time series: 40 years form 1975 to 2014
 
 ```{r}
+library(Matrix) 
+library(quantreg)
+ 
+
+
 Embedding <- c("FC","FC-5","SC","PDO", "KW", "SL") 
 Edim <- length(Embedding)
 d <- array(data = 0, dim = c(39,Edim)) 
@@ -841,7 +912,7 @@ d[,6] <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
 
 colnames(d) <-  c("FC", "FC-5","SC","PDO", "KW", "SL") 
 
-targ_col <- 1
+targ_col <- 5
 coeff_names <- sapply(colnames(d),function(x) paste("d", colnames(d)[targ_col], "d", x, sep = ""))
 ```
 For the weighted linear regression, we will be
@@ -1006,18 +1077,6 @@ abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
 ```
 ```{r}
-qL <- rq(coeff$dFCdSC ~ coeff$dFCdPDO,alpha=0.05,.05) 
-qU <- rq(coeff$dFCdSC ~ coeff$dFCdPDO,alpha=0.05,.95)
-plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSC' ], 
-     xlab=expression(partialdiff*FC / partialdiff*PDO), 
-     ylab=expression(partialdiff*FC / partialdiff*SC), 
-     xlim=range(coeff[trange,"dFCdPDO"]),ylim=range(coeff[trange,"dFCdSC"]),pch=8)
-abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
-abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
-abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
-```
-
-```{r}
 qL <- rq(coeff$dFCdSL ~ coeff$dFCdPDO,alpha=0.05,.05) 
 qU <- rq(coeff$dFCdSL ~ coeff$dFCdPDO,alpha=0.05,.95)
 plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSL' ], 
@@ -1027,4 +1086,130 @@ plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSL' ],
 abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
+```
+
+```{r}
+qL <- rq(coeff$dFCdSL ~ coeff$dFCdKW,alpha=0.05,.05) 
+qU <- rq(coeff$dFCdSL ~ coeff$dFCdKW,alpha=0.05,.95)
+plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSL' ], 
+     xlab=expression(partialdiff*FC / partialdiff*KW), 
+     ylab=expression(partialdiff*FC / partialdiff*SL), 
+     xlim=range(coeff[trange,"dFCd"]),ylim=range(coeff[trange,"dFCdSL"]),pch=8)
+abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
+abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
+```
+
+Re-run smap analysis for the Orca in order to calculate the partial interaction strengths of Male sea lions on orcas. If negative, this could explain the positive net effect that male sea lions have on Chinook. 
+
+```{r}
+Embedding <- c("FC","SC","PDO", "KW", "SL") 
+Edim <- length(Embedding)
+d <- array(data = 0, dim = c(39,Edim)) 
+d[,1] <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1975 & IHR_Fall_Chinook.csv$year<2015)]
+d[,2] <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1975 & IHR_SprSum_Chinook.csv$year<2015)]
+d[,3] <- PDO.csv$PDOya[which(PDO.csv$Year>1975 & PDO.csv$Year<2015)]
+d[,4] <- SRKW.csv$SR_Orca[which(SRKW.csv$Year<2015)]
+d[,5] <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+
+colnames(d) <-  c("FC", "SC","PDO", "KW", "SL") 
+
+targ_col <- 4 #Target species: Orcas
+coeff_names <- sapply(colnames(d),function(x) paste("d", colnames(d)[targ_col], "d", x, sep = ""))
+
+block <- cbind(d[2:dim(d)[1],targ_col],d[1:(dim(d)[1]-1),]) 
+norm_consts <- apply(block, 2, function(x) sd(x))
+block <- as.data.frame(apply(block, 2, function(x) (x-mean(x))/sd(x)))
+
+
+lib <- 1:dim(block)[1] 
+pred <- 1:dim(block)[1] 
+theta <- 3
+
+
+coeff <- array(0,dim=c(length(pred),Edim)) 
+colnames(coeff) <- coeff_names
+coeff <- as.data.frame(coeff)
+ 
+
+lm_svdsolve <- function(y, x, ws, subset = seq_along(y)){ 
+  x <- x[subset,]
+  y <- y[subset]
+  ws <- ws[subset]
+  
+  # prepended column of 1s for constant term in linear model
+  A <- cbind(1, x) * ws 
+  A_svd <- svd(A)
+  
+  # >>REMOVE SMALL SINGULAR VALUES<<
+  s <- A_svd$d
+  s_inv <- matrix(0, nrow = dim(x)[2]+1, ncol = dim(x)[2]+1) 
+  for(i in seq_along(s))
+  {
+    if(s[i] >= max(s) * 1e-5) s_inv[i,i] <- 1/s[i]
+  }
+
+  coeff <- A_svd$v %*% s_inv %*% t(A_svd$u) %*% (ws * y)
+  coeff <- t(coeff)
+  
+  colnames(coeff) <- c("const",colnames(x))
+  return(coeff) 
+}
+
+# >>CALCULATE COEFFICIENTS<<
+for (ipred in 1:length(pred)){
+
+  #target point is excluded from the fitting procedure
+  libs = lib[-pred[ipred]]
+  
+  # >>CALCULATE WEIGHTS<<
+  q <- matrix(as.numeric(block[pred[ipred],2:dim(block)[2]]), 
+              ncol=Edim, nrow=length(libs), byrow = T)
+  distances <- sqrt(rowSums((block[libs,2:dim(block)[2]] - q)^2)) 
+  dbar <- mean(distances)
+  Ws <- exp(-theta*distances/dbar)
+  
+  # >>REGRESS<<
+  svd_fit <- lm_svdsolve(block[libs,1],block[libs,2:dim(block)[2]],Ws) 
+  coeff[ipred,] <- svd_fit[-1]
+}
+
+coeff <- cbind(pred,coeff) 
+colnames(coeff)[1] <- "t"
+
+
+l<-dim(block[1])[1]  #number of datapoints for plotting
+par(mfrow = c(1,1))
+trange <- 1:l
+
+
+plot(coeff[trange,"t"],coeff[trange,"dKWdSL"],type="l",col="green",xlab="time", 
+     ylab=expression(partialdiff*KW / partialdiff*SL), 
+     ylim=range(coeff[trange,"dKWdSL"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+
+```{r}
+
+plot(coeff[trange,"t"],coeff[trange,"dKWdFC"],type="l",col="green",xlab="time", 
+     ylab=expression(partialdiff*KW / partialdiff*FC), 
+     ylim=range(coeff[trange,"dKWdFC"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+
+```{r}
+
+plot(coeff[trange,"t"],coeff[trange,"dKWdSC"],type="l",col="green",xlab="time", 
+     ylab=expression(partialdiff*KW / partialdiff*SC), 
+     ylim=range(coeff[trange,"dKWdSC"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+```
+
+
+```{r}
+
+plot(coeff[trange,"t"],coeff[trange,"dKWdPDO"],type="l",col="green",xlab="time", 
+     ylab=expression(partialdiff*KW / partialdiff*PDO), 
+     ylim=range(coeff[trange,"dKWdPDO"]),xlim=range(trange),lwd=2)
+abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
 ```
