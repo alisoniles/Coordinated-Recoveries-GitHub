@@ -143,7 +143,7 @@ for(E.t in 2:9){
 (E_ccm_PDO <- E.test.PDO$E[which.max(E.test.PDO$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_ccm_PDO,57,2))
+libs <- c(seq(E_ccm_PDO*1.5,57,2))
 
 # CCM analysis with varying library size (L)
 FChnk_xmap_PDO <- ccm(dat, E=E_ccm_PDO,lib_column="FChnk", target_column="PDO",
@@ -155,7 +155,7 @@ apply(nCPq[,2:5],2,MannKendall)
 
 # Plot forecast skill vs library size
 # Fall Chinook cross-mapping PDO
-plot(nCPq[,3]~libs,type="l",col="red",ylim=c(0.2,0.6),lwd=2,
+plot(nCPq[,3]~libs,type="l",col="red",ylim=c(0.1,0.6),lwd=2,
      main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
 lines(nCPq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
 lines(nCPq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
@@ -170,7 +170,7 @@ for(E.t in 2:9){
 E_ccm_FChnk <- E.test.FChnk$E[which.max(E.test.FChnk$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_ccm_FChnk,57,2))
+libs <- c(seq(E_ccm_FChnk*1.5,57,2))
 
 # CCM analysis with varying library size (L)
 PDO_xmap_FChnk <- ccm(dat, E=E_ccm_FChnk,lib_column="PDO", target_column="FChnk",
@@ -184,75 +184,12 @@ apply(nPCq[,2:5],2,MannKendall)
 lines(nPCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
 lines(nPCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(nPCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(30,0.3,c("Fall Chinook cross-mapping PDO","PDO cross-mapping Fall Chinook"),lty=c(1,1),col=c("red","blue"))
+legend(25,0.25,c("Fall Chinook xmap PDO","PDO xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'FChnk'],dat[,'PDO']),lty=3)
 
 ```
 Significant effect of PDO on IHR Fall chinook population size (monotonic increasing trend in red) but no significant effect of chinook on PDO (in blue, as expected of course)
 
-```{r}
-## Spring/Summer Chinook interaction with PDO
-
-
-# Spring/Summer Chinook cross-mapping PDO (i.e. testing PDO as a cause of Spring/Summer chinook)
-
-# Determine the embedding dimension
-E.test.PDO=NULL
-for(E.t in 2:9){
-  E.temp <- ccm(dat, E = E.t, lib_column = "SChnk", target_column = "PDO", lib_sizes = 57, num_samples = 1, tp=-1,random_libs = F)
-  E.test.PDO=rbind(E.test.PDO,E.temp)}
-E_ccm_PDO <- E.test.PDO$E[which.max(E.test.PDO$rho)[1]] # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_ccm_PDO,57,2))
-
-# CCM analysis with varying library size (L)
-SChnk_xmap_PDO <- ccm(dat, E=E_ccm_PDO,lib_column="SChnk", target_column="PDO",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nCPq=as.matrix(aggregate(SChnk_xmap_PDO[,c('rho')],by = list(as.factor(SChnk_xmap_PDO$lib_size)), quantile)[,'x'])
-apply(nCPq[,2:5],2,MannKendall)
-
-
-# Plot forecast skill vs library size
-# Spring/Summer Chinook cross-mapping PDO
-plot(nCPq[,3]~libs,type="l",col="red",ylim=c(0.2,0.6),lwd=2,
-     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
-lines(nCPq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
-lines(nCPq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
-
-
-###########################################################
-# PDO cross-mapping Fall Chinook (i.e. testing Fall chinook as a cause of PDO - makes no sense, just exploring the methodology)
-# Determine the embedding dimension
-E.test.SChnk=NULL
-for(E.t in 2:9){
-  E.temp <- ccm(dat, E = E.t, lib_column = "PDO", target_column = "SChnk", lib_sizes = 57, num_samples = 1, tp=-1,random_libs = F)
-  E.test.SChnk=rbind(E.test.SChnk,E.temp)}
-(E_ccm_SChnk <- E.test.SChnk$E[which.max(E.test.SChnk$rho)[1]]) # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_ccm_SChnk,57,2))
-
-# CCM analysis with varying library size (L)
-PDO_xmap_SChnk <- ccm(dat, E=E_ccm_SChnk,lib_column="PDO", target_column="SChnk",
-                lib_sizes=libs, num_samples=50, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nPCq=as.matrix(aggregate(PDO_xmap_SChnk[,c('rho')],by = list(as.factor(PDO_xmap_SChnk$lib_size)), quantile)[,'x'])
-apply(nPCq[,2:5],2,MannKendall)
-
-
-# PDO cross-mapping Spring/Summer Chinook 
-lines(nPCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
-lines(nPCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
-lines(nPCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(30,0.25,c("S/S Chinook cross-mapping PDO","PDO cross-mapping S/S Chinook"),lty=c(1,1),col=c("red","blue"))
-#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
-
-```
-Significant effect of PDO on IHR Spring/Summer chinook population size (monotonic increasing trend in red) but no significant effect of chinook on PDO (in blue, as expected of course)
 
 ```{r}
 ## Sealion - Chinook interaction 
@@ -273,7 +210,7 @@ for(E.t in 2:9){
 (E_FChnk_ccmE_SL <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_FChnk_ccmE_SL*2,40,2))
+libs <- c(seq(E_FChnk_ccmE_SL*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 FChnk_ccm_SL <- ccm(sealion.csv, E=E_FChnk_ccmE_SL,lib_column="FChnk", target_column="Pup.count",
@@ -286,7 +223,7 @@ apply(nFC_SLq[,2:5],2,MannKendall)
 
 # Plot forecast skill vs library size
 # Fall Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of Fall chinook)
-plot(nFC_SLq[,3]~libs,type="l",col="red",ylim=c(0.6,0.9),lwd=2,
+plot(nFC_SLq[,3]~libs,type="l",col="red",ylim=c(0.5,0.9),lwd=2,
      main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
 lines(nFC_SLq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
 lines(nFC_SLq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
@@ -302,7 +239,7 @@ for(E.t in 2:9){
 (E_SL_ccmE_FChnk <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SL_ccmE_FChnk,40,2))
+libs <- c(seq(E_SL_ccmE_FChnk*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 SL_ccm_FChnk <- ccm(sealion.csv, E=E_SL_ccmE_FChnk,lib_column="Pup.count", target_column="FChnk",
@@ -316,73 +253,11 @@ apply(nSL_FCq[,2:5],2,MannKendall)
 lines(nSL_FCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
 lines(nSL_FCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(nSL_FCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(20,0.65,c("Fall Chinook xmap sea lion pup count","Sea lion pup count xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
+legend(15,0.6,c("Fall Chinook xmap sea lion pup count","Sea lion pup count xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'FChnk'],dat[,'PDO']),lty=3)
 
 ```
 No significant effect of sea lion pup counts on IHR Fall Chinook (in red), but a significant effect of IHR Fall Chinook on sea lion pup counts (in blue). 
-
-```{r}
-# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:8){
-  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "SChnk", target_column = "Pup.count", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-E_SChnk_ccmE_SL <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_SChnk_ccmE_SL*2,40,2))
-
-# CCM analysis with varying library size (L)
-SChnk_ccm_SL <- ccm(sealion.csv, E=E_SChnk_ccmE_SL,lib_column="SChnk", target_column="Pup.count",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nSC_SLq=as.matrix(aggregate(SChnk_ccm_SL[,c('rho')],by = list(as.factor(SChnk_ccm_SL$lib_size)), quantile)[,'x'])
-apply(nSC_SLq[,2:5],2,MannKendall)
-
-# Plot forecast skill vs library size
-# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
-plot(nSC_SLq[,3]~libs,type="l",col="red",ylim=c(0.5,0.7),lwd=2,
-     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
-lines(nSC_SLq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
-lines(nSC_SLq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
-
-
-###########################################################
-# Sealion cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of sea lions)
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:8){
-  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "Pup.count", target_column = "SChnk", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-E_SL_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_SL_ccmE_SChnk*2,40,2))
-
-# CCM analysis with varying library size (L)
-SL_ccm_SChnk <- ccm(sealion.csv, E=E_SL_ccmE_SChnk,lib_column="Pup.count", target_column="SChnk",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nSL_SCq=as.matrix(aggregate(SL_ccm_SChnk[,c('rho')],by = list(as.factor(SL_ccm_SChnk$lib_size)), quantile)[,'x'])
-apply(nSL_SCq[,2:5],2,MannKendall)
-
-
-
-
-# Sealion pupcount cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of sea lion pup count)
-lines(nSL_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
-lines(nSL_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
-lines(nSL_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(20,0.55,c("S/S Chinook xmap sea lion pup count","Sea lion pup count xmap S/S Chinook"),lty=c(1,1),col=c("red","blue"))
-#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
-
-```
 ```{r}
 # Fall Chinook cross-mapping male sea lion population estimate (i.e. testing male sea lions as a cause of Fall chinook)
 
@@ -394,7 +269,7 @@ for(E.t in 2:9){
 (E_FChnk_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_FChnk_ccmE_SLM*2,40,2))
+libs <- c(seq(E_FChnk_ccmE_SLM,40,2))
 
 # CCM analysis with varying library size (L)
 FChnk_ccm_SLM <- ccm(sealion.csv, E=E_FChnk_ccmE_SLM,lib_column="FChnk", target_column="Male",
@@ -437,16 +312,349 @@ apply(nSLM_FCq[,2:5],2,MannKendall)
 lines(nSLM_FCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
 lines(nSLM_FCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(nSLM_FCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(25,0.83,c("Fall Chinook xmap male sea lion","Male sea lion xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
+legend(22,0.80,c("Fall Chinook xmap male sea lion","Male sea lion xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'FChnk'],dat[,'PDO']),lty=3)
 
 ```
 Significant 2-way interaction between Fall Chinook and male sea lion population estimates!
 
 ```{r}
-# Orca cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of Orca dynamics)
+## Orca - Chinook interaction 
+
+# select Chinook and PDO data between 1976 and 2018 - years for SR Orca population counts
+SRKW.csv$FChnk <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1975 & IHR_Fall_Chinook.csv$year<2019)]
+SRKW.csv$SChnk <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1975 & IHR_SprSum_Chinook.csv$year<2019)]
+SRKW.csv$PDO <- PDO.csv$PDOya[which(PDO.csv$Year>1975 & PDO.csv$Year<2019)]
+
+# Fall Chinook cross-mapping orcas (i.e. testing orcas as a cause of Fall chinook)
+
+
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "FChnk", target_column = "SR_Orca", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+(E_FChnk_ccmE_orca <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_FChnk_ccmE_orca*1.5,43,2))
+
+# CCM analysis with varying library size (L)
+FChnk_ccm_orca <- ccm(SRKW.csv, E=E_FChnk_ccmE_orca,lib_column="FChnk", target_column="SR_Orca",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nFC_orcaq=as.matrix(aggregate(FChnk_ccm_orca[,c('rho')],by = list(as.factor(FChnk_ccm_orca$lib_size)), quantile)[,'x'])
+apply(nFC_orcaq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# Fall Chinook cross-mapping orca (i.e. testing orcas as a cause of Fall chinook)
+plot(nFC_orcaq[,3]~libs,type="l",col="red",ylim=c(0.4,0.9),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nFC_orcaq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nFC_orcaq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+###########################################################
+# Orcas cross-mapping Fall Chinook (i.e. testing Fall chinook as a cause of orca populations)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SR_Orca", target_column = "FChnk", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+(E_orca_ccmE_FChnk <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_orca_ccmE_FChnk*1.5,43,2))
+
+# CCM analysis with varying library size (L)
+orca_ccm_FChnk <- ccm(SRKW.csv, E=E_orca_ccmE_FChnk,lib_column="SR_Orca", target_column="FChnk",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+norca_FCq=as.matrix(aggregate(orca_ccm_FChnk[,c('rho')],by = list(as.factor(orca_ccm_FChnk$lib_size)), quantile)[,'x'])
+apply(norca_FCq[,2:5],2,MannKendall)
+
+
+
+# orca cross-mapping Fall Chinoon (i.e. testing Fall chinook as a cause of orcas)
+lines(norca_FCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(norca_FCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(norca_FCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(22,0.55,c("Fall Chinook xmap SR orcas","SR orcas xmap Fall chinook"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'FChnk'],dat[,'PDO']),lty=3)
+
+```
+Significant 2-way interaction between Fall Chinook at IHR dam and the Southern Resident orca population
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+## Spring/Summer Chinook interaction with PDO
+
+
+# Spring/Summer Chinook cross-mapping PDO (i.e. testing PDO as a cause of Spring/Summer chinook)
+
+# Determine the embedding dimension
+E.test.PDO=NULL
+for(E.t in 2:9){
+  E.temp <- ccm(dat, E = E.t, lib_column = "SChnk", target_column = "PDO", lib_sizes = 57, num_samples = 1, tp=-1,random_libs = F)
+  E.test.PDO=rbind(E.test.PDO,E.temp)}
+E_ccm_PDO <- E.test.PDO$E[which.max(E.test.PDO$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_ccm_PDO*1.5,57,2))
+
+# CCM analysis with varying library size (L)
+SChnk_xmap_PDO <- ccm(dat, E=E_ccm_PDO,lib_column="SChnk", target_column="PDO",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nCPq=as.matrix(aggregate(SChnk_xmap_PDO[,c('rho')],by = list(as.factor(SChnk_xmap_PDO$lib_size)), quantile)[,'x'])
+apply(nCPq[,2:5],2,MannKendall)
+
+
+# Plot forecast skill vs library size
+# Spring/Summer Chinook cross-mapping PDO
+plot(nCPq[,3]~libs,type="l",col="red",ylim=c(0.05,0.65),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nCPq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nCPq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+
+###########################################################
+# PDO cross-mapping Fall Chinook (i.e. testing Fall chinook as a cause of PDO - makes no sense, just exploring the methodology)
+# Determine the embedding dimension
+E.test.SChnk=NULL
+for(E.t in 2:9){
+  E.temp <- ccm(dat, E = E.t, lib_column = "PDO", target_column = "SChnk", lib_sizes = 57, num_samples = 1, tp=-1,random_libs = F)
+  E.test.SChnk=rbind(E.test.SChnk,E.temp)}
+(E_ccm_SChnk <- E.test.SChnk$E[which.max(E.test.SChnk$rho)[1]]) # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_ccm_SChnk*1.5,57,2))
+
+# CCM analysis with varying library size (L)
+PDO_xmap_SChnk <- ccm(dat, E=E_ccm_SChnk,lib_column="PDO", target_column="SChnk",
+                lib_sizes=libs, num_samples=50, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nPCq=as.matrix(aggregate(PDO_xmap_SChnk[,c('rho')],by = list(as.factor(PDO_xmap_SChnk$lib_size)), quantile)[,'x'])
+apply(nPCq[,2:5],2,MannKendall)
+
+
+# PDO cross-mapping Spring/Summer Chinook 
+lines(nPCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nPCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nPCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(30,0.2,c("S/S Chinook cross-mapping PDO","PDO cross-mapping S/S Chinook"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
+
+```
+
+Significant effect of PDO on IHR Spring/Summer chinook population size (monotonic increasing trend in red) but no significant effect of chinook on PDO (in blue, as expected of course)
+
+```{r}
+# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "SChnk", target_column = "Pup.count", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SChnk_ccmE_SL <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SChnk_ccmE_SL*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+SChnk_ccm_SL <- ccm(sealion.csv, E=E_SChnk_ccmE_SL,lib_column="SChnk", target_column="Pup.count",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSC_SLq=as.matrix(aggregate(SChnk_ccm_SL[,c('rho')],by = list(as.factor(SChnk_ccm_SL$lib_size)), quantile)[,'x'])
+apply(nSC_SLq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
+plot(nSC_SLq[,3]~libs,type="l",col="red",ylim=c(0.4,0.7),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nSC_SLq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nSC_SLq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+
+###########################################################
+# Sealion cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of sea lions)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "Pup.count", target_column = "SChnk", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SL_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SL_ccmE_SChnk*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+SL_ccm_SChnk <- ccm(sealion.csv, E=E_SL_ccmE_SChnk,lib_column="Pup.count", target_column="SChnk",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSL_SCq=as.matrix(aggregate(SL_ccm_SChnk[,c('rho')],by = list(as.factor(SL_ccm_SChnk$lib_size)), quantile)[,'x'])
+apply(nSL_SCq[,2:5],2,MannKendall)
+
+
+
+
+# Sealion pupcount cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of sea lion pup count)
+lines(nSL_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nSL_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nSL_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(20,0.49,c("S/S Chinook xmap sea lion pup count","Sea lion pup count xmap S/S Chinook"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
+
+```
+Non-significant effects between sea lion pup-count and S/S Chinook
+
+```{r}
+# Spring/Summer Chinook cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of S/S chinook)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "SChnk", target_column = "Male", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SChnk_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SChnk_ccmE_SLM*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+SChnk_ccm_SLM <- ccm(sealion.csv, E=E_SChnk_ccmE_SLM,lib_column="SChnk", target_column="Male",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSC_SLMq=as.matrix(aggregate(SChnk_ccm_SLM[,c('rho')],by = list(as.factor(SChnk_ccm_SLM$lib_size)), quantile)[,'x'])
+apply(nSC_SLMq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
+plot(nSC_SLMq[,3]~libs,type="l",col="red",ylim=c(0.4,0.9),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nSC_SLMq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nSC_SLMq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+
+###########################################################
+# Male sea lion cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of male sea lions)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "Male", target_column = "SChnk", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SLM_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SLM_ccmE_SChnk*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+SLM_ccm_SChnk <- ccm(sealion.csv, E=E_SLM_ccmE_SChnk,lib_column="Male", target_column="SChnk",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSLM_SCq=as.matrix(aggregate(SLM_ccm_SChnk[,c('rho')],by = list(as.factor(SLM_ccm_SChnk$lib_size)), quantile)[,'x'])
+apply(nSLM_SCq[,2:5],2,MannKendall)
+
+# Sealion pupcount cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of sea lion pup count)
+lines(nSLM_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nSLM_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nSLM_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(20,0.55,c("S/S Chinook xmap male sea lion","Male sea lion xmap S/S Chinook"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
+
+```
+
+
+Slight but significant effect of Spring/Summer Chinook on male sea lion population estimates but no significant effect of sea lions on S/S Chinook. 
+
+```{r}
+# Spring/Summer Chinook cross-mapping orca (i.e. testing orcas as a cause of S/S chinook)
+
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:9){
+  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SChnk", target_column = "SR_Orca", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SChnk_ccmE_orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SChnk_ccmE_orca*1.5,43,2))
+
+# CCM analysis with varying library size (L)
+SChnk_ccm_orca <- ccm(SRKW.csv, E=E_SChnk_ccmE_orca,lib_column="SChnk", target_column="SR_Orca",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSC_orcaq=as.matrix(aggregate(SChnk_ccm_orca[,c('rho')],by = list(as.factor(SChnk_ccm_orca$lib_size)), quantile)[,'x'])
+apply(nSC_orcaq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# Spring/Summer Chinook cross-mapping orca (i.e. testing orcas as a cause of Spring/Summer chinook)
+plot(nSC_orcaq[,3]~libs,type="l",col="red",ylim=c(0,1),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nSC_orcaq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nSC_orcaq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+
+###########################################################
+# orca cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of Orcas)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:9){
+  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SR_Orca", target_column = "SChnk", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_orca_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_orca_ccmE_SChnk*1.5,43,2))
+
+# CCM analysis with varying library size (L)
+orca_ccm_SChnk <- ccm(SRKW.csv, E=E_orca_ccmE_SChnk,lib_column="SR_Orca", target_column="SChnk",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+norca_SCq=as.matrix(aggregate(orca_ccm_SChnk[,c('rho')],by = list(as.factor(orca_ccm_SChnk$lib_size)), quantile)[,'x'])
+apply(norca_SCq[,2:5],2,MannKendall)
+
+# orca cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of orcas)
+lines(norca_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(norca_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(norca_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(20,0.55,c("Spring/Summer Chinook cross-mapping orcas","Orcas cross-mapping Spring/Summer Chinook"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
+
+```
+Significant 2-way interaction between Spring/Summer Chinook at IHR dam and the Southern Resident orca population. Although significant, this interaction seems less strong than that between Fall Chinook and orcas.
+
+
+```{r}
+# Orca cross-mapping sea lion pup counts (i.e. testing sea lion pup as a cause of Orca dynamics)
 SRKW <- NULL
 SRKW$Male <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+SRKW$Pup <- sealion.csv$Pup.count[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
 SRKW$SR_Orca <- SRKW.csv$SR_Orca[which(SRKW.csv$Year>1975 & SRKW.csv$Year<2015)]
 SRKW <- data.frame(SRKW)
 
@@ -458,7 +666,7 @@ for(E.t in 2:8){
 E_SR_Orca_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SR_Orca_ccmE_SLM*2,40,2))
+libs <- c(seq(E_SR_Orca_ccmE_SLM*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 SR_Orca_ccm_SLM <- ccm(SRKW, E=E_SR_Orca_ccmE_SLM,lib_column="SR_Orca", target_column="Male",
@@ -489,7 +697,7 @@ for(E.t in 2:8){
 E_SLM_ccmE_SR_Orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SLM_ccmE_SR_Orca*2,40,2))
+libs <- c(seq(E_SLM_ccmE_SR_Orca*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 SLM_ccm_SR_Orca <- ccm(SRKW, E=E_SLM_ccmE_SR_Orca,lib_column="Male", target_column="SR_Orca",
@@ -509,197 +717,71 @@ legend(20,0.55,c("Orca xmap male sea lion","Male sea lion xmap Orca"),lty=c(1,1)
 ```
 
 ```{r}
-# Spring/Summer Chinook cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of S/S chinook)
+# Orca cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of Orca dynamics)
+SRKW <- NULL
+SRKW$Male <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+SRKW$Pup <- sealion.csv$Pup.count[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+SRKW$SR_Orca <- SRKW.csv$SR_Orca[which(SRKW.csv$Year>1975 & SRKW.csv$Year<2015)]
+SRKW <- data.frame(SRKW)
 
 # Determine the embedding dimension
 E.test=NULL
 for(E.t in 2:8){
-  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "SChnk", target_column = "Male", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.temp <- ccm(SRKW, E = E.t, lib_column = "SR_Orca", target_column = "Pup", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
   E.test=rbind(E.test,E.temp)}
-E_SChnk_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+E_SR_Orca_ccmE_SLP <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SChnk_ccmE_SLM*2,40,2))
+libs <- c(seq(E_SR_Orca_ccmE_SLP*1.5,40,2))
 
 # CCM analysis with varying library size (L)
-SChnk_ccm_SLM <- ccm(sealion.csv, E=E_SChnk_ccmE_SLM,lib_column="SChnk", target_column="Male",
+SR_Orca_ccm_SLP <- ccm(SRKW, E=E_SR_Orca_ccmE_SLP,lib_column="SR_Orca", target_column="Pup",
                 lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
 	
 # Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nSC_SLMq=as.matrix(aggregate(SChnk_ccm_SLM[,c('rho')],by = list(as.factor(SChnk_ccm_SLM$lib_size)), quantile)[,'x'])
-apply(nSC_SLMq[,2:5],2,MannKendall)
+nKW_SLPq=as.matrix(aggregate(SR_Orca_ccm_SLP[,c('rho')],by = list(as.factor(SR_Orca_ccm_SLP$lib_size)), quantile)[,'x'])
+apply(nKW_SLPq[,2:5],2,MannKendall)
 
 # Plot forecast skill vs library size
-# Spring/Summer Chinook cross-mapping sealion pup count (i.e. testing sea lion pup count as a cause of S/S chinook)
-plot(nSC_SLMq[,3]~libs,type="l",col="red",ylim=c(0.4,0.9),lwd=2,
+# Orca cross-mapping male sea lion estimates (i.e. testing male sea lion estimates as a cause of Orca dynamics)
+
+plot(nKW_SLPq[,3]~libs,type="l",col="red",ylim=c(0.2,0.9),lwd=2,
      main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
-lines(nSC_SLMq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
-lines(nSC_SLMq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+lines(nKW_SLPq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nKW_SLPq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
 
 
 ###########################################################
-# Male sea lion cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of male sea lions)
+# Male sea lion cross-mapping Orcas (i.e. testing Orcas as a cause of male sea lions)
+
 
 # Determine the embedding dimension
 E.test=NULL
 for(E.t in 2:8){
-  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "Male", target_column = "SChnk", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.temp <- ccm(SRKW, E = E.t, lib_column = "Pup", target_column = "SR_Orca", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
   E.test=rbind(E.test,E.temp)}
-E_SLM_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+E_SLP_ccmE_SR_Orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SLM_ccmE_SChnk*2,40,2))
+libs <- c(seq(E_SLP_ccmE_SR_Orca*1.5,40,2))
 
 # CCM analysis with varying library size (L)
-SLM_ccm_SChnk <- ccm(sealion.csv, E=E_SLM_ccmE_SChnk,lib_column="Male", target_column="SChnk",
+SLP_ccm_SR_Orca <- ccm(SRKW, E=E_SLP_ccmE_SR_Orca,lib_column="Pup", target_column="SR_Orca",
                 lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
 	
 # Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nSLM_SCq=as.matrix(aggregate(SLM_ccm_SChnk[,c('rho')],by = list(as.factor(SLM_ccm_SChnk$lib_size)), quantile)[,'x'])
-apply(nSLM_SCq[,2:5],2,MannKendall)
+nSLP_KWq=as.matrix(aggregate(SLP_ccm_SR_Orca[,c('rho')],by = list(as.factor(SLP_ccm_SR_Orca$lib_size)), quantile)[,'x'])
+apply(nSLP_KWq[,2:5],2,MannKendall)
 
-# Sealion pupcount cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of sea lion pup count)
-lines(nSLM_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
-lines(nSLM_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
-lines(nSLM_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(20,0.55,c("S/S Chinook xmap male sea lion","Male sea lion xmap S/S Chinook"),lty=c(1,1),col=c("red","blue"))
+# Male sea lion cross-mapping Orcas (i.e. testing Orcas as a cause of male sea lions)
+lines(nSLP_KWq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nSLP_KWq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nSLP_KWq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(25,0.4,c("Orca xmap sea lion pup count","Sea lion pup count xmap Orca"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
 
 ```
-
-
-Slight but significant effect of Spring/Summer Chinook on male sea lion population estimates but no significant effect of sea lions on S/S Chinook. 
-
-```{r}
-## Orca - Chinook interaction 
-
-# select Chinook and PDO data between 1976 and 2018 - years for SR Orca population counts
-SRKW.csv$FChnk <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1975 & IHR_Fall_Chinook.csv$year<2019)]
-SRKW.csv$SChnk <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1975 & IHR_SprSum_Chinook.csv$year<2019)]
-SRKW.csv$PDO <- PDO.csv$PDOya[which(PDO.csv$Year>1975 & PDO.csv$Year<2019)]
-
-# Fall Chinook cross-mapping orcas (i.e. testing orcas as a cause of Fall chinook)
-
-
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:8){
-  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "FChnk", target_column = "SR_Orca", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-(E_FChnk_ccmE_orca <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_FChnk_ccmE_orca*2,43,2))
-
-# CCM analysis with varying library size (L)
-FChnk_ccm_orca <- ccm(SRKW.csv, E=E_FChnk_ccmE_orca,lib_column="FChnk", target_column="SR_Orca",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nFC_orcaq=as.matrix(aggregate(FChnk_ccm_orca[,c('rho')],by = list(as.factor(FChnk_ccm_orca$lib_size)), quantile)[,'x'])
-apply(nFC_orcaq[,2:5],2,MannKendall)
-
-# Plot forecast skill vs library size
-# Fall Chinook cross-mapping orca (i.e. testing orcas as a cause of Fall chinook)
-plot(nFC_orcaq[,3]~libs,type="l",col="red",ylim=c(0.6,0.9),lwd=2,
-     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
-lines(nFC_orcaq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
-lines(nFC_orcaq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
-
-###########################################################
-# Orcas cross-mapping Fall Chinook (i.e. testing Fall chinook as a cause of orca populations)
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:8){
-  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SR_Orca", target_column = "FChnk", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-(E_orca_ccmE_FChnk <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_orca_ccmE_FChnk*2,43,2))
-
-# CCM analysis with varying library size (L)
-orca_ccm_FChnk <- ccm(SRKW.csv, E=E_orca_ccmE_FChnk,lib_column="SR_Orca", target_column="FChnk",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-norca_FCq=as.matrix(aggregate(orca_ccm_FChnk[,c('rho')],by = list(as.factor(orca_ccm_FChnk$lib_size)), quantile)[,'x'])
-apply(norca_FCq[,2:5],2,MannKendall)
-
-
-
-# orca cross-mapping Fall Chinoon (i.e. testing Fall chinook as a cause of orcas)
-lines(norca_FCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
-lines(norca_FCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
-lines(norca_FCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(30,0.65,c("Fall Chinook cross-mapping orcas","Orcas cross-mapping Fall chinook"),lty=c(1,1),col=c("red","blue"))
-#abline(h=cor(dat[,'FChnk'],dat[,'PDO']),lty=3)
-
-```
-Significant 2-way interaction between Fall Chinook at IHR dam and the Southern Resident orca population
-
-```{r}
-# Spring/Summer Chinook cross-mapping orca (i.e. testing orcas as a cause of S/S chinook)
-
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:9){
-  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SChnk", target_column = "SR_Orca", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-E_SChnk_ccmE_orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_SChnk_ccmE_orca*2,43,2))
-
-# CCM analysis with varying library size (L)
-SChnk_ccm_orca <- ccm(SRKW.csv, E=E_SChnk_ccmE_orca,lib_column="SChnk", target_column="SR_Orca",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-nSC_orcaq=as.matrix(aggregate(SChnk_ccm_orca[,c('rho')],by = list(as.factor(SChnk_ccm_orca$lib_size)), quantile)[,'x'])
-apply(nSC_orcaq[,2:5],2,MannKendall)
-
-# Plot forecast skill vs library size
-# Spring/Summer Chinook cross-mapping orca (i.e. testing orcas as a cause of Spring/Summer chinook)
-plot(nSC_orcaq[,3]~libs,type="l",col="red",ylim=c(0,1),lwd=2,
-     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
-lines(nSC_orcaq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
-lines(nSC_orcaq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
-
-
-###########################################################
-# orca cross-mapping Spring/Summer Chinook (i.e. testing Spring/Summer chinook as a cause of Orcas)
-
-# Determine the embedding dimension
-E.test=NULL
-for(E.t in 2:9){
-  E.temp <- ccm(SRKW.csv, E = E.t, lib_column = "SR_Orca", target_column = "SChnk", lib_sizes = 43, num_samples = 1, tp=-1,random_libs = F)
-  E.test=rbind(E.test,E.temp)}
-E_orca_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
-
-# Design a sequence of library size
-libs <- c(seq(E_orca_ccmE_SChnk*2,43,2))
-
-# CCM analysis with varying library size (L)
-orca_ccm_SChnk <- ccm(SRKW.csv, E=E_orca_ccmE_SChnk,lib_column="SR_Orca", target_column="SChnk",
-                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
-	
-# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
-norca_SCq=as.matrix(aggregate(orca_ccm_SChnk[,c('rho')],by = list(as.factor(orca_ccm_SChnk$lib_size)), quantile)[,'x'])
-apply(norca_SCq[,2:5],2,MannKendall)
-
-# orca cross-mapping Spring/Summer Chinoon (i.e. testing Spring/Summer chinook as a cause of orcas)
-lines(norca_SCq[,3]~libs,col="blue",lwd=1,lty=1) # median 
-lines(norca_SCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
-lines(norca_SCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(20,0.55,c("Spring/Summer Chinook cross-mapping orcas","Orcas cross-mapping Spring/Summer Chinook"),lty=c(1,1),col=c("red","blue"))
-#abline(h=cor(dat[,'SChnk'],dat[,'PDO']),lty=3)
-
-```
-Significant 2-way interaction between Spring/Summer Chinook at IHR dam and the Southern Resident orca population. Although significant, this interaction seems less strong than that between Fall Chinook and orcas.
+Significant effect of Orcas on sea lion pup count but not of pup counts on orcas. 
 
 ```{r}
 # PDO cross-mapping sea lion pup counts (i.e. testing sea lion pup counts as a cause of PDO)
@@ -714,7 +796,7 @@ for(E.t in 2:8){
 E_PDO_ccmE_SL <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_PDO_ccmE_SL*2,40,2))
+libs <- c(seq(E_PDO_ccmE_SL*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 PDO_ccm_SL <- ccm(sealion.csv, E=E_PDO_ccmE_SL,lib_column="PDO", target_column="Pup.count",
@@ -742,7 +824,7 @@ for(E.t in 2:8){
 E_SL_ccmE_PDO <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SL_ccmE_PDO*2,40,2))
+libs <- c(seq(E_SL_ccmE_PDO*1.5,40,2))
 
 # CCM analysis with varying library size (L)
 SL_ccm_PDO <- ccm(sealion.csv, E=E_SL_ccmE_PDO,lib_column="Pup.count", target_column="PDO",
@@ -760,6 +842,68 @@ lines(nSL_PDOq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
 legend(18,0.3,c("PDO cross-mapping sea lion pup counts","Sea lion pup counts cross-mapping PDO"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'PDO'],dat[,'PDO']),lty=3)
 ```
+
+```{r}
+# PDO cross-mapping sea lion pup counts (i.e. testing sea lion pup counts as a cause of PDO)
+
+
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "PDO", target_column = "Male", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_PDO_ccmE_SLM <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_PDO_ccmE_SLM*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+PDO_ccm_SLM <- ccm(sealion.csv, E=E_PDO_ccmE_SLM,lib_column="PDO", target_column="Male",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nPDO_SLMq=as.matrix(aggregate(PDO_ccm_SLM[,c('rho')],by = list(as.factor(PDO_ccm_SLM$lib_size)), quantile)[,'x'])
+apply(nPDO_SLMq[,2:5],2,MannKendall)
+
+# Plot forecast skill vs library size
+# PDO cross-mapping sealion (i.e. testing sea lions as a cause of PDO)
+plot(nPDO_SLMq[,3]~libs,type="l",col="red",ylim=c(0.3,1),lwd=2,
+     main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+lines(nPDO_SLMq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+lines(nPDO_SLMq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+
+###########################################################
+# Sea lion male population cross-mapping PDO (i.e. testing PDO as a cause of sea lions male population)
+
+# Determine the embedding dimension
+E.test=NULL
+for(E.t in 2:8){
+  E.temp <- ccm(sealion.csv, E = E.t, lib_column = "Male", target_column = "PDO", lib_sizes = 40, num_samples = 1, tp=-1,random_libs = F)
+  E.test=rbind(E.test,E.temp)}
+E_SLM_ccmE_PDO <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
+
+# Design a sequence of library size
+libs <- c(seq(E_SLM_ccmE_PDO*1.5,40,2))
+
+# CCM analysis with varying library size (L)
+SLM_ccm_PDO <- ccm(sealion.csv, E=E_SLM_ccmE_PDO,lib_column="Male", target_column="PDO",
+                lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+	
+# Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+nSLM_PDOq=as.matrix(aggregate(SLM_ccm_PDO[,c('rho')],by = list(as.factor(SLM_ccm_PDO$lib_size)), quantile)[,'x'])
+apply(nSLM_PDOq[,2:5],2,MannKendall)
+
+
+# Sea lion male population cross-mapping PDO (i.e. testing PDO as a cause of sea lions male population)
+
+lines(nSLM_PDOq[,3]~libs,col="blue",lwd=1,lty=1) # median 
+lines(nSLM_PDOq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
+lines(nSLM_PDOq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
+legend(18,0.75,c("PDO xmap male sea lions","Male sea lion xmap PDO"),lty=c(1,1),col=c("red","blue"))
+#abline(h=cor(dat[,'PDO'],dat[,'PDO']),lty=3)
+```
+
 No significant effect of PDO on sea lion populations
 
 ```{r}
@@ -776,7 +920,7 @@ for(E.t in 2:8){
 E_PDO_ccmE_orca <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_PDO_ccmE_orca*2,43,2))
+libs <- c(seq(E_PDO_ccmE_orca*1.5,43,2))
 
 # CCM analysis with varying library size (L)
 PDO_ccm_orca <- ccm(SRKW.csv, E=E_PDO_ccmE_orca,lib_column="PDO", target_column="SR_Orca",
@@ -804,7 +948,7 @@ for(E.t in 2:8){
 E_orca_ccmE_PDO <- E.test$E[which.max(E.test$rho)[1]] # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_orca_ccmE_PDO*2,43,2))
+libs <- c(seq(E_orca_ccmE_PDO*1.5,43,2))
 
 # CCM analysis with varying library size (L)
 orca_ccm_PDO <- ccm(SRKW.csv, E=E_orca_ccmE_PDO,lib_column="SR_Orca", target_column="PDO",
@@ -818,10 +962,11 @@ apply(norca_PDOq[,2:5],2,MannKendall)
 lines(norca_PDOq[,3]~libs,col="blue",lwd=1,lty=1) # median 
 lines(norca_PDOq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(norca_PDOq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
-legend(20,0.55,c("PDO cross-mapping orcas","Orcas cross-mapping PDO"),lty=c(1,1),col=c("red","blue"))
+legend(20,0.4,c("PDO cross-mapping orcas","Orcas cross-mapping PDO"),lty=c(1,1),col=c("red","blue"))
 #abline(h=cor(dat[,'PDO'],dat[,'PDO']),lty=3)
 
 ```
+Both are significantly increasing, but only the effect of PDO on Orcas is significantly different from zero. 
 ```{r}
 ## Spring/Summer Chinook interaction with Fall Chinook 
 
@@ -836,7 +981,7 @@ for(E.t in 2:9){
 (E_FChnk_ccmE_SChnk <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_FChnk_ccmE_SChnk*2,57,2))
+libs <- c(seq(E_FChnk_ccmE_SChnk*1.5,57,2))
 
 # CCM analysis with varying library size (L)
 FChnk_ccm_SL <- ccm(dat.df, E=E_FChnk_ccmE_SChnk,lib_column="FChnk", target_column="SChnk",
@@ -849,7 +994,7 @@ apply(nFC_SCq[,2:5],2,MannKendall)
 
 # Plot forecast skill vs library size
 # Fall Chinook cross-mapping Spring/Summer Chinook (i.e. testing S/S Chinook as a cause of Fall chinook)
-plot(nFC_SCq[,3]~libs,type="l",col="red",ylim=c(0.6,0.9),lwd=2,
+plot(nFC_SCq[,3]~libs,type="l",col="red",ylim=c(0.55,0.9),lwd=2,
      main="Convergent cross mapping CCM",xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
 lines(nFC_SCq[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
 lines(nFC_SCq[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
@@ -865,7 +1010,7 @@ for(E.t in 2:9){
 (E_SChnk_ccmE_FChnk <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
 
 # Design a sequence of library size
-libs <- c(seq(E_SChnk_ccmE_FChnk,57,2))
+libs <- c(seq(E_SChnk_ccmE_FChnk*1.5,57,2))
 
 # CCM analysis with varying library size (L)
 SL_ccm_FChnk <- ccm(dat.df, E=E_SChnk_ccmE_FChnk,lib_column="SChnk", target_column="FChnk",
@@ -881,10 +1026,10 @@ lines(nSC_FCq[,3]~libs,col="blue",lwd=1,lty=1) # median
 lines(nSC_FCq[,2]~libs,col="blue",lwd=1,lty=2) # 1st quantile 
 lines(nSC_FCq[,4]~libs,col="blue",lwd=1,lty=2) # 3rd quantile
 
-legend(20,0.65,c("Fall Chinook cross-mapping Spring/Summer Chinook","Spring/Summer Chinook cross-mapping Fall Chinook"),lty=c(1,1),col=c("red","blue"))
+legend(20,0.6,c("Fall Chinook xmap Spring/Summer Chinook","Spring/Summer Chinook xmap Fall Chinook"),lty=c(1,1),col=c("red","blue"))
 
 ```
-
+Significant effect of S/S chinook on Fall Chinook but not vice-versa. 
 
 
 Tracking interactions in time (Code from Deyle 2016)
@@ -900,19 +1045,21 @@ library(quantreg)
  
 
 
-Embedding <- c("FC","FC-5","SC","PDO", "KW", "SL") 
+Embedding <- c("FC","PDO", "KW", "SLM", "SC") 
 Edim <- length(Embedding)
 d <- array(data = 0, dim = c(39,Edim)) 
 d[,1] <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1975 & IHR_Fall_Chinook.csv$year<2015)]
-d[,2] <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1970 & IHR_Fall_Chinook.csv$year<2010)]
-d[,3] <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1975 & IHR_SprSum_Chinook.csv$year<2015)]
-d[,4] <- PDO.csv$PDOya[which(PDO.csv$Year>1975 & PDO.csv$Year<2015)]
-d[,5] <- SRKW.csv$SR_Orca[which(SRKW.csv$Year<2015)]
-d[,6] <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+d[,2] <- PDO.csv$PDOya[which(PDO.csv$Year>1975 & PDO.csv$Year<2015)]
+d[,3] <- SRKW.csv$SR_Orca[which(SRKW.csv$Year<2015)]
+d[,4] <- sealion.csv$Male[which(sealion.csv$Year>1975 & sealion.csv$Year<2015)]
+d[,5] <- dat$SChnk[which(IHR_SprSum_Chinook.csv$year>1975 & IHR_SprSum_Chinook.csv$year<2015)]
+#d[,2] <- dat$FChnk[which(IHR_Fall_Chinook.csv$year>1970 & IHR_Fall_Chinook.csv$year<2010)]
 
-colnames(d) <-  c("FC", "FC-5","SC","PDO", "KW", "SL") 
 
-targ_col <- 5
+
+colnames(d) <-  c("FC","PDO", "KW", "SLM", "SC") 
+
+targ_col <- 1
 coeff_names <- sapply(colnames(d),function(x) paste("d", colnames(d)[targ_col], "d", x, sep = ""))
 ```
 For the weighted linear regression, we will be
@@ -996,62 +1143,25 @@ par(mfrow = c(1,1))
 trange <- 1:l
 
 plot(coeff[trange,"t"],coeff[trange,"dFCdFC"],type="l",col="green",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*FC1), 
-     ylim=range(coeff[trange,"dFCdFC"]),xlim=range(trange),lwd=2)
+     ylab="interaction coefficient", 
+     ylim=c(-0.9,1),xlim=range(trange),lwd=2)
 abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+
+lines(coeff[trange,"dFCdSC"],type="l",col="blue",lwd=2)
+lines(coeff[trange,"dFCdPDO"],type="l",col="red",lwd=2)
+lines(coeff[trange,"dFCdKW"],type="l",col="black",lwd=2)
+lines(coeff[trange,"dFCdSLM"],type="l",col="magenta",lwd=2)
+#lines(coeff[trange,"dFCdFC-5"],type="l",col="cyan",lwd=2)
+
+
+legend(0,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*FC1),expression(partialdiff*FC / partialdiff*PDO), expression(partialdiff*FC / partialdiff*SRKW)),lty=c(1,1),col=c("green","red","black"))
+legend(12,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*SLM), expression(partialdiff*FC / partialdiff*SC)),lty=c(1,1),col=c("magenta", "blue"))
 ```
 
 
-```{r}
-par(mfrow = c(1,1))
-trange <- 1:l
 
-plot(coeff[trange,"t"],coeff[trange,"dFCdFC-5"],type="l",col="green",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*FC5), 
-     ylim=range(coeff[trange,"dFCdFC-5"]),xlim=range(trange),lwd=2)
-abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-```
 
-```{r}
-par(mfrow = c(1,1))
-trange <- 1:l
 
-plot(coeff[trange,"t"],coeff[trange,"dFCdSC"],type="l",col="blue",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*SC), 
-     ylim=range(coeff[trange,"dFCdSC"]),xlim=range(trange),lwd=2)
-abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-```
-
-```{r}
-par(mfrow = c(1,1))
-trange <- 1:l
-
-plot(coeff[trange,"t"],coeff[trange,"dFCdPDO"],type="l",col="red",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*PDO), 
-     ylim=range(coeff[trange,"dFCdPDO"]),xlim=range(trange),lwd=2)
-abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-```
-
-```{r}
-par(mfrow = c(1,1))
-trange <- 1:l
-
-plot(coeff[trange,"t"],coeff[trange,"dFCdKW"],type="l",col="black",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*SRKW), 
-     ylim=range(coeff[trange,"dFCdKW"]),xlim=range(trange),lwd=2)
-abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-
-```
-```{r}
-par(mfrow = c(1,1))
-trange <- 1:l
-
-plot(coeff[trange,"t"],coeff[trange,"dFCdSL"],type="l",col="black",xlab="time", 
-     ylab=expression(partialdiff*FC / partialdiff*SL), 
-     ylim=range(coeff[trange,"dFCdSL"]),xlim=range(trange),lwd=2)
-abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-
-```
 
 We can also plot the predation coeffcient of orcas against the effect of PDO to show how they relate.
 ```{r}
@@ -1066,23 +1176,23 @@ abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
 ```
 ```{r}
-qL <- rq(coeff$dFCdFC-5 ~ coeff$dFCdPDO,alpha=0.05,.05) 
-qU <- rq(coeff$dFCdFC-5 ~ coeff$dFCdPDO,alpha=0.05,.95)
-plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdFC-5' ], 
-     xlab=expression(partialdiff*FC / partialdiff*PDO), 
-     ylab=expression(partialdiff*FC / partialdiff*FC-5), 
-     xlim=range(coeff[trange,"dFCdPDO"]),ylim=range(coeff[trange,"dFCdFC-5"]),pch=8)
+qL <- rq(coeff$dFCdFC ~ coeff$dFCdSLM,alpha=0.05,.05) 
+qU <- rq(coeff$dFCdFC ~ coeff$dFCdSLM,alpha=0.05,.95)
+plot(coeff[1:l, 'dFCdSLM' ],coeff[1:l, 'dFCdFC' ], 
+     xlab=expression(partialdiff*FC / partialdiff*SLM), 
+     ylab=expression(partialdiff*FC / partialdiff*FC1), 
+     xlim=range(coeff[trange,"dFCdSLM"]),ylim=range(coeff[trange,"dFCdFC"]),pch=8)
 abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
 ```
 ```{r}
-qL <- rq(coeff$dFCdSL ~ coeff$dFCdPDO,alpha=0.05,.05) 
-qU <- rq(coeff$dFCdSL ~ coeff$dFCdPDO,alpha=0.05,.95)
-plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSL' ], 
+qL <- rq(coeff$dFCdSLM ~ coeff$dFCdPDO,alpha=0.05,.05) 
+qU <- rq(coeff$dFCdSLM ~ coeff$dFCdPDO,alpha=0.05,.95)
+plot(coeff[1:l, 'dFCdPDO' ],coeff[1:l, 'dFCdSLM' ], 
      xlab=expression(partialdiff*FC / partialdiff*PDO), 
-     ylab=expression(partialdiff*FC / partialdiff*SL), 
-     xlim=range(coeff[trange,"dFCdPDO"]),ylim=range(coeff[trange,"dFCdSL"]),pch=8)
+     ylab=expression(partialdiff*FC / partialdiff*SLM), 
+     xlim=range(coeff[trange,"dFCdPDO"]),ylim=range(coeff[trange,"dFCdSLM"]),pch=8)
 abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
