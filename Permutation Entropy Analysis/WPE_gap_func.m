@@ -5,10 +5,9 @@ function [ H, n ] = WPE_gap_func( x, t, wl, tau )
 %   Excludes permutations covering a string of zeros.
 
 % %To troubleshoot code:
-%     x=(CHA+CHJ);
-%     t=mtime;
-%     tau=1;
-%     wl=3;
+%     x=cell2mat(C(i,j));
+%     t=cell2mat(C(i,1));
+
 
 xl=x;
     for m=1:wl-1
@@ -18,17 +17,17 @@ xl=x;
     
     %Remove permutations covering gaps in the time series
         tgap=vertcat(0,diff(t)>=2);%find data gaps
-        startremove=find(tgap==1)-wl;
-        endremove=find(tgap==1);
-        removeindex=zeros(length(startremove),wl+1);
+        startremove=find(tgap==1)-wl+1;
+        endremove=find(tgap==1)-1;
+        removeindex=zeros(length(startremove),wl-1);
         for r=1:length(startremove)
             removeindex(r,:)=startremove(r):1:endremove(r);
         end
-        ri=unique(sort(reshape(removeindex,(wl+1)*length(removeindex),1)));
+        ri=unique(sort(reshape(removeindex,(wl-1)*size(removeindex,1),1)));
         ri(ri<=0)=[]; %remove zeros and negative values
         ri(ri>length(xl))=[];
         xl(ri,:)=[]; 
-         n=length(xl);      
+        n=length(xl);      
         
             xltemp=xl(:,1:wl); %just the columns of xl for this word length
             maxH=sum(log2(2:wl)); %maximum entropy

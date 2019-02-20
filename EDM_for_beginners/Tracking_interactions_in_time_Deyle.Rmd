@@ -37,16 +37,16 @@ The model uses a type II functional response for the consumers preying on the re
 Prey selection is incorporated into the model. 
 
 
-```{r}
+
 params <- list(xp=0.08,  #Mass-specific metabolic rate of the predator
-               yp=1.6, #Ingestion rate per unit metabolic rate of predator
+               yp=5, #Ingestion rate per unit metabolic rate of predator
                pp=0.5, #Prey preference of predator (0 <= pp <= 1).  At pp=1, P preys only on C1, at pp=0.5, P preys on C1 and C2 in proportion to their biomass (i.e. no preference), and at pp=0, P preys only on C2
                C1star=0.5, #Half-saturation density of consumer 1
                C2star=0.5, #Half-saturation density of consumer 2
-               xc1=0.15, # Mass-specific metabolic rates of consumers , measured relative to the                             production-to-biomass ratio of the resource population
-               xc2=0.15,
-               yc1=3.9, #Ingestion rate per unit metabolic rate of consumers 
-               yc2=3.9,
+               xc1=0.1, # Mass-specific metabolic rates of consumers , measured relative to the                             production-to-biomass ratio of the resource population
+               xc2=0.07,
+               yc1=3.2, #Ingestion rate per unit metabolic rate of consumers 
+               yc2=2.9,
                Rstar=0.3, #Half-saturation density of the resource
                k=1.2) #Carrying capacity
 
@@ -65,16 +65,32 @@ dP <- function(R,C1,C2,P) (params$pp*C1/(params$pp*C1+(1-params$pp)*C2))*params$
     params$xp*P
 
 dF <- function(R,C1,C2,P) c(dR(R,C1,C2,P), dC1(R,C1,C2,P), dC2(R,C1,C2,P), dP(R,C1,C2,P))
+
+```{r}
+params <- list(nu1=0.1,nu2=0.07,lambda1=3.2,lambda2=2.9,C1star=0.5,C2star=0.5, mu1=0.15,mu2=0.15,kappa1=2.5,kappa2=2.0,Rstar=0.3,k=1.2)
+dR <- function(R,C1,C2,P1,P2) R*(1-R/params$k) -
+  params$mu1*params$kappa1*(C1*R)/(R+params$Rstar) -
+  params$mu2*params$kappa2*(C2*R)/(R+params$Rstar)
+dC1 <- function(R,C1,C2,P1,P2) params$mu1*params$kappa1*(C1*R)/(R+params$Rstar) -
+    params$nu1*params$lambda1*(P1*C1)/(C1+params$C1star) - params$mu1*C1
+dC2 <- function(R,C1,C2,P1,P2) params$mu2*params$kappa2*(C2*R)/(R+params$Rstar) -
+    params$nu2*params$lambda2*(P2*C2)/(C2+params$C2star) - params$mu2*C2
+dP1 <- function(R,C1,C2,P1,P2) params$nu1*params$lambda1*(P1*C1)/(C1+params$C1star) -
+    params$nu1*P1
+dP2 <- function(R,C1,C2,P1,P2) params$nu2*params$lambda2*(P2*C2)/(C2+params$C2star) -
+    params$nu2*P2
+dF <- function(R,C1,C2,P1,P2) c(dR(R,C1,C2,P1,P2), dC1(R,C1,C2,P1,P2), dC2(R,C1,C2,P1,P2), dP1(R,C1,C2,P1,P2), dP2(R,C1,C2,P1,P2))
 ```
+
 And the simulation parameters. The equations were solved using the basic Euler method with step size Δt = 0.01. The time series of all five variables were decimated to every 5th time point, then normalized to have a mean of 0 and standard deviation of 1 before analysis with S-maps.
 ```{r}
 tmax <- 10000; tau <- 5; dt <- 1/100; burn <- 200 
-d <- array(data = 0, dim = c(tmax/tau,4)) 
-colnames(d) <- c( 'R' , 'C1' , 'C2' , 'P' )
+d <- array(data = 0, dim = c(tmax/tau,5)) 
+colnames(d) <- c( 'R' , 'C1' , 'C2' , 'P1', 'P2' )
 ```
 We run the model with initial conditions (R, C1, C2, P) = (1, 0.5, 0.8, 0.7). Note that we start with a burn period to insure the dynamics relax to the attractor manifold.
 ```{r}
-Xi <- c(1,.5,.8,.7)  #initial conditions for the 4 species (R, C1, C2, P)
+Xi <- c(1,.5,.8,.7, .8)  #initial conditions for the 4 species (R, C1, C2, P)
 
 #>>>RUN BURN<<<  start with a burn period to insure the dynamics relax to the attractor manifold
 idex <- 0
@@ -100,13 +116,16 @@ targ_col <- 2
 ```
 The effect of predator P2 on C1 is very indirect, and we find can in fact be safely ignored. Thus, we only need to consider the four-dimensional space given by R, C1, C2, and P1.
 ```{r}
-Embedding <- c("R","C1","C2","P") 
+Embedding <- c("R","C1","C2","P1") 
 Edim <- length(Embedding)
 
 d <- d[,Embedding]
 
 coeff_names <- sapply(colnames(d),function(x) paste("d", colnames(d)[targ_col], "d", x, sep = ""))
 ```
+
+
+
 For the weighted linear regression, we will be
 ```{r}
 block <- cbind(d[2:dim(d)[1],targ_col],d[1:(dim(d)[1]-1),]) 
@@ -177,6 +196,12 @@ for (ipred in 1:length(pred)){
 coeff <- cbind(pred,coeff) 
 colnames(coeff)[1] <- "t"
 ```
+Write the files to CSV so that I can import to matlab and make pretty figures
+```{r}
+write.csv(d, file = "EDM_concept_eg_model_timeseries.csv")
+write.csv(coeff, file = "EDM_concept_eg_model_coefficients.csv",row.names=FALSE)
+```
+
 We can plot a time series of these coeffcients over a span of time.
 ```{r}
 par(mfrow = c(1,1))
