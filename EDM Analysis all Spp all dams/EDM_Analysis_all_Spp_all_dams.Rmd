@@ -6,7 +6,11 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      tidy.opts=list(width.cutoff=60),
+                      tidy=TRUE)
 ```
 # CORE_EDM research questions
 
@@ -20,53 +24,104 @@ How are culls predicted to affect salmon returns and other components of system?
 # loading R packages
 library(rEDM) # All the EDM analyses are carried out by the rEDM package.
 library(Kendall)
-
+library(tidyr)
+library(tidyverse)
+library(dplyr)
 ```
 
 # Load and prepare data
 
 ```{r}
 
-folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/Data/analysis ready/FPC annual dam counts/"      # path to folder that holds multiple .csv files
+folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/data/"
 file_list <- list.files(path=folder, pattern="*.csv") # create list of all .csv files in folder
-dam_list <- substr(file_list,1,3) #create list of all dam names
-
 
 # read in each .csv file in file_list and create a data frame with the same name as the .csv file
 for (i in 1:length(file_list)){
-  assign(substr(file_list[i],1,3), 
+  assign(substr(file_list[i],1,nchar(file_list[i])-4),
   read.csv(paste(folder, file_list[i], sep=''))
   )}
 
-fish_list <- colnames(BON)[2:12] #create list of fish names
-data.list <- list(BON, TDA, JDA, MCN, PRD, RIS, RRH, WEL, IHR, LMN, LGS, LGR) #put data into a list in order from mouth to headwaters (Columbia R followed by Snake R.). Don't include WFA or WAN as there is not enough years 
-salmon <- lapply(data.list, function(x) x[(names(x) %in% c("year", "chinook", "coho", "steelhead", "sockeye", "chinook_SS", "chinook_F"))]) # Keep just the "Chinook" "Chinook SS" "Chinook F" "Coho" "Steelhead"  and  "Sockeye" columns
+rm(WFA, WAN) #Don't include WFA or WAN as there is not enough years 
+rm(TDA, JDA, MCN, RIS, RRH, WEL, LMN, LGS, LGR) #Only keep the first dam for each basin
+
+BON <- select(BON, c("year", "coho", "steelhead", "sockeye", "chinook_SS", "chinook_F")) 
+PRD <- select(PRD, c("year", "coho", "steelhead", "sockeye", "chinook_SS", "chinook_F")) 
+IHR <- select(IHR, c("year", "coho", "steelhead", "sockeye", "chinook_SS", "chinook_F")) 
+
+# Use gather to take multiple columns and collapse into key-value pairs
+BON <- gather(BON, "species", abundance, 2:6)
+PRD <- gather(PRD, "species", abundance, 2:6)
+IHR <- gather(IHR, "species", abundance, 2:6)
+
+# Add location and source columns:
+BON$location <- "BON"
+PRD$location <- "PRD"
+IHR$location <- "IHR"
+BON$source <- "fpc.org"
+PRD$source <- "fpc.org"
+IHR$source <- "fpc.org"
+
+# Remove string of zeros in early years for coho at PRD
+PRD <- PRD %>% slice(16:285)
 
 # Data normalization: Prior to simplex projection, the time series are normalized to zero mean and unit variance.
-for (i in 1:length(salmon)){  #for each dam
-    for (j in 2:7){ #for each species
-      d <- salmon[[i]][[j]]   
-      salmon[[i]][[j]] <- ((d-mean(d))/sd(d)) 
-    }
-}
+BON <- BON %>%
+  group_by(species) %>%
+  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) %>%
+  ungroup()
+PRD <- PRD %>%
+  group_by(species) %>%
+  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) %>%
+  ungroup()
+IHR <- IHR %>%
+  group_by(species) %>%
+  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) %>%
+  ungroup()
 
-# Load other variables: PDO, SRKW, sealion data
-folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/Data/analysis ready/"      # path to folder that holds .csv files
-file_list <- list.files(path=folder, pattern="*.csv") # create list of all .csv files in folder
+# Rearrange
+BON <- BON[, c(4,2,1,3,6,5)]
+PRD <- PRD[, c(4,2,1,3,6,5)]
+IHR <- IHR[, c(4,2,1,3,6,5)]
 
-# read in each .csv file in file_list and create a data frame with the same name as the .csv file
-for (i in 1:length(file_list)){
-  assign(file_list[i], 
-  read.csv(paste(folder, file_list[i], sep=''))
-)}
+#Pacific Decadal Oscillation data
+PDO <- rename(PDO, abundance = PDOya) 
+PDO <- rename(PDO, year = Year) 
+PDO$species <- "PDO"
+PDO$location <- "ocean"
+PDO$source <- "ncdc.noaa.gov"
+PDO <- PDO %>%  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) # normalization
+PDO <- PDO[, c(4,3,1,2,6,5)]
 
-PDO.csv$PDOya <- ((PDO.csv[,"PDOya"]-mean(PDO.csv[,"PDOya"]))/sd(PDO.csv[,"PDOya"]))
-#plot(PDO.csv$PDOya~PDO.csv$Year,type="l",xlab="Year",ylab="PDO",ylim=c(-2,2),col=2,main="PDO time series")
+#Southern Resident Killer Whale data
+SRKW <- rename(SRKW, abundance = SR_Orca) 
+SRKW <- rename(SRKW, year = Year)
+SRKW$species <- "SRKW"
+SRKW$location <- "ocean"
+SRKW$source <- "www.whaleresearch.com"
+SRKW <- SRKW %>%  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) # normalization
+SRKW <- SRKW[, c(4,3,1,2,6,5)]
 
-SRKW.csv$SR_Orca <- ((SRKW.csv[,"SR_Orca"]-mean(SRKW.csv[,"SR_Orca"]))/sd(SRKW.csv[,"SR_Orca"]))
+#California Sea Lion data
+CSL <- rename(CSL, year = Year) #rename year column
+CSL <- rename(CSL, CSL_males = Male) 
+CSL <- rename(CSL, CSL_pups = Pup.count) 
+CSL <- gather(CSL, "species", abundance, 2:3)
+CSL$location <- "ocean"
+CSL$source <- "Laake 2018"
+CSL <- CSL %>%
+  group_by(species) %>%
+  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) %>%
+  ungroup()
+CSL<- CSL[, c(4,2,1,3,6,5)]
 
-sealion.csv$Pup.count <- ((sealion.csv[,"Pup.count"]-mean(sealion.csv[,"Pup.count"]))/sd(sealion.csv[,"Pup.count"]))
-sealion.csv$Male <- ((sealion.csv[,"Male"]-mean(sealion.csv[,"Male"]))/sd(sealion.csv[,"Male"]))
+dd <- bind_rows(BON, PRD, IHR, CSL, SRKW, PDO)
+dd$ID <- as.numeric(as.factor(paste0(dd$location, "_", dd$species)))
+dd_nest <- dd %>% group_by(ID) %>% nest()
+dd_nest$N <- unlist(lapply(dd_nest$data, nrow))
+
+#plot(PDO$PDOya~PDO$Year,type="l",xlab="Year",ylab="PDO",ylim=c(-2,2),col=2,main="PDO time series")
+# plot time series
 
 ```
 # Simplex projection (Sugihara & May 1990)
@@ -81,9 +136,7 @@ Note that, in the case where the time series is rather short, leave-one-out cros
 # The simplex projection is carried out by the function rEDM::simplex(). 
 # We divide the time series into two halves. The first half is used as the library set for manifold reconstruction. The second half is used as the target for out-of-sample prediction. 
 # The argument lib is the time index indicating the start (1) and the end (n/2) in the library set, respectively. Similarly, the argument pred indicates the time index in the prediction set. 
-
-# We specify a sequence of testing embedding dimensions from 2 to 8 by the argument E=c(2:8), which executes the simplex projections using different embedding dimensions.
-
+# We specify a sequence of testing embedding dimensions from 2 to 10 by the argument E=c(2:10), which executes the simplex projections using different embedding dimensions.
 
 E <- list()
 for (i in 1:1){ #length(salmon)){  #for each dam
@@ -94,10 +147,10 @@ E[[j]] <-sim[which.max(sim),"E"][1]# The optimal E
     }
 }
 
-sim_PDO <- simplex(PDO.csv$PDOya,lib=c(1,round(length(PDO.csv$PDOya)/2)),pred=c(round(length(PDO.csv$PDOya)/2)+1,length(PDO.csv$PDOya)),E=c(2:10)) # PDO
-sim_orca <- simplex(SRKW.csv$SR_Orca,lib=c(1,round(length(SRKW.csv$SR_Orca)/2)),pred=c(round(length(SRKW.csv$SR_Orca)/2)+1,length(SRKW.csv$SR_Orca)),E=c(2:10)) # ORca
-sim_sealionpup <- simplex(sealion.csv$Pup.count,lib=c(1,round(length(sealion.csv$Pup.count)/2)),pred=c(round(length(sealion.csv$Pup.count)/2)+1,length(sealion.csv$Pup.count)),E=c(2:10)) # Sealion pups
-sim_sealionmale <- simplex(sealion.csv$Male,lib=c(1,round(length(sealion.csv$Male)/2)),pred=c(round(length(sealion.csv$Male)/2)+1,length(sealion.csv$Male)),E=c(2:10)) # Sealion Males
+sim_PDO <- simplex(PDO$PDOya,lib=c(1,round(length(PDO$PDOya)/2)),pred=c(round(length(PDO$PDOya)/2)+1,length(PDO$PDOya)),E=c(2:10)) # PDO
+sim_orca <- simplex(SRKW$SR_Orca,lib=c(1,round(length(SRKW$SR_Orca)/2)),pred=c(round(length(SRKW$SR_Orca)/2)+1,length(SRKW$SR_Orca)),E=c(2:10)) # ORca
+sim_sealionpup <- simplex(CSL$Pup.count,lib=c(1,round(length(CSL$Pup.count)/2)),pred=c(round(length(CSL$Pup.count)/2)+1,length(CSL$Pup.count)),E=c(2:10)) # Sealion pups
+sim_sealionmale <- simplex(CSL$Male,lib=c(1,round(length(CSL$Male)/2)),pred=c(round(length(CSL$Male)/2)+1,length(CSL$Male)),E=c(2:10)) # Sealion Males
 
 # We present the results showing the relationship between the predictive skill (ρ) and the embedding dimension (E)
 ## Plot predictive skill (rho) vs embedding dimension (E) 
