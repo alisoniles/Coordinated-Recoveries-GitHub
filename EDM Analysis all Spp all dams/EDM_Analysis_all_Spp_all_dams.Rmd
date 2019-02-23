@@ -27,6 +27,7 @@ library(Kendall)
 library(tidyr)
 library(tidyverse)
 library(dplyr)
+#library(statcomp) #permutation entropy function here - can't get it to install the package. Used my PE function in Matlab
 ```
 
 # Load and prepare data
@@ -115,56 +116,132 @@ CSL <- CSL %>%
   ungroup()
 CSL<- CSL[, c(4,2,1,3,6,5)]
 
-dd <- bind_rows(BON, PRD, IHR, CSL, SRKW, PDO)
+dd <- bind_rows(PRD, CSL, SRKW, PDO)
 dd$ID <- as.numeric(as.factor(paste0(dd$location, "_", dd$species)))
-dd_nest <- dd %>% group_by(ID) %>% nest()
-dd_nest$N <- unlist(lapply(dd_nest$data, nrow))
-
-#plot(PDO$PDOya~PDO$Year,type="l",xlab="Year",ylab="PDO",ylim=c(-2,2),col=2,main="PDO time series")
-# plot time series
+dd_ts <- dd %>% group_by(ID) %>% nest()
+dd_ts$N <- unlist(lapply(dd_ts$data, nrow))
 
 ```
 # Simplex projection (Sugihara & May 1990)
 
 The complexity of a system can be practically defined as the number of independent variables needed to reconstruct the attractor (i.e. dimensionality of the system). Determining the best embedding dimension E with 'Simplex projection' is a fundamental first step in all EDM analysis. 
 
-By simplex projection, we make one-step, out-of-sample forward forecast (predict t+1 step) using different values of E to determine the optimal embedding dimension. We present the results showing the relationship between the predictive skill (ρ - the correlation coefficient between observations and forecasts) and the embedding dimension (E) (Fig. 2c & d in the main text).
+By simplex projection, we make one-step, out-of-sample forward forecast (predict t+1 step) using different values of E to determine the optimal embedding dimension. In the case where the time series is rather short, leave-one-out cross-validation can be performed instead of dividing the time series into halves (Sugihara et al. 1996; Glaser et al. 2014).
 
-Note that, in the case where the time series is rather short, leave-one-out cross-validation can be performed instead of dividing the time series into halves (Sugihara et al. 1996; Glaser et al. 2014).
+The general approach was to divide the time series into a training and a test dataset, according to a specified split (e.g. split 2 means first 50% of data used for training and second 50% used for testing). We used a split of 3 (66% of data used for training, 33% used for testing).
+
+We first fitted the simplex projection to identify the best embedding dimension D. D varied from 1 to 10. Based on cross-validation, we chose D with the highest forecast skill across the training data. Next we fitted the S-maps with the chosen D to the training data and determined the optimal tuning parameter theta. The tuning parameter theta determines how non-linear the system is and hence which embeddings are considered for CCM. Theta varied in 18 steps between 0 and 8 (with log scaled step sizes). 
 
 ```{r}
-# The simplex projection is carried out by the function rEDM::simplex(). 
-# We divide the time series into two halves. The first half is used as the library set for manifold reconstruction. The second half is used as the target for out-of-sample prediction. 
-# The argument lib is the time index indicating the start (1) and the end (n/2) in the library set, respectively. Similarly, the argument pred indicates the time index in the prediction set. 
-# We specify a sequence of testing embedding dimensions from 2 to 10 by the argument E=c(2:10), which executes the simplex projections using different embedding dimensions.
+# define how much data you want to use
+# by division -> 2 = 50% split, 4 = 25% etc.
+split <- 3
 
-E <- list()
-for (i in 1:1){ #length(salmon)){  #for each dam
-    for (j in 2:7){ #for each species
-n <- round(length(salmon[[i]][[j]])/2)
-sim <- simplex(salmon[[i]][[j]],lib=c(1,n),pred=c(n+1,length(salmon[[i]][[j]])),E=c(2:10)) #Salmon 
-E[[j]] <-sim[which.max(sim),"E"][1]# The optimal E 
-    }
+dd_ts$fit <- list(NULL)
+dd_ts$model <- list(NULL)
+
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/smap_fitting_Fig.pdf")
+for (i in 1:nrow(dd_ts)){
+  
+  layout(matrix(c(1,2,3,3), 2, 2, byrow = TRUE))
+  ts_select <- as.data.frame(dd_ts$data[[i]])
+  
+  step_ahead <- as.integer(nrow(ts_select)/split) # define steps ahead forecast (based on split)
+  
+  simplex_fit <- simplex(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"))
+  
+  # estimate E_hat, but restrict E to be less than half the ts length to be predicted
+  E_hat <- min(simplex_fit[which(max(simplex_fit$rho)==simplex_fit$rho)[1], ]$E, step_ahead/2)
+  plot(simplex_fit$E, simplex_fit$rho, type="l", xlab = "Embedding dimension (E)", ylab="Forecast skill (rho)")
+  abline(v=E_hat, col="red", lty=2)
+  
+  smap_fit <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"), E = E_hat)
+  plot(smap_fit$theta, smap_fit$rho, type="l", xlab = "Theta", ylab="Forecast skill (rho)")
+  theta_hat <- smap_fit[which(max(smap_fit$rho)==smap_fit$rho), ]$theta
+  abline(v=theta_hat, col="red", lty=2)
+  
+  smap_fit <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
+  dd_ts[i, 4] <- smap_fit
+  
+  smap_pred  <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)), pred = c( c((length(ts_select$abundance)-step_ahead)),  length(ts_select$abundance)),  
+                      stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
+  dd_ts[i, 5] <- smap_pred
+  
+  xyy <- smap_pred["model_output"][[1]][[1]] %>% drop_na()
+  plot(xyy$time,xyy$obs, type="l", xlab = "Time", ylab="Abundance")
+  #lines(xyy$time, xyy$pred, col=2)
+  layout(matrix(c(1,1), 1, 1, byrow = TRUE))
 }
-
-sim_PDO <- simplex(PDO$PDOya,lib=c(1,round(length(PDO$PDOya)/2)),pred=c(round(length(PDO$PDOya)/2)+1,length(PDO$PDOya)),E=c(2:10)) # PDO
-sim_orca <- simplex(SRKW$SR_Orca,lib=c(1,round(length(SRKW$SR_Orca)/2)),pred=c(round(length(SRKW$SR_Orca)/2)+1,length(SRKW$SR_Orca)),E=c(2:10)) # ORca
-sim_sealionpup <- simplex(CSL$Pup.count,lib=c(1,round(length(CSL$Pup.count)/2)),pred=c(round(length(CSL$Pup.count)/2)+1,length(CSL$Pup.count)),E=c(2:10)) # Sealion pups
-sim_sealionmale <- simplex(CSL$Male,lib=c(1,round(length(CSL$Male)/2)),pred=c(round(length(CSL$Male)/2)+1,length(CSL$Male)),E=c(2:10)) # Sealion Males
-
-# We present the results showing the relationship between the predictive skill (ρ) and the embedding dimension (E)
-## Plot predictive skill (rho) vs embedding dimension (E) 
-#par(mfrow=c(1,1),mar=c(4,4,1,1))
-#plot(rho~E,data=sim_FChnk,type="l",xlab="Embedding dimension (E)",ylab=expression(rho),ylim=c(-0.4,0.8),col=2,main="Ice Harbor Dam Fall Chinook, determine optimal E")
-
-## The optimal embedding dimension determined by maximizing rho
-
-E_PDO <-sim_PDO[which.max(sim_PDO$rho),"E"][1]# The optimal E of PDO
-E_orca <-sim_orca[which.max(sim_orca$rho),"E"][1]# The optimal E of southern resident orca population
-E_sealionpup <-sim_sealionpup[which.max(sim_sealionpup$rho),"E"][1]# The optimal E of sea lion pup count data
-E_sealionmale <-sim_sealionmale[which.max(sim_sealionmale$rho),"E"][1]# The optimal E of  male sea lion population estimates
+dev.off()
 ```
+# Determining causal variables by convergent cross mapping (CCM)
 
+EDM can be used to reveal causation between variables. Two variables are causally linked if they interact in the same dynamical system. Following Takens’ theorem, the system manifold reconstructed from univariate embedding (State Space Reconstruction using a single variable) gives a 1-1 map to the original system, i.e., topologically invariance. Because all manifolds reconstructed from univariates give 1-1 maps to the original manifold, it is not surprising that all the reconstructed manifolds result in 1-1 mappings if they are causally linked. Based on this idea, Sugihara et al. (2012) developed a cross-mapping algorithm to test the causation between a pair of variables in dynamical systems. This algorithm predicts the current quantity of one variable M1 using the time lags of another variable M2 and vice versa. If M1 and M2 belong to the same dynamical system (i.e., they are causally linked), the cross-mapping between them shall be ‘‘convergent.’’ Convergence means that the cross-mapping skill (q) improves with increasing library size. This is because more data in the library makes the reconstructed manifold denser, and the highly resolved attractor improves the accuracy of prediction based on neighboring points (i.e., simplex projection). Sugihara et al. (2012) stated that convergence is a practical criterion to test causation, and called this phenomenon convergent cross-mapping (CCM).
 
+To evaluate convergence in cross-mapping, the state space is reconstructed using different library lengths (L) subsampled randomly from time series. Here, Li starts from the minimal library length, L0, which is equal to the embedding dimension, to the maximal library length, Lmax, which equal to the whole length of the time series. To test the convergence of CCM, two approaches are widely used. First, the convergence can be tested by investigating how the cross- mapping skill changes with respect to the library size (e.g., trend or increment). For example, one can consider the following two statistical criteria: (1) testing the existence of a significant monotonic increasing trend in q(L) using Kendall’s s test, and (2) testing the significance of the improvement in q(L) by Fisher’s Dq Z test, which checks whether the cross-mapping skill obtained under the maximal library length (q(Lmax)) is significantly higher than that obtained using the minimal library length (q(L0)). The convergence of CCM is deemed significant when both Kendall’s s test and Fisher’s Dq Z test are significant. 
+
+Note that, the direction of cross-mapping is opposite to the direction of cause-effect. That is, a convergent cross-mapping from M2(t) to M1(t) indicates that M1 causes M2. This is because M1, as a causal variable driving M2, has left its footprints on M2(t). The footprints of M1 are transcribed on the past history of M2, and thus M2 is able to predict the current value of M1.
+
+# First we test the causal significance of each of the species interactions in the system
+
+The matrix output of the calculations will be organized with the convention of the community matrix, A, whose elements aij are interpreted as the direct effect of the species in column j on the species in row i. 
+
+```{R}
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_PRD_Fig.pdf")
+
+for (j in 1:nrow(dd_ts)){   # the direct effect of the species in column j
+  for (i in 1:nrow(dd_ts)){ # on the species in row i
+    
+    layout(matrix(c(1,1), 1, 1, byrow = TRUE))
+    
+    if (i==j) next
+    
+   # (if you can predict j based on the library formed by i, they the signiture of j is found in the time series of i and thus j has a direct, causal influence on i)
+  tar_y <- as.data.frame(dd_ts$data[[j]]) #select target species data 
+  lib_x <- as.data.frame(dd_ts$data[[i]]) #select species for which to base the library on
+  
+  # select overlapping years
+  dat <- merge(lib_x,tar_y, by = "year")
+  dat <- select(dat, c("year", "norm.x", "norm.y")) 
+  dat <- rename(dat, tar.y = norm.y) 
+  dat <- rename(dat, lib.x = norm.x)
+  ls <- nrow(dat)
+  
+  # Determine the embedding dimension
+  E.test=NULL
+  for(E.t in 2:10){
+    E.temp <- ccm(dat, E = E.t, lib_column = "lib.x", target_column = "tar.y", lib_sizes = ls, num_samples = 1, tp=-1,random_libs = F)
+    E.test=rbind(E.test,E.temp)}
+  (E <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
+  
+  # Design a sequence of library size
+  libs <- c(seq(as.integer(E*1.5),ls,2))
+  
+  # CCM analysis with varying library size (L)
+  xmap <- ccm(dat, E=E,lib_column="lib.x", target_column="tar.y",
+                  lib_sizes=libs, num_samples=100, replace=T, RNGseed=2301)
+  	
+  # Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+  rho_quant=as.matrix(aggregate(xmap[,c('rho')],by = list(as.factor(xmap$lib_size)), quantile)[,'x'])
+  MK <- apply(rho_quant[,2:5],2,MannKendall) #This is a test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. Here the median, maximum, and 1st & 3rd quantiles are tested.
+  FZ <- paired.r(rho_quant[1,3],rho_quant[length(libs),3],NULL, libs[1], libs[length(libs)], twotailed=FALSE) # independent correlations, different sample sizes
+  
+  # Plot forecast skill vs library size
+ plot(rho_quant[,3]~libs,type="l",col="red",ylim=c(-0.1,1.1),lwd=2,
+       main=paste(dd_ts$data[[i]][[1]][[1]], dd_ts$data[[i]][[2]][[1]], "xmap",  dd_ts$data[[j]][[1]][[1]], dd_ts$data[[j]][[2]][[1]], sep=" "), sub=paste("(i.e. testing", dd_ts$data[[j]][[1]][[1]], dd_ts$data[[j]][[2]][[1]],"as a cause of",dd_ts$data[[i]][[1]][[1]], dd_ts$data[[i]][[2]][[1]], ")", sep=" "),xlab="Library size",ylab=expression(rho)) # median predictive skill vs library size (or we can use mean predictive skill)
+  lines(rho_quant[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
+  lines(rho_quant[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
+  
+  text(25,1.1,paste("100%:", signif(MK$`100%`[[2]],2), sep=" "))
+  text(25,1.05,paste("75%:", signif(MK$`75%`[[2]],2), sep=" "))
+  text(25,1,paste("50%:", signif(MK$`50%`[[2]],2), sep=" "))
+  text(25,0.95,paste("25%:", signif(MK$`25%`[[2]],2), sep=" "))
+  text(25,0.9,paste("FZ:", FZ$p, sep=" "))
+  
+  layout(matrix(c(1,1), 1, 1, byrow = TRUE))
+  }
+}
+dev.off()
+```
 
 
