@@ -1,6 +1,6 @@
 ---
 title: "EDM_all_Spp_all_dams"
-author: "Alison Iles"
+author: "Alison Iles + Kurt Ingeman"
 date: "2/13/2019"
 output: html_document
 ---
@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = FALSE,
                       tidy=TRUE)
 ```
 # CORE_EDM research questions
+# (Forked)
 
 Is there evidence of a (strong, consistent) negative impact on salmon returns of pinniped pop increases in the Columbia Basin?
 If so, for which runs? Does this effect match local pred occupancy?
