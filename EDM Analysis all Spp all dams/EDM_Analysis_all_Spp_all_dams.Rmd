@@ -159,7 +159,7 @@ CSL <- CSL %>%
   ungroup()
 CSL<- CSL[, c(4,2,1,3,6,5)]
 
-dd <- bind_rows(BON, CSL, SRKW, PDO, PDO_L1, PDO_L2, PDO_L3, PDO_L4, PDO_L5, PDO_L6)
+dd <- bind_rows(IHR, CSL, SRKW, PDO, PDO_L1, PDO_L2, PDO_L3, PDO_L4, PDO_L5, PDO_L6)
 dd$ID <- as.numeric(as.factor(paste0(dd$location, "_", dd$species)))
 dd_ts <- dd %>% group_by(ID) %>% nest()
 dd_ts$N <- unlist(lapply(dd_ts$data, nrow))
@@ -233,7 +233,7 @@ Note that, the direction of cross-mapping is opposite to the direction of cause-
 The matrix output of the calculations will be organized with the convention of the community matrix, A, whose elements aij are interpreted as the direct effect of the species in column j on the species in row i. 
 
 ```{R}
-pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_BON_Fig.pdf")
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_IHR_Fig.pdf")
  var_names <- matrix(1, nrow=nrow(dd_ts))
  SI_embed <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of significant causal interactions between variables to help determine which to use in the embeddings of each fish stock. 
  SI_rho <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of correlation coefficients between variables to help determine which to use in the embeddings. 
@@ -322,7 +322,7 @@ library(quantreg)
 
 pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/Coeff_Fig.pdf")
 
-for (i in 1:5){ #for each of the five fish taxa
+for (i in 1:7){ #for each of the five fish taxa + CSL + SRKW
   
   layout(matrix(c(1,2), 2, 1, byrow = TRUE))
  
@@ -427,15 +427,16 @@ for (i in 1:5){ #for each of the five fish taxa
         xlab="time", ylab="interaction coefficient")
     
     # Create a list of colors to use for the lines.
-    cl <- rainbow(10)
+    cl <- rainbow(8)
     
     # Now fill plot with the log transformed coverage data from the
     # files one by one.
     for  (icoeff in 1:Edim) {
-        lines(coeff[trange,1],coeff[trange,(2+icoeff)], col = cl[icoeff], type="l", lwd=2)
-        plotcol[icoeff] <- cl[icoeff]
-    }
-    legend("topright", legend = coeff_names, col = cl[], lwd = 1,
+         lines(coeff[trange,1],coeff[trange,(2+icoeff)], col = cl[icoeff], type="l", lwd=2)
+         plotcol[icoeff] <- cl[icoeff]
+      }
+    abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+    legend("bottomleft", legend = coeff_names, col = cl[], lwd = 1,
            cex = 0.5)
     
   
