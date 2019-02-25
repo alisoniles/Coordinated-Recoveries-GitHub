@@ -27,6 +27,7 @@ library(Kendall)
 library(tidyr)
 library(tidyverse)
 library(dplyr)
+library(psych)
 #library(statcomp) #permutation entropy function here - can't get it to install the package. Used my PE function in Matlab
 ```
 
@@ -94,6 +95,48 @@ PDO$source <- "ncdc.noaa.gov"
 PDO <- PDO %>%  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) # normalization
 PDO <- PDO[, c(4,3,1,2,6,5)]
 
+#Lagged PDO by 1 year
+PDO_L1 <- PDO 
+PDO_L1$abundance[2:nrow(PDO_L1)] <- PDO_L1$abundance[1:(nrow(PDO_L1)-1)]
+PDO_L1$norm[2:nrow(PDO_L1)] <- PDO_L1$norm[1:(nrow(PDO_L1)-1)]
+PDO_L1 <- PDO_L1 %>% slice(2:nrow(PDO_L1))
+PDO_L1$species <- "PDO_L1"
+
+#Lagged PDO by 2 years
+PDO_L2 <- PDO 
+PDO_L2$abundance[3:nrow(PDO_L2)] <- PDO_L2$abundance[1:(nrow(PDO_L2)-2)]
+PDO_L2$norm[3:nrow(PDO_L2)] <- PDO_L2$norm[1:(nrow(PDO_L2)-2)]
+PDO_L2 <- PDO_L2 %>% slice(3:nrow(PDO_L2))
+PDO_L2$species <- "PDO_L2"
+
+#Lagged PDO by 3 years
+PDO_L3 <- PDO 
+PDO_L3$abundance[4:nrow(PDO_L3)] <- PDO_L3$abundance[1:(nrow(PDO_L3)-3)]
+PDO_L3$norm[4:nrow(PDO_L3)] <- PDO_L3$norm[1:(nrow(PDO_L3)-3)]
+PDO_L3 <- PDO_L3 %>% slice(4:nrow(PDO_L3))
+PDO_L3$species <- "PDO_L3"
+
+#Lagged PDO by 4 years
+PDO_L4 <- PDO 
+PDO_L4$abundance[5:nrow(PDO_L4)] <- PDO_L4$abundance[1:(nrow(PDO_L4)-4)]
+PDO_L4$norm[5:nrow(PDO_L4)] <- PDO_L4$norm[1:(nrow(PDO_L4)-4)]
+PDO_L4 <- PDO_L4 %>% slice(5:nrow(PDO_L4))
+PDO_L4$species <- "PDO_L4"
+
+#Lagged PDO by 5 years
+PDO_L5 <- PDO 
+PDO_L5$abundance[6:nrow(PDO_L5)] <- PDO_L5$abundance[1:(nrow(PDO_L5)-5)]
+PDO_L5$norm[6:nrow(PDO_L5)] <- PDO_L5$norm[1:(nrow(PDO_L5)-5)]
+PDO_L5 <- PDO_L5 %>% slice(6:nrow(PDO_L5))
+PDO_L5$species <- "PDO_L5"
+
+#Lagged PDO by 6 years
+PDO_L6 <- PDO 
+PDO_L6$abundance[7:nrow(PDO_L6)] <- PDO_L6$abundance[1:(nrow(PDO_L6)-6)]
+PDO_L6$norm[7:nrow(PDO_L6)] <- PDO_L6$norm[1:(nrow(PDO_L6)-6)]
+PDO_L6 <- PDO_L6 %>% slice(7:nrow(PDO_L6))
+PDO_L6$species <- "PDO_L6"
+
 #Southern Resident Killer Whale data
 SRKW <- rename(SRKW, abundance = SR_Orca) 
 SRKW <- rename(SRKW, year = Year)
@@ -104,10 +147,10 @@ SRKW <- SRKW %>%  mutate(norm = (abundance - mean(abundance)) / sd(abundance)) #
 SRKW <- SRKW[, c(4,3,1,2,6,5)]
 
 #California Sea Lion data
+CSL <- select(CSL, c("Year", "Male"))
 CSL <- rename(CSL, year = Year) #rename year column
-CSL <- rename(CSL, CSL_males = Male) 
-CSL <- rename(CSL, CSL_pups = Pup.count) 
-CSL <- gather(CSL, "species", abundance, 2:3)
+CSL <- rename(CSL, CSL = Male) 
+CSL <- gather(CSL, "species", abundance, 2)
 CSL$location <- "ocean"
 CSL$source <- "Laake 2018"
 CSL <- CSL %>%
@@ -116,7 +159,7 @@ CSL <- CSL %>%
   ungroup()
 CSL<- CSL[, c(4,2,1,3,6,5)]
 
-dd <- bind_rows(PRD, CSL, SRKW, PDO)
+dd <- bind_rows(BON, CSL, SRKW, PDO, PDO_L1, PDO_L2, PDO_L3, PDO_L4, PDO_L5, PDO_L6)
 dd$ID <- as.numeric(as.factor(paste0(dd$location, "_", dd$species)))
 dd_ts <- dd %>% group_by(ID) %>% nest()
 dd_ts$N <- unlist(lapply(dd_ts$data, nrow))
@@ -135,10 +178,10 @@ We first fitted the simplex projection to identify the best embedding dimension 
 ```{r}
 # define how much data you want to use
 # by division -> 2 = 50% split, 4 = 25% etc.
-split <- 3
+split <- 2
 
-dd_ts$fit <- list(NULL)
-dd_ts$model <- list(NULL)
+dd_ts$E <- list(NULL)
+dd_ts$theta <- list(NULL)
 
 pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/smap_fitting_Fig.pdf")
 for (i in 1:nrow(dd_ts)){
@@ -148,30 +191,33 @@ for (i in 1:nrow(dd_ts)){
   
   step_ahead <- as.integer(nrow(ts_select)/split) # define steps ahead forecast (based on split)
   
-  simplex_fit <- simplex(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"))
+  simplex_fit <- simplex(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"))
   
   # estimate E_hat, but restrict E to be less than half the ts length to be predicted
   E_hat <- min(simplex_fit[which(max(simplex_fit$rho)==simplex_fit$rho)[1], ]$E, step_ahead/2)
   plot(simplex_fit$E, simplex_fit$rho, type="l", xlab = "Embedding dimension (E)", ylab="Forecast skill (rho)")
   abline(v=E_hat, col="red", lty=2)
   
-  smap_fit <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"), E = E_hat)
+  # estimate theta
+  smap_fit <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)),  stats_only = T, norm_type = c("L2 norm"), E = E_hat)
   plot(smap_fit$theta, smap_fit$rho, type="l", xlab = "Theta", ylab="Forecast skill (rho)")
   theta_hat <- smap_fit[which(max(smap_fit$rho)==smap_fit$rho), ]$theta
   abline(v=theta_hat, col="red", lty=2)
   
-  smap_fit <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)),  stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
-  dd_ts[i, 4] <- smap_fit
+  dd_ts$E[i] <- E_hat
+  dd_ts$theta[i] <- theta_hat
   
-  smap_pred  <- s_map(ts_select$abundance, lib = c(1, (length(ts_select$abundance)-step_ahead)), pred = c( c((length(ts_select$abundance)-step_ahead)),  length(ts_select$abundance)),  
-                      stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
-  dd_ts[i, 5] <- smap_pred
+  # best fit 
+  smap_best_fit <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)),  stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
+  
+  smap_pred  <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)), pred = c( c((length(ts_select$norm)-step_ahead)),  length(ts_select$norm)), stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
   
   xyy <- smap_pred["model_output"][[1]][[1]] %>% drop_na()
-  plot(xyy$time,xyy$obs, type="l", xlab = "Time", ylab="Abundance")
-  #lines(xyy$time, xyy$pred, col=2)
+  plot(ts_select$year, ts_select$norm, type="l", xlab = "Time", ylab="Abundance (normalized)", main=paste(ts_select$location[[1]], ts_select$species[[1]], sep=" "))
+  lines(ts_select$year[xyy$time[1]:xyy$time[nrow(xyy)]], xyy$pred, col=2)
   layout(matrix(c(1,1), 1, 1, byrow = TRUE))
 }
+
 dev.off()
 ```
 # Determining causal variables by convergent cross mapping (CCM)
@@ -182,13 +228,20 @@ To evaluate convergence in cross-mapping, the state space is reconstructed using
 
 Note that, the direction of cross-mapping is opposite to the direction of cause-effect. That is, a convergent cross-mapping from M2(t) to M1(t) indicates that M1 causes M2. This is because M1, as a causal variable driving M2, has left its footprints on M2(t). The footprints of M1 are transcribed on the past history of M2, and thus M2 is able to predict the current value of M1.
 
-# First we test the causal significance of each of the species interactions in the system
+# Test the causal significance of each of the species interactions in the system
 
 The matrix output of the calculations will be organized with the convention of the community matrix, A, whose elements aij are interpreted as the direct effect of the species in column j on the species in row i. 
 
 ```{R}
-pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_PRD_Fig.pdf")
-
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_BON_Fig.pdf")
+ var_names <- matrix(1, nrow=nrow(dd_ts))
+ SI_embed <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of significant causal interactions between variables to help determine which to use in the embeddings of each fish stock. 
+ SI_rho <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of correlation coefficients between variables to help determine which to use in the embeddings. 
+ colnames(SI_embed, do.NULL = FALSE)
+ colnames(SI_rho, do.NULL = FALSE)
+ rownames(SI_embed, do.NULL = FALSE)
+ rownames(SI_rho, do.NULL = FALSE)
+  
 for (j in 1:nrow(dd_ts)){   # the direct effect of the species in column j
   for (i in 1:nrow(dd_ts)){ # on the species in row i
     
@@ -215,7 +268,7 @@ for (j in 1:nrow(dd_ts)){   # the direct effect of the species in column j
   (E <- E.test$E[which.max(E.test$rho)[1]]) # the optimal E
   
   # Design a sequence of library size
-  libs <- c(seq(as.integer(E*1.5),ls,2))
+  libs <- c(seq(as.integer(E*2),ls,1))
   
   # CCM analysis with varying library size (L)
   xmap <- ccm(dat, E=E,lib_column="lib.x", target_column="tar.y",
@@ -223,8 +276,15 @@ for (j in 1:nrow(dd_ts)){   # the direct effect of the species in column j
   	
   # Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
   rho_quant=as.matrix(aggregate(xmap[,c('rho')],by = list(as.factor(xmap$lib_size)), quantile)[,'x'])
-  MK <- apply(rho_quant[,2:5],2,MannKendall) #This is a test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. Here the median, maximum, and 1st & 3rd quantiles are tested.
-  FZ <- paired.r(rho_quant[1,3],rho_quant[length(libs),3],NULL, libs[1], libs[length(libs)], twotailed=FALSE) # independent correlations, different sample sizes
+  MK <- apply(rho_quant[,2:5],2,MannKendall) #This is a test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. Here the median, maximum, and 1st & 3rd quantiles are tested, all need to be <0.05.
+  FZ <- paired.r(rho_quant[1,3],rho_quant[length(libs),3], NULL, libs[1], libs[length(libs)], twotailed=FALSE) # This transforms the rho at the min library and max library length to a normally distributed Fisher's z value and then tests that the max library z is significantly higher than the begining. Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
+  CI95 <- r.con(rho_quant[length(libs),3], libs[length(libs)], p=.95, twotailed=FALSE) # Test if rho is significantly different from 0 at p=0.05 level, which is what was done for Sockey in Ye et al. 2015
+  
+  # Output tables for the embeddings
+  SI_embed[i,j] <- (MK$`25%`[[2]]<0.01 & MK$`50%`[[2]]<0.01 & MK$`75%`[[2]]<0.01 & MK$`100%`[[2]]<0.01 & CI95[1] > 0 & (rho_quant[1,3] < rho_quant[length(libs),3])) #Criteria to include a variable in the embedding: all percentiles are increasing and the final rho is statistically greater than zero. 
+  SI_rho[i,j] <- signif(rho_quant[length(libs),3],2)
+  var_names[j] <- dd_ts$data[[j]][[2]][[1]]
+
   
   # Plot forecast skill vs library size
  plot(rho_quant[,3]~libs,type="l",col="red",ylim=c(-0.1,1.1),lwd=2,
@@ -232,16 +292,134 @@ for (j in 1:nrow(dd_ts)){   # the direct effect of the species in column j
   lines(rho_quant[,2]~libs,col="red",lwd=1,lty=2) # 1st quantile 
   lines(rho_quant[,4]~libs,col="red",lwd=1,lty=2) # 3rd quantile
   
-  text(25,1.1,paste("100%:", signif(MK$`100%`[[2]],2), sep=" "))
-  text(25,1.05,paste("75%:", signif(MK$`75%`[[2]],2), sep=" "))
-  text(25,1,paste("50%:", signif(MK$`50%`[[2]],2), sep=" "))
-  text(25,0.95,paste("25%:", signif(MK$`25%`[[2]],2), sep=" "))
-  text(25,0.9,paste("FZ:", FZ$p, sep=" "))
+  #text(30,1.1,paste("100%:", signif(MK$`100%`[[2]],2), sep=" "))
+  #text(30,1.05,paste("75%:", signif(MK$`75%`[[2]],2), sep=" "))
+  #text(30,1,paste("50%:", signif(MK$`50%`[[2]],2), sep=" "))
+  #text(30,0.95,paste("25%:", signif(MK$`25%`[[2]],2), sep=" "))
+  text(30,1.05,paste("MK @ each quantile < 0.05?:", SI_embed[i,j], sep=" "))
+  text(30,1,paste("begin-end FZ p-val:", signif(FZ$p,2), sep=" "))
+  text(30,0.95,paste("upper 95% CI:", signif(CI95[2],2), sep=" "))
+  text(30,0.9,paste("lower 95% CI:", signif(CI95[1],2), sep=" "))
   
   layout(matrix(c(1,1), 1, 1, byrow = TRUE))
   }
 }
 dev.off()
+
+SI_embed <- data.frame(SI_embed)
+SI_rho <- data.frame(SI_rho)
+colnames(SI_embed) <- rownames(SI_embed) <- colnames(SI_rho) <- rownames(SI_rho) <- var_names
+
+
 ```
+# Tracking interactions in time (Code from Deyle 2016)
 
+To calculate the coefficients of the partial effect of one variable on another, we first have to determine which embedding to use. This is somewhat subjective. Although only 'causal' variables should be included, our limited sample size makes the more rigorous statistical tests of causality (significantly different rho between min and max library size in the CCM analysis) 
 
+```{r}
+library(Matrix) 
+library(quantreg)
+
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/Coeff_Fig.pdf")
+
+for (i in 1:5){ #for each of the five fish taxa
+  
+  layout(matrix(c(1,2,3,3), 2, 2, byrow = TRUE))
+ 
+  PDO_L <- which(max(SI_rho[i,8:14])==SI_rho[i,8:14])+7
+  plot(seq(from = 0, to = 6, by = 1), SI_rho[i,8:14], type="l", xlab = "PDO prediction lag (yrs)", ylab="Forecast skill (rho)")+
+  abline(v=PDO_L, col="red", lty=2)
+  
+  which_var <- c(i, which(SI_embed[i,1:7]==TRUE), PDO_L) #Identifiy the significant variables to include in the analysis
+  Edim <- length(which_var)
+  
+  Embedding <- dd_ts$data[[i]][[2]][[1]]
+  d <- as.data.frame(dd_ts$data[[i]]) #select focal species data 
+    for (wv in 2:length(which_var)){
+    Embedding <- c(Embedding, dd_ts$data[[which_var[wv]]][[2]][[1]])
+    d <- merge(d, dd_ts$data[[which_var[wv]]], by = "year", suffixes = c(Embedding[wv-1],Embedding[wv]) ) #merge the different variables together by overlapping years
+    }
+  year <- as.data.frame(d$year) %>% slice(2:nrow(d))
+  d <- select(d, paste("norm",Embedding, sep="")) 
+  ls <- nrow(d)
+ 
+  targ_col <- 1
+   
+  #For the weighted linear regression, we will be
+  block <- cbind(d[2:dim(d)[1],targ_col],d[1:(dim(d)[1]-1),]) 
+  norm_consts <- apply(block, 2, function(x) sd(x))
+  block <- as.data.frame(apply(block, 2, function(x) (x-mean(x))/sd(x)))
+   
+  #We have a few final parameters to set for the S-map regression.
+  lib <- 1:dim(block)[1] 
+  pred <- 1:dim(block)[1] 
+  theta <- dd_ts$theta[[i]]
+   
+  #and we need to set up output.
+  coeff_names <- sapply(Embedding, function(x) paste("d", Embedding[targ_col], "/d", x, sep = ""))
+  coeff <- array(0,dim=c(length(pred),Edim)) 
+  colnames(coeff) <- coeff_names
+  coeff <- as.data.frame(coeff)
+   
+  #Finally, to stay consistent with prior applications of S-maps, we will use SVD to solve the weighted linear regression. For ease, we put this into a single function that is similar to the basic lm() function in R. The lm() function could be used instead, but it computes the regression using QR instead of SVD.
+  
+  lm_svdsolve <- function(y, x, ws, subset = seq_along(y)){ 
+        x <- x[subset,]
+        y <- y[subset]
+        ws <- ws[subset]
+      
+        # prepended column of 1s for constant term in linear model
+        A <- cbind(1, x) * ws 
+        A_svd <- svd(A)
+        
+        # >>REMOVE SMALL SINGULAR VALUES<<
+        s <- A_svd$d
+        s_inv <- matrix(0, nrow = dim(x)[2]+1, ncol = dim(x)[2]+1) 
+        for(k in seq_along(s)){
+              if(s[k] >= max(s) * 1e-5) s_inv[k,k] <- 1/s[k]
+            }
+      
+        coeff <- A_svd$v %*% s_inv %*% t(A_svd$u) %*% (ws * y)
+        coeff <- t(coeff)
+        
+        colnames(coeff) <- c("const",colnames(x))
+        return(coeff) 
+    }
+
+#Now, all the preceding code was just to set up the calculation. We now loop over each prediction point to actually calculate the S-map locally weighted regression for each prediction point. This calculation is quite simple. (1) We calculate the (normalized) Euclidian distance from the target point to the other points on the attractor. (2) These distances then become the weights for a weighted linear regression, which we solve using singular value decomposition (SVD).
+  
+  # >>CALCULATE COEFFICIENTS<<
+  for (ipred in 1:length(pred)){
+  
+      #target point is excluded from the fitting procedure
+      libs = lib[-pred[ipred]]
+      
+      # >>CALCULATE WEIGHTS<<
+      q <- matrix(as.numeric(block[pred[ipred],2:dim(block)[2]]), 
+                  ncol=Edim, nrow=length(libs), byrow = T)
+      distances <- sqrt(rowSums((block[libs,2:dim(block)[2]] - q)^2)) 
+      dbar <- mean(distances)
+      Ws <- exp(-theta*distances/dbar)
+      
+      # >>REGRESS<<
+      svd_fit <- lm_svdsolve(block[libs,1],block[libs,2:dim(block)[2]],Ws) 
+      coeff[ipred,] <- svd_fit[-1]
+    }
+  
+  coeff <- cbind(pred,coeff) 
+  colnames(coeff)[1] <- "t"
+  
+  #We can plot a time series of these coeffcients over a span of time.
+  l<-dim(block[1])[1]  #number of datapoints for plotting
+  trange <- 1:l
+  coeff <- data.frame(year, coeff)
+  plot(coeff[trange,1],coeff[trange,4],type="l",col="green",xlab="time",
+       ylab="interaction coefficient", lwd=2)+
+  abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+  
+  legend(0,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*FC1),expression(partialdiff*FC / partialdiff*PDO), expression(partialdiff*FC / partialdiff*SRKW)),lty=c(1,1),col=c("green","red","black"))
+  legend(12,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*SLM), expression(partialdiff*FC / partialdiff*SC)),lty=c(1,1),col=c("magenta", "blue"))
+
+  layout(matrix(c(1,1), 1, 1, byrow = TRUE))
+}
+```

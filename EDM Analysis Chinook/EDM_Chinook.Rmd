@@ -1032,7 +1032,7 @@ legend(20,0.6,c("Fall Chinook xmap Spring/Summer Chinook","Spring/Summer Chinook
 Significant effect of S/S chinook on Fall Chinook but not vice-versa. 
 
 
-Tracking interactions in time (Code from Deyle 2016)
+# Tracking interactions in time (Code from Deyle 2016)
 
 Focusing on Fall Chinook, the factors that appear to be causally influencing Fall Chinook in the Snake River include Spring/Summer Chinook, male sea lions PDO, and the Southern resident orcas. The optimal embedding dimension for Fall Chinook was 5, suggesting that not all of these are important. The permutation entropy analysis suggested that a time lag of tau=5 containted the most redundant information, perhaps because these were the spawners for the returning generation. So, to start, I'll consider the five-dimensional space given by Fall Chinook (t and t-5), Spring/Summer Chinook, male sea lions, PDO, and SRKW.
 
