@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = FALSE,
                       tidy=TRUE)
 ```
 # CORE_EDM research questions
-# CHECK?
 
 Is there evidence of a (strong, consistent) negative impact on salmon returns of pinniped pop increases in the Columbia Basin?
 If so, for which runs? Does this effect match local pred occupancy?
@@ -325,7 +324,7 @@ pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-
 
 for (i in 1:5){ #for each of the five fish taxa
   
-  layout(matrix(c(1,2,3,3), 2, 2, byrow = TRUE))
+  layout(matrix(c(1,2), 2, 1, byrow = TRUE))
  
   PDO_L <- which(max(SI_rho[i,8:14])==SI_rho[i,8:14])+7
   plot(seq(from = 0, to = 6, by = 1), SI_rho[i,8:14], type="l", xlab = "PDO prediction lag (yrs)", ylab="Forecast skill (rho)")+
@@ -335,13 +334,20 @@ for (i in 1:5){ #for each of the five fish taxa
   Edim <- length(which_var)
   
   Embedding <- dd_ts$data[[i]][[2]][[1]]
-  d <- as.data.frame(dd_ts$data[[i]]) #select focal species data 
+  d <- as.data.frame(dd_ts$data[[i]]) #select target species data 
+  dname <- d$species[[1]]
+  d <- select(d, c("year", "norm")) 
+  names(d) <- c("year", dname)
     for (wv in 2:length(which_var)){
     Embedding <- c(Embedding, dd_ts$data[[which_var[wv]]][[2]][[1]])
-    d <- merge(d, dd_ts$data[[which_var[wv]]], by = "year", suffixes = c(Embedding[wv-1],Embedding[wv]) ) #merge the different variables together by overlapping years
+    dvar <- dd_ts$data[[which_var[wv]]]
+    dname <- dvar$species[[1]] 
+    dvar <- select(dvar, c("year", "norm")) 
+    names(dvar) <- c("year", dname)
+    d <- merge(d, dvar, by = "year") #merge the different variables together by overlapping years
     }
   year <- as.data.frame(d$year) %>% slice(2:nrow(d))
-  d <- select(d, paste("norm",Embedding, sep="")) 
+  d <- select(d, Embedding) 
   ls <- nrow(d)
  
   targ_col <- 1
@@ -414,13 +420,26 @@ for (i in 1:5){ #for each of the five fish taxa
   l<-dim(block[1])[1]  #number of datapoints for plotting
   trange <- 1:l
   coeff <- data.frame(year, coeff)
-  plot(coeff[trange,1],coeff[trange,4],type="l",col="green",xlab="time",
-       ylab="interaction coefficient", lwd=2)+
-  abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
   
-  legend(0,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*FC1),expression(partialdiff*FC / partialdiff*PDO), expression(partialdiff*FC / partialdiff*SRKW)),lty=c(1,1),col=c("green","red","black"))
-  legend(12,-0.3,c(ylab=expression(partialdiff*FC / partialdiff*SLM), expression(partialdiff*FC / partialdiff*SC)),lty=c(1,1),col=c("magenta", "blue"))
-
+  plotcol <- NULL
+  # First create an empty plot.
+    plot(0,0, type = 'n', xlim = c(min(year), max(year)), ylim = c(-1, 1), 
+        xlab="time", ylab="interaction coefficient")
+    
+    # Create a list of colors to use for the lines.
+    cl <- rainbow(10)
+    
+    # Now fill plot with the log transformed coverage data from the
+    # files one by one.
+    for  (icoeff in 1:Edim) {
+        lines(coeff[trange,1],coeff[trange,(2+icoeff)], col = cl[icoeff], type="l", lwd=2)
+        plotcol[icoeff] <- cl[icoeff]
+    }
+    legend("topright", legend = coeff_names, col = cl[], lwd = 1,
+           cex = 0.5)
+    
+  
   layout(matrix(c(1,1), 1, 1, byrow = TRUE))
 }
+dev.off()
 ```
