@@ -35,7 +35,7 @@ library(psych)
 
 ```{r}
 
-folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/data/"
+folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/data/"
 file_list <- list.files(path=folder, pattern="*.csv") # create list of all .csv files in folder
 
 # read in each .csv file in file_list and create a data frame with the same name as the .csv file
@@ -183,7 +183,7 @@ split <- 2
 dd_ts$E <- list(NULL)
 dd_ts$theta <- list(NULL)
 
-pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/smap_fitting_Fig.pdf")
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/smap_fitting_Fig.pdf")
 for (i in 1:nrow(dd_ts)){
   
   layout(matrix(c(1,2,3,3), 2, 2, byrow = TRUE))
@@ -195,7 +195,7 @@ for (i in 1:nrow(dd_ts)){
   
   # estimate E_hat, but restrict E to be less than half the ts length to be predicted
   E_hat <- min(simplex_fit[which(max(simplex_fit$rho)==simplex_fit$rho)[1], ]$E, step_ahead/2)
-  plot(simplex_fit$E, simplex_fit$rho, type="l", xlab = "Embedding dimension (E)", ylab="Forecast skill (rho)")
+  plot(simplex_fit$E, simplex_fit$rho, type="l", xlab = "Embedding dimension (E)", ylab="Forecast skill (rho)")+
   abline(v=E_hat, col="red", lty=2)
   
   # estimate theta
@@ -210,7 +210,7 @@ for (i in 1:nrow(dd_ts)){
   # best fit 
   smap_best_fit <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)),  stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
   
-  smap_pred  <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)), pred = c( c((length(ts_select$norm)-step_ahead)),  length(ts_select$norm)), stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
+  smap_pred  <- s_map(ts_select$norm, lib = c(1, (length(ts_select$norm)-step_ahead)), pred = c((length(ts_select$norm)-step_ahead)+1,  length(ts_select$norm)), stats_only = F, norm_type = c("L2 norm"), E = E_hat, theta = theta_hat)
   
   xyy <- smap_pred["model_output"][[1]][[1]] %>% drop_na()
   plot(ts_select$year, ts_select$norm, type="l", xlab = "Time", ylab="Abundance (normalized)", main=paste(ts_select$location[[1]], ts_select$species[[1]], sep=" "))
@@ -233,7 +233,7 @@ Note that, the direction of cross-mapping is opposite to the direction of cause-
 The matrix output of the calculations will be organized with the convention of the community matrix, A, whose elements aij are interpreted as the direct effect of the species in column j on the species in row i. 
 
 ```{R}
-pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_IHR_Fig.pdf")
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/ccm_IHR_Fig.pdf")
  var_names <- matrix(1, nrow=nrow(dd_ts))
  SI_embed <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of significant causal interactions between variables to help determine which to use in the embeddings of each fish stock. 
  SI_rho <- matrix(ncol=nrow(dd_ts), nrow=nrow(dd_ts)) #output a matrix of correlation coefficients between variables to help determine which to use in the embeddings. 
@@ -320,7 +320,7 @@ To calculate the coefficients of the partial effect of one variable on another, 
 library(Matrix) 
 library(quantreg)
 
-pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/Coeff_Fig.pdf")
+pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/EDM Analysis all Spp all dams/output/Coeff_Fig.pdf")
 
 for (i in 1:7){ #for each of the five fish taxa + CSL + SRKW
   

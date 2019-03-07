@@ -84,13 +84,16 @@ dF <- function(R,C1,C2,P1,P2) c(dR(R,C1,C2,P1,P2), dC1(R,C1,C2,P1,P2), dC2(R,C1,
 
 And the simulation parameters. The equations were solved using the basic Euler method with step size Δt = 0.01. The time series of all five variables were decimated to every 5th time point, then normalized to have a mean of 0 and standard deviation of 1 before analysis with S-maps.
 ```{r}
-tmax <- 10000; tau <- 5; dt <- 1/100; burn <- 200 
+tmax <- 10000
+tau <- 5
+dt <- 1/100
+burn <- 200 
 d <- array(data = 0, dim = c(tmax/tau,5)) 
 colnames(d) <- c( 'R' , 'C1' , 'C2' , 'P1', 'P2' )
 ```
-We run the model with initial conditions (R, C1, C2, P) = (1, 0.5, 0.8, 0.7). Note that we start with a burn period to insure the dynamics relax to the attractor manifold.
+We run the model with initial conditions (R, C1, C2, P) = (1, 0.5, 0.8, 0.7). Note that we start with a burn period to ensure the dynamics relax to the attractor manifold.
 ```{r}
-Xi <- c(1,.5,.8,.7, .8)  #initial conditions for the 4 species (R, C1, C2, P)
+Xi <- c(1, .5, .8,.7, .8)  #initial conditions for the 4 species (R, C1, C2, P)
 
 #>>>RUN BURN<<<  start with a burn period to insure the dynamics relax to the attractor manifold
 idex <- 0
@@ -219,21 +222,21 @@ plot(coeff[trange,"t"],coeff[trange,"dC1dC2"],type="l",col="blue",xlab="time",
 abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
 ```
 
-```{r}
-plot(coeff[trange,"t"],coeff[trange,"dC1dP"],type="l",col="red",xlab="time",
+```{r} 
+plot(coeff[trange,"t"],coeff[trange,"dC1dP1"],type="l",col="red",xlab="time",
      ylab=expression(partialdiff*C[1] / partialdiff*P[1]), 
-     ylim=range(coeff[trange,"dC1dP"]),xlim=range(trange),lwd=2)
+     ylim=range(coeff[trange,"dC1dP1"]),xlim=range(trange),lwd=2)
 abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
 ```
 
 We can also plot the predation coeffcient to show how predation on C1 changes with resource-limitation for C1.
 ```{r}
-qL <- rq(coeff$dC1dP ~ coeff$dC1dR,.05) 
-qU <- rq(coeff$dC1dP ~ coeff$dC1dR,.95)
-plot(coeff[1001:1999, 'dC1dR' ],coeff[1001:1999, 'dC1dP' ], 
+qL <- rq(coeff$dC1dP1 ~ coeff$dC1dR,.05) 
+qU <- rq(coeff$dC1dP1 ~ coeff$dC1dR,.95)
+plot(coeff[1001:1999, 'dC1dR' ],coeff[1001:1999, 'dC1dP1' ], 
      xlab=expression(partialdiff*C[1] / partialdiff*R), 
      ylab=expression(partialdiff*C[1] / partialdiff*P), 
-     xlim=range(coeff[trange,"dC1dR"]),ylim=range(coeff[trange,"dC1dP"]),pch=8)
+     xlim=range(coeff[trange,"dC1dR"]),ylim=range(coeff[trange,"dC1dP1"]),pch=8)
 abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
@@ -244,10 +247,10 @@ We can also plot the predation coefficient of P on C1 with respect to the compet
 ```{r}
 qL <- rq(coeff$dC1dP ~ coeff$dC1dC2,.05) 
 qU <- rq(coeff$dC1dP ~ coeff$dC1dC2,.95)
-plot(coeff[1001:1999, 'dC1dC2' ],coeff[1001:1999, 'dC1dP' ], 
+plot(coeff[1001:1999, 'dC1dC2' ],coeff[1001:1999, 'dC1dP1' ], 
      xlab=expression(partialdiff*C[1] / partialdiff*C2), 
      ylab=expression(partialdiff*C[1] / partialdiff*P), 
-     xlim=range(coeff[trange,"dC1dC2"]),ylim=range(coeff[trange,"dC1dP"]),pch=8)
+     xlim=range(coeff[trange,"dC1dC2"]),ylim=range(coeff[trange,"dC1dP1"]),pch=8)
 abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red',lwd=2)
 abline(a=0,b=0,lty=1,col='grey',lwd=2) #zero line
