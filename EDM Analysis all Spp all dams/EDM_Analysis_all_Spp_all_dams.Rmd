@@ -384,25 +384,25 @@ pdf("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coo
 
 for (i in 1:7){ #for each of the five fish taxa + CSL + SRKW
   
-  layout(matrix(c(1,2), 2, 1, byrow = TRUE))
+  layout(matrix(c(1,2,3), 3, 1, byrow = TRUE))
  
   PDO_L <- which(max(SI_rho[i,8:14])==SI_rho[i,8:14])+7
-  plot(seq(from = 0, to = 6, by = 1), SI_rho[i,8:14], type="l", xlab = "PDO prediction lag (yrs)", ylab="Forecast skill (rho)")+
-  abline(v=PDO_L, col="red", lty=2)
-  
+  plot(seq(from = 0, to = 6, by = 1), SI_rho[i,8:14], type="l", xlab = "PDO prediction lag (yrs)", ylab="Forecast skill (rho)")
+  points(which(max(SI_rho[i,8:14])==SI_rho[i,8:14])-1, max(SI_rho[i,8:14]), type="p", col="red3")
+ 
   which_var <- c(i, which(SI_embed[i,1:7]==TRUE), PDO_L) #Identifiy the variables to include in the analysis
   Edim <- length(which_var)
   
   Embedding <- dd_ts$data[[i]][[2]][[1]]
   d <- as.data.frame(dd_ts$data[[i]]) #select target species data 
   dname <- d$species[[1]]
-  d <- select(d, c("year", "norm")) 
+  d <- select(d, c("year", "abundance")) 
   names(d) <- c("year", dname)
     for (wv in 2:length(which_var)){
     Embedding <- c(Embedding, dd_ts$data[[which_var[wv]]][[2]][[1]])
     dvar <- dd_ts$data[[which_var[wv]]]
     dname <- dvar$species[[1]] 
-    dvar <- select(dvar, c("year", "norm")) 
+    dvar <- select(dvar, c("year", "abundance")) 
     names(dvar) <- c("year", dname)
     d <- merge(d, dvar, by = "year") #merge the different variables together by overlapping years
     }
@@ -416,19 +416,69 @@ for (i in 1:7){ #for each of the five fish taxa + CSL + SRKW
   block <- cbind(d[2:dim(d)[1],targ_col],d[1:(dim(d)[1]-1),]) 
   norm_consts <- apply(block, 2, function(x) sd(x))
   block <- as.data.frame(apply(block, 2, function(x) (x-mean(x))/sd(x)))
+  names(block) <- c("1ahead",Embedding)
    
   #We have a few final parameters to set for the S-map regression.
   lib <- 1:dim(block)[1] 
   pred <- 1:dim(block)[1] 
-  theta <- dd_ts$theta[[i]]
    
-  #and we need to set up output.
-  coeff_names <- sapply(Embedding, function(x) paste("d", Embedding[targ_col], "/d", x, sep = ""))
-  coeff <- array(0,dim=c(length(pred),Edim)) 
-  colnames(coeff) <- coeff_names
-  coeff <- as.data.frame(coeff)
-   
-  #Finally, to stay consistent with prior applications of S-maps, we will use SVD to solve the weighted linear regression. For ease, we put this into a single function that is similar to the basic lm() function in R. The lm() function could be used instead, but it computes the regression using QR instead of SVD.
+   # Explore the best weighting parameter (nonlinear parameter, theta)
+               test_theta <- block_lnlp(block, method = "s-map", num_neighbors = 0,
+               theta = c(0, 1e-04, 3e-04, 0.001,0.003, 0.01, 0.03, 0.1,0.3, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2), #try many thetas
+               target_column = targ_col,
+               silent = T)
+               best_theta <- test_theta[which.min(test_theta$mae),"theta"]  # Best theta is selected based on mean absolute error (MAE)
+                    # Check MAE and theta
+                    plot(test_theta$mae~test_theta$theta, type="l", xlab="Theta", ylab="MAE")+
+                    points(best_theta, min(test_theta$mae), type="p", col="red3")
+
+               # Do S-map analysis with the best theta
+               smap_res <-  block_lnlp(block,
+               method = "s-map",
+               num_neighbors = 0, # we have to use any value < 1 for s-map
+               theta = best_theta,
+               target_column = targ_col,
+               silent = T,
+               save_smap_coefficients = T) # save S-map coefficients
+               
+               # Time series of fluctuating interaction strength for spp i
+               smap_coef <- as.data.frame(smap_res$smap_coefficients[[1]])
+               coeff <- data.frame(year, smap_coef)
+               coeff_names <- sapply(Embedding, function(x) paste("d", Embedding[targ_col], "/d", x, sep = ""))
+               colnames(coeff) <- c("year",coeff_names,"Intercept")
+               coeff <- cbind(pred,coeff) 
+               colnames(coeff)[1] <- "t"
+  
+  #We can plot a time series of these coeffcients over a span of time.
+  l<-dim(block[1])[1]-1  #number of datapoints for plotting
+  trange <- 1:l
+
+  plotcol <- NULL
+  # First create an empty plot.
+    plot(0,0, type = 'n', xlim = c(min(year), max(year)), 
+         ylim = c(min(coeff[trange,3:Edim+1]), max(coeff[trange,2:Edim+1])),
+         xlab="time", 
+         ylab="interaction coefficient")
+    
+    # Create a list of colors to use for the lines.
+    cl <- rainbow(Edim)
+    
+    # Now fill plot with the log transformed coverage data from the
+    # files one by one.
+    for  (k in 1:Edim) {
+         lines(coeff[trange,2],coeff[trange,(2+k)], col = cl[k], type="l", lwd=2)
+         plotcol[k] <- cl[k]
+      }
+    abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
+    legend("bottomleft", legend = coeff_names, col = cl[], lwd = 1,
+           cex = 0.5)
+    
+  
+  layout(matrix(c(1,1), 1, 1, byrow = TRUE))
+}
+dev.off()
+```
+ #Finally, to stay consistent with prior applications of S-maps, we will use SVD to solve the weighted linear regression. For ease, we put this into a single function that is similar to the basic lm() function in R. The lm() function could be used instead, but it computes the regression using QR instead of SVD.
   
   lm_svdsolve <- function(y, x, ws, subset = seq_along(y)){ 
         x <- x[subset,]
@@ -473,34 +523,3 @@ for (i in 1:7){ #for each of the five fish taxa + CSL + SRKW
       coeff[ipred,] <- svd_fit[-1]
     }
   
-  coeff <- cbind(pred,coeff) 
-  colnames(coeff)[1] <- "t"
-  
-  #We can plot a time series of these coeffcients over a span of time.
-  l<-dim(block[1])[1]  #number of datapoints for plotting
-  trange <- 1:l
-  coeff <- data.frame(year, coeff)
-  
-  plotcol <- NULL
-  # First create an empty plot.
-    plot(0,0, type = 'n', xlim = c(min(year), max(year)), ylim = c(-1, 1), 
-        xlab="time", ylab="interaction coefficient")
-    
-    # Create a list of colors to use for the lines.
-    cl <- rainbow(8)
-    
-    # Now fill plot with the log transformed coverage data from the
-    # files one by one.
-    for  (icoeff in 1:Edim) {
-         lines(coeff[trange,1],coeff[trange,(2+icoeff)], col = cl[icoeff], type="l", lwd=2)
-         plotcol[icoeff] <- cl[icoeff]
-      }
-    abline(a=0 ,b=0 , lty="dashed", col="black", lwd=.5)
-    legend("bottomleft", legend = coeff_names, col = cl[], lwd = 1,
-           cex = 0.5)
-    
-  
-  layout(matrix(c(1,1), 1, 1, byrow = TRUE))
-}
-dev.off()
-```
