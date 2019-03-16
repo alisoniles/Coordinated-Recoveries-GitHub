@@ -11,8 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Modified code from Ye et al. 2015 
 
-
-
 First, we load the necessary packages. Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code.
 
 ```{r, echo=FALSE}
@@ -78,8 +76,8 @@ compute_stats <- function(obs, pred)
 ## load and process data
 
 ```{r}
-    preprocess_data <- function()
-{
+#preprocess_data <- function()  #This function had the below functions and data loading within it. Is this just so the work space isn't cluttered with the variables from intermediate calculations?
+
     preprocess_stock <- function(stock_df)
     {
         n <- NROW(stock_df)
@@ -140,24 +138,22 @@ compute_stats <- function(obs, pred)
         stock_df[, pdo_names] <- pdo_cols
         
         return(stock_df)
-    } 
+    }
     
-    data <- read_excel("pnas.1417063112.sd02.xls")    
+    data <- read.csv("sockeye_data.csv")
     
-    sockeye_ret_data <- read_excel("pnas.1417063112.sd01.xls")
-
     # filter stocks we don't want
     stock_data <- split(data, data$stk)
     stock_data <- lapply(stock_data, preprocess_stock)
     
     # add env data
-    env_data <- read_excel("pnas.1417063112.sd03.xls")
+    env_data <- read.csv("env_data.csv")
     block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_data)})
     
     # save and return
     save(block_data, file = "block_data.Rdata")
-    return()
-}
+#    return()
+
 ```
 
 ## Return?? What?
