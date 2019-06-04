@@ -96,6 +96,20 @@ stock_data <- lapply(stock_data, preprocess_stock)
 ```{r}
 env_data <- read.csv("env_data.csv")
 
+normalize <- function(block)
+{
+    if(NCOL(block) > 1)
+    {
+        n <- NROW(block)
+        means <- sapply(block, mean, na.rm = TRUE)
+        sds <- sapply(block, sd, na.rm = TRUE)
+        return((block - matrix(rep(means, each = n), nrow = n)) / 
+                   matrix(rep(sds, each = n), nrow = n))
+    }
+    else
+        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
+}
+
 make_block <- function(stock_df, env_data)
     {
         discharge_names <- c("D_max", "D_apr", "D_may", "D_jun")
@@ -114,10 +128,6 @@ make_block <- function(stock_df, env_data)
         discharge_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(discharge)))
         discharge_cols[index_in_stock_df,] <- discharge[index_in_env_data, ]
         stock_df[, discharge_names] <- discharge_cols
-        
-        temp_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(temperature)))
-        temp_cols[index_in_stock_df,] <- temperature[index_in_env_data, ]
-        stock_df[, temp_names] <- temp_cols
         
         # lag PDO by 1 year (winter before smolt outmigration)
         desired_years <- stock_df$yr + 1
