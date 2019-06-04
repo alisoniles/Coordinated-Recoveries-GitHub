@@ -1,17 +1,18 @@
 ---
-title: "My_Sockeye_EDM_test_code"
+title: "CORE EDM Analysis"
 author: "Alison Iles"
-date: "5/31/2019"
-output: html_document
+date: "6/3/2019"
+output:  pdf_document: default
+          html_document
+          keep_md: yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Test code to learn how the functions in the code for Ye et al. 2015 work
-
-First, we load the necessary packages. Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code.
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
 
 ```{r, echo=FALSE}
 library(rEDM)
@@ -23,13 +24,18 @@ library(gridExtra)
 library(xtable)
 ```
 
-#1 load the data:
-```{r}
-data_sockeye <- read.csv("sockeye_data.csv")
-     #This is the sockeye data for the nine different stocks of the Fraser River, BC. The data file contains the name of the stock, year, the number of 4-yr-old recruits, 5-yr-old recruits, total recruits and number of effective spawners during the brood year of these recruits. 
+#load data
 
+```{R}
+folder <- "/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Data/analysis ready/"      # path to folder that holds data in .csv files
+data <- read.csv(paste(folder, "SRSS_cohort_prelim.csv", sep=''))
+```
+
+#normalize
+
+```{R}
  # To focus on one stock to figure out what's going on
-#stock_df <- subset(data, stk == "Early Stuart") 
+stock_df <- subset(data, stk == "Bear Valley Creek") 
  
 # The original code normalized by cycle line. Chinook don't demonstrate a strong cycle line, so I changed the normalize_by_cycle_line function to normalize on a 1 year cycle 
     normalize_by_cycle_line <- function(ts)
@@ -55,15 +61,21 @@ data_sockeye <- read.csv("sockeye_data.csv")
      preprocess_stock <- function(stock_df)
     {
         n <- NROW(stock_df)  #n is the number of observations for the stock
-        stock_df$rec45 <- stock_df$rec4 + stock_df$rec5 #Adds 4 and 5 year old recruits togoether, but not sure why, since that is already there with rec column. 
-        stock_df$ret <- stock_df$rec4 + c(NA, stock_df$rec5[1:(n-1)]) # age-4 and age-5 fish (aligned to rec4) #total returns are calculated by adding 4 year old recruits plus 5 year old recruits from the previous brood year. This value is aligned to the rec4 brood year, not the year they are actually returning together. 
+         
+        stock_df$ret <- stock_df$rec3 + c(NA, stock_df$rec4[1:(n-1)]) + c(NA, NA, stock_df$rec5[1:(n-2)]) #+ c(NA, NA, NA, stock_df$rec6[1:(n-3)]) # age-3,4,5,and 6 fish (aligned to rec3) #total returns are calculated by adding 3 year old recruits plus 4 year old recruits from the previous brood year, plus 5 year olds from two years prior...etc. This value is aligned to the rec3 brood year, not the year they are actually returning together. 
        
 # Normalize on a 1 year cycle line (i.e. NO cycle line!)
-        temp <- normalize_by_cycle_line(stock_df$rec45)
-        stock_df$rec45_n <- temp$ts #normalized total recruits
-        stock_df$rec45_mu <- temp$mu
-        stock_df$rec45_sigma <- temp$sigma
-
+        
+        temp <- normalize_by_cycle_line(stock_df$eff)
+        stock_df$eff_n <- temp$ts #normalized number of effective spawners
+        stock_df$eff_mu <- temp$mu
+        stock_df$eff_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rec3)
+        stock_df$rec3_n <- temp$ts #normalized 4 year old recruits
+        stock_df$rec3_mu <- temp$mu
+        stock_df$rec3_sigma <- temp$sigma
+        
         temp <- normalize_by_cycle_line(stock_df$rec4)
         stock_df$rec4_n <- temp$ts #normalized 4 year old recruits
         stock_df$rec4_mu <- temp$mu
@@ -73,54 +85,49 @@ data_sockeye <- read.csv("sockeye_data.csv")
         stock_df$rec5_n <- temp$ts #normalized 5 year old recruits
         stock_df$rec5_mu <- temp$mu
         stock_df$rec5_sigma <- temp$sigma
-
-        temp <- normalize_by_cycle_line(stock_df$eff)
-        stock_df$eff_n <- temp$ts #normalized number of effective spawners
-        stock_df$eff_mu <- temp$mu
-        stock_df$eff_sigma <- temp$sigma
         
+        temp <- normalize_by_cycle_line(stock_df$rec)
+        stock_df$rec_n <- temp$ts #normalized total recruits
+        stock_df$rec_mu <- temp$mu
+        stock_df$rec_sigma <- temp$sigma
+
         return(stock_df)
     }   
 
      
 # filter stocks we don't want
-stock_data <- split(data_sockeye, data$stk)    
+stock_data <- split(data, data$stk)    
 stock_data <- lapply(stock_data, preprocess_stock) 
 # lapply returns a list of the same length as X, each element of which is the result of applying FUN to the corresponding element of X.
-    
-    
 ```
-    
-# add env data
 
-```{r}
-env_data <- read.csv("env_data.csv")
+#Figure out how to concatenate the data and run univariate EDM on just the recruit data...
+
+
+#load environmental data
+
+```{R}
+env_data <- read.csv(paste(folder, "SRSS_env_prelim.csv", sep=''))
 
 make_block <- function(stock_df, env_data)
     {
-        discharge_names <- c("D_max", "D_apr", "D_may", "D_jun")
-        temp_names <- c("ET_apr", "ET_may", "ET_jun", "PT_apr", "PT_may", "PT_jun", "PT_jul")
         pdo_names <- "PDO_win"
-        discharge <- normalize(env_data[, discharge_names])
-        temperature <- normalize(env_data[, temp_names])
+        upwelling_names <- c("up_apr", "up_oct", "up_nov")
         pdo <- normalize(env_data[, pdo_names])
+        upwelling <- normalize(env_data[, upwelling_names])
         
         # line up environmental data
-        # lag temperature and river discharge 2 years
-        desired_years <- stock_df$yr + 2
+        # lag temperature and river upwelling 2 years
+        desired_years <- stock_df$yr + 2  #brood year + 2 
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
         
-        discharge_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(discharge)))
-        discharge_cols[index_in_stock_df,] <- discharge[index_in_env_data, ]
-        stock_df[, discharge_names] <- discharge_cols
+        upwelling_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(upwelling)))
+        upwelling_cols[index_in_stock_df,] <- upwelling[index_in_env_data, ]
+        stock_df[, upwelling_names] <- upwelling_cols
         
-        temp_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(temperature)))
-        temp_cols[index_in_stock_df,] <- temperature[index_in_env_data, ]
-        stock_df[, temp_names] <- temp_cols
-        
-        # lag PDO by 1 year (winter before smolt outmigration)
-        desired_years <- stock_df$yr + 1
+        # lag PDO by 2 years 
+        desired_years <- stock_df$yr + 2
         index_in_env_data <- match(desired_years, env_data$year)
         pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
         pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data]
@@ -135,5 +142,6 @@ block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_d
     # save and return
     save(block_data, file = "block_data.Rdata")
     return()
+
 ```
- stock_df <- 
+
