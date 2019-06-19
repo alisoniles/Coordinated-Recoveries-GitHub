@@ -22,6 +22,7 @@ library(rgl)
 library(ggplot2)
 library(gridExtra)
 library(xtable)
+library(rlist)
 ```
 
 #load data
@@ -35,7 +36,7 @@ data <- read.csv(paste(folder, "SRSS_cohort_prelim.csv", sep=''))
 
 ```{R}
  # To focus on one stock to figure out what's going on
-stock_df <- subset(data, stk == "Bear Valley Creek") 
+#stock_df <- subset(data, stk == "Bear Valley Creek") 
  
 # The original code normalized by cycle line. Chinook don't demonstrate a strong cycle line, so I changed the normalize_by_cycle_line function to normalize on a 1 year cycle 
     normalize_by_cycle_line <- function(ts)
@@ -90,6 +91,11 @@ stock_df <- subset(data, stk == "Bear Valley Creek")
         stock_df$rec_n <- temp$ts #normalized total recruits
         stock_df$rec_mu <- temp$mu
         stock_df$rec_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$ret)
+        stock_df$ret_n <- temp$ts #normalized returns
+        stock_df$ret_mu <- temp$mu
+        stock_df$ret_sigma <- temp$sigma
 
         return(stock_df)
     }   
@@ -156,89 +162,111 @@ block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_d
 
 ```
 
-#Figure out how to concatenate the data, test for nonlinearity and run univariate EDM on just the recruit data...
+#Concatenate the data and test for nonlinearity
+
+#The compute_nonlinearity_aggregated function is modified from the Ye et al 2015 paper to set up the data and library to give to Simplex and xmap and lib that includes with year and keeping NAs. This is because our data includes some NAs in the data for (Wenaha 1963, 1964 and Wellowa 1955) and there are some missing years. From the tutorial: Missing data can be recorded using either of the standard NA or NaN values. The program will automatically ignore such missing values when appropriate. For instance, simplex projection will not select nearest neighbors if any of the state vector coordinates is missing or if the corresponding target value is missing. Note that when there is no observed target value, it is still possible to make a prediction if the corresponding predictors have no missing values.
+
 ```{R}
-compute_nonlinearity_aggregated <- function()
+compute_nonlinearity_aggregated <- function(block_data, name)
 {
-    load("block_data.Rdata")
-    ret <- lapply(block_data, function(x) {
-        temp <- x$ret
-        temp <- temp[is.finite(temp)]
-        return((temp - mean(temp)) / sd(temp))
-    })
-    x <- c()
-    lib <- matrix(NA, nrow = 26, ncol = 2)
+    
+     ag_ret_n <- lapply(block_data, function(x) {   
+        temp <- x$ret_n
+        return(temp) })
+     ag_yr <- lapply(block_data, function(x) {   
+        temp <- x$yr
+        return(temp) })
+    returns <- c()
+    years <- c()
+    lib <- matrix(NA, nrow = length(block_data), ncol = 2)
     last <- 0
-    for(i in 1:26)
+    for(i in 1:length(block_data))  #List in lib the begin and end points of each stock
     {
-        x <- c(x, ret[[i]])
-        lib[i,] <- c(last+1, last + length(ret[[i]]))
+        returns <- c(returns, ag_ret_n[[i]])
+        years <- c(years, ag_yr[[i]])
+        lib[i,] <- c(last+1, last + length(ag_ret_n[[i]]))
         last <- lib[i,2]
     }
-    simplex_output <- simplex(x, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
-    E <- simplex_output$E[which.max(simplex_output$rho)]
-    smap_output <- s_map(x, lib = lib, pred = lib, E = E, exclusion_radius = 0, silent = TRUE)
-    theta <- smap_output$theta[which.max(smap_output$rho)]
+    x <- cbind(years,returns)
+  
+    simplex_output <- simplex(x, lib = lib, pred = lib, E = 2:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            E <- min(best_rho_E, best_mae_E)
     
-    save(simplex_output, E, smap_output, theta, file = "results_nonlinear_aggregated.Rdata")
+    smap_output <- s_map(x, lib = lib, pred = lib, E = E, exclusion_radius = 0, silent = TRUE)
+            best_rho_theta <- smap_output$theta[which.max(smap_output$rho)]
+            best_mae_theta <- smap_output$theta[which.min(smap_output$mae)]   
+            theta <- max(best_rho_theta, best_mae_theta)
+    
+    save(simplex_output, E, smap_output, theta, file = paste("results_nonlinear_aggregated_",name,".Rdata", sep = "", collapse = NULL))
+    
     return()
 }
 
-test_nonlinearity_aggregated <- function(num_shuffles = 500)
+
+
+
+test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
 {
-    get_smap_stats <- function(x, lib, E = NULL)
+    get_smap_stats <- function(x, lib, E)
     {
         if(is.null(E))
         {
             # compute E using simplex on recruits time series
-            simplex_output <- simplex(x, E = 1:8, silent = TRUE)
+            simplex_output <- simplex(x, E = 2:8, exclusion_radius = 0, silent = TRUE)
             best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
             best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
-            E <- min(best_rho_E, best_mae_E)
+            best_E <- min(best_rho_E, best_mae_E)
         }
         
         # compute theta using s-map and E 
-        smap_output <- s_map(x, lib = lib, pred = lib, E = E, silent = TRUE)
+        smap_output <- s_map(x, lib = lib, pred = lib, E = best_E, exclusion_radius = 0, silent = TRUE)
         
         best_rho <- max(smap_output$rho)
         best_mae <- min(smap_output$mae)
-        return(data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0]))
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], best_E)
+        return(df)
     }
     
-    load("block_data.Rdata")
-    ret <- lapply(block_data, function(x) {
-        temp <- x$ret
-        temp <- temp[is.finite(temp)]
-        return((temp - mean(temp)) / sd(temp))
-    })
-    x <- c()
-    lib <- matrix(NA, nrow = 26, ncol = 2)
+     ag_ret_n <- lapply(block_data, function(x) {   
+        temp <- x$ret_n
+        return(temp) })
+     ag_yr <- lapply(block_data, function(x) {   
+        temp <- x$yr
+        return(temp) })
+    returns <- c()
+    years <- c()
+    lib <- matrix(NA, nrow = length(block_data), ncol = 2)
     last <- 0
-    for(i in 1:26)
+    for(i in 1:length(block_data))  #List in lib the begin and end points of each stock
     {
-        x <- c(x, ret[[i]])
-        lib[i,] <- c(last+1, last + length(ret[[i]]))
+        returns <- c(returns, ag_ret_n[[i]])
+        years <- c(years, ag_yr[[i]])
+        lib[i,] <- c(last+1, last + length(ag_ret_n[[i]]))
         last <- lib[i,2]
     }
-    E <- 6
+    x <- cbind(years,returns)
     
     cat("calculating for actual data... ", sep = "")
     start_time <- proc.time()
+    E <- NULL
     actual <- get_smap_stats(x, lib, E)
     delta_mae <- actual$delta_mae
     elapsed_time <- proc.time() - start_time
     cat("(", elapsed_time[3], " sec.)\n", sep = "")
     
-    # null distribution
+    # null distribution. #shuffle the data but leave the NAs where they are because they generally line up with the beginning of the time series.
     cat("calculating for random shuffles... ", sep = "")
     start_time <- proc.time()
+    E <- actual$best_E
     null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
-        x_shuffle <- c()
-        for(i in 1:26)
-        {
-            n <- length(ret[[i]])
-            x_shuffle <- c(x_shuffle, ret[[i]][sample(n, n)])
-        }
+        returns_shuffle <- c()
+        for(i in 1:length(block_data)) {
+            temp <- replace(ag_ret_n[[i]], is.finite(ag_ret_n[[i]]), sample(ag_ret_n[[i]][is.finite(ag_ret_n[[i]])])) 
+            returns_shuffle <- c(returns_shuffle, temp)
+            }
+        x_shuffle <- cbind(years,returns_shuffle)
         return(get_smap_stats(x_shuffle, lib, E))
     }))
     
@@ -247,13 +275,36 @@ test_nonlinearity_aggregated <- function(num_shuffles = 500)
     cat("(", elapsed_time[3], " sec.)\n", sep = "")
     
     save(delta_mae = delta_mae, delta_mae_p = delta_mae_p, 
-         file = "test_nonlinear_aggregated.Rdata")
+         file = paste("test_nonlinear_aggregated_",name,".Rdata", sep = "", collapse = NULL))
     return()
+
 }
 
+###---- nonlinear test ----###
+load("block_data.Rdata")
+name <- "all"
+compute_nonlinearity_aggregated(block_data, name)
+test_nonlinearity_aggregated(block_data, name)
+
+###--- nonlinear test for different major population groups
+  mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+  
+  for(u in 1:5){
+    temp <- block_data[c(mpg==u)]
+    name <- as.character(temp[[1]]$mpg[1])
+    compute_nonlinearity_aggregated(temp, name)
+    test_nonlinearity_aggregated(temp, name)
+  }
+```
+
+#Nonlinear test for the individual stocks
+```{r}
 compute_nonlinearity_stock <- function()
 {
-    get_smap_stats <- function(x, E = NULL)
+    get_smap_stats <- function(x, E = E)
     {
         if(is.null(E))
         {
@@ -269,14 +320,17 @@ compute_nonlinearity_stock <- function()
         
         best_rho <- max(smap_output$rho)
         best_mae <- min(smap_output$mae)
-        return(data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0]))
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], best_E)
+        return(df)
     }
     
-    nonlinearity_for_stock <- function(stock_df, num_shuffles = 500, max_E = 8)
+    
+    nonlinearity_for_stock <- function(stock_df, num_shuffles = 500)
     {
-        x <- stock_df$ret
-        x <- x[is.finite(x)]
-        n <- length(x)
+        returns <- stock_df$ret_n
+        years <- stock_df$yr
+        n <- length(returns)
+        x <- cbind(years,returns)
         
         cat("calculating for actual data for ", as.character(stock_df$stk[1]), "... ", sep = "")
         start_time <- proc.time()
@@ -290,7 +344,7 @@ compute_nonlinearity_stock <- function()
         
         best_rho <- max(smap_output$rho)
         best_mae <- min(smap_output$mae)
-        theta <- smap_output$theta[which.min(smap_output$mae)]
+        theta <- smap_output$theta[which.min(smap_output$mae)] 
         delta_mae <- best_mae - smap_output$mae[smap_output$theta == 0]
         elapsed_time <- proc.time() - start_time
         cat("(", elapsed_time[3], " sec.)\n", sep = "")
@@ -298,11 +352,12 @@ compute_nonlinearity_stock <- function()
         cat("calculating for random shuffles for ", as.character(stock_df$stk[1]), "... ", sep = "")
         start_time <- proc.time()
         null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
-            x_shuffle <- x[sample(n, n)]
-            return(get_smap_stats(x_shuffle, E))
+        returns_shuffle <- replace(returns, is.finite(returns), sample(returns[is.finite(returns)])) 
+        x_shuffle <- cbind(years,returns_shuffle)  
+        return(get_smap_stats(x_shuffle, E))
         }))
         
-        delta_mae_p = (sum(null_dist$delta_mae < delta_mae)+1) / num_shuffles
+        delta_mae_p = (sum(null_dist$delta_mae < delta_mae)+1) / num_shuffles #proportion of randomizations with change in mae less than observed with the real data
         elapsed_time <- proc.time() - start_time
         cat("(", elapsed_time[3], " sec.)\n", sep = "")
         
@@ -316,15 +371,354 @@ compute_nonlinearity_stock <- function()
     
     load("block_data.Rdata")
     nonlinearity_results <- lapply(block_data, nonlinearity_for_stock)
+    saveRDS(nonlinearity_results, file = "results_nonlinearity_stock.RDS")
     save(nonlinearity_results, file = "results_nonlinearity_stock.Rdata")
     return(nonlinearity_results)
 }
 
 
-#---- nonlinear test ----
-compute_nonlinearity_aggregated()
-test_nonlinearity_aggregated()
-compute_nonlinearity_stock()
+ compute_nonlinearity_stock()
 
 ```
 
+# run EDM models 
+
+Testing the code...
+```{r}
+load("block_data.Rdata")
+
+#Preparing the data for one major population group
+#construct a single composite time series with the normalized data
+
+#ID the different mpg
+    mpg <- c() 
+      for(stk in 1:length(block_data)) { 
+          mpg[stk] <- block_data[[stk]]$mpg[1]
+      } 
+Imnaha <- block_data[c(mpg==1)] #Only Imnaha for now
+    #compute_nonlinearity_aggregated(Imnaha) #saved as "results_nonlinear_aggregated_",name,".Rdata",       simplex_output, E, smap_output, theta
+    #test_nonlinearity_aggregated(Imnaha) #saved as "test_nonlinear_aggregated_",name,".Rdata",             delta_mae, delta_mae_p
+    #load("results_nonlinear_aggregated_Imnaha.Rdata")
+    #load("test_nonlinear_aggregated_Imnaha.Rdata")
+    #par(mfrow = c(1, 2)) 
+      #plot(simplex_output$E, simplex_output$rho, type = "l", xlab = "Embedding Dimension (E)", ylab = "Forecast Skill (rho)", main = "aggregate function dimensionality")
+      #plot(smap_output$theta, smap_output$rho, type = "l", xlab = "Nonlinearity (theta)", ylab = "Forecast skill (rho)", main="aggregate function nonlinearity")
+
+      
+Imnaha <- rbind(Imnaha[[1]],Imnaha[[2]],Imnaha[[3]],Imnaha[[4]],Imnaha[[5]],Imnaha[[6]]) #merge data into one data frame
+Imnaha <- Imnaha[c("stk", "yr", "eff_n", "rec3_n", "rec4_n", "rec5_n", "ret_n", "up_apr", "up_oct", "up_nov", "pdo_win")] #keep time, population, normalized spawners and rec4, environmental vars
+Imnaha <- droplevels(Imnaha) #drop unused levels from factors in a data frame
+# To prevent lagged vectors from being constructed that span separate populations, we need to create an appropriae index variable to identify different segments. We can then assess the predictive skill of EDM by using cross-validation and selecting random subsets of populations to use for the library and prediction sets
+      data_by_popn <- split(Imnaha, Imnaha$stk)
+      segments_end <- cumsum(sapply(data_by_popn, NROW))
+      segments_begin <- unname(c(1, segments_end[-length(segments_end)] + 1))
+      segments <- cbind(segments_begin, segments_end)
+       # Choose random segments for prediction
+      set.seed(7583)
+      rndlib <- sample(1:NROW(segments), floor(NROW(segments) * 0.75))
+      composite_lib <- segments[rndlib, ]  
+      composite_pred <- segments[-rndlib, ]
+
+      
+#Quantifying predictability and nonlinearity
+#We first use the rEDM function, simplex() to identify the best embedding dimension for the different aged recruits
+      vars <- c("rec3_n", "rec4_n", "rec5_n", "ret_n")
+simplex_out <- lapply(vars, function(var) { 
+  simplex(Imnaha[, c("yr", var)], E = 2:10, lib = segments, pred = segments, exclusion_radius = 0, silent = TRUE) #use all the segments for library and prediction defaults to leave one out cross-validation, tutorial code: lib = composite_lib, pred = composite_pred
+})
+
+names(simplex_out) <- vars
+
+  best_E <- sapply(simplex_out, function(df) {
+ df$E[which.max(df$rho)]
+ })
+best_E
+
+ par(mfrow = c(2, 2)) 
+ for (var in names(simplex_out)) {
+ plot(simplex_out[[var]]$E, simplex_out[[var]]$rho, type = "l", xlab = "Embedding Dimension (E)",
+ ylab = "Forecast Skill (rho)", main = var)
+ }
+ 
+
+#Using these best_E values for the embedding dimension, we can identify nonlinearity using the s_map() function:
+smap_out <- lapply(vars, function(var) {
+s_map(Imnaha[, c("yr", var)], E = best_E[var], lib = segments, pred = segments, exclusion_radius = 0, silent = TRUE) #use all the segments for library and prediction defaults to leave one out cross-validation, tutorial code: lib = composite_lib, pred = composite_pred
+})
+ names(smap_out) <- names(simplex_out)
+
+best_theta_rho <- sapply(smap_out, function(df) {
+ df$theta[which.max(df$rho)]
+ })
+best_theta_rho 
+
+best_theta_mae <- sapply(smap_out, function(df) {
+ df$theta[which.min(df$mae)]
+ })
+best_theta_mae 
+ 
+par(mfrow = c(2, 2))
+for (var in names(smap_out)) {                        
+plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", ylab = "Forecast skill (rho)", main=var)}
+
+par(mfrow = c(2, 2))
+for (var in names(smap_out)) {                        
+plot(smap_out[[var]]$theta, smap_out[[var]]$mae, type = "l", xlab = "Nonlinearity (theta)", ylab = "Mean absolute error (MAE)", main=var)}
+
+
+```
+# Multivariate models
+
+Our next step is to produce forecast models. Recall that the best predictions were obtained using a high number of time lags - the dynamics were high dimensional. As such, it could be that adding additional information from other variables will improve predictions. Specifically, we compare models that predict recruits using lags of itself vs. models that also include environmental variables.
+
+```{r}
+#We can do this using the block_lnlp() function, but first we need to construct lags for each variable. Here, we use the make_block() function, which automatically adds lags of the variables. However, we also need to be careful, since the raw data combines observations from multiple populations. By including the lib argument, we can indicate which parts of the time series correspond to different segments, so that lags indicate unknown values correctly.
+
+block_data <- make_block(Imnaha[, 2:11], t = Imnaha$yr, max_lag = 5,
+lib = segments) 
+str(block_data)
+
+# Note that the lagged columns begin with NA values because there are no observations of the variables for times t < 1. The vectors that include NA values are excluded if that specific value is needed for computation.
+
+# Next, we run the models, being sure to set up predictor variables (the columns argument) and the variable to be predicted (the target_column argument). By default, predictions are always for one step ahead. Note that some models include only lagged observations of the target variable, and other models also include environmental data
+
+
+
+```
+
+
+```{r}
+blk <- block_data[[4]] #extract Catherine Creek data
+cath <- block_lnlp(blk, columns = c("eff","rec4","rec5","up_apr", "up_oct","up_nov","pdo_win"), num_neighbors = "E+1", method = c("simplex"), stats_only = FALSE, first_column_time = TRUE, save_smap_coefficients = TRUE)
+obs <- cath$model_output[[1]]$obs
+preds <- cath$model_output[[1]]$pred
+times <- cath$model_output[[1]]$time
+dat <- data.frame(times, preds, obs)
+plot(times, preds, col = 2, ylim = c(0,2200))
+points(times, obs, col = 1)
+plot(obs, preds)
+```
+
+
+```{r}
+block_lnlp_4 <- function(block, target_column, columns, norm = FALSE)
+{
+    if(norm)
+    {
+        block[,columns] <- normalize(block[,columns])
+    }
+    
+    lib_segments <- matrix(NA, nrow = 4, ncol = 2)
+    segment_size <- NROW(block)/4
+    start_index <- 1
+    for(i in 1:4)
+    {
+        lib_segments[i,1] <- floor(start_index)
+        end_index <- start_index - 1 + segment_size
+        lib_segments[i,2] <- floor(end_index)
+        start_index <- end_index+1
+    }
+    
+    if(is.list(columns))
+    {
+        preds <- lapply(1:length(columns), function(x) {rep.int(NA, times = NROW(block))})
+        for(i in 1:4)
+        {
+            pred_index <- lib_segments[i,1]:lib_segments[i,2]
+            
+            temp <- block_lnlp(block, lib = lib_segments[-i,], pred = lib_segments[i,], 
+                               target_column = target_column, tp = 0, 
+                               first_column_time = TRUE, 
+                               columns = columns, stats_only = FALSE)
+            
+            for(j in 1:length(columns))
+                preds[[j]][pred_index] <- temp$model_output[[j]]$pred[pred_index] #AI: changed from temp[[j]]$model_output$pred[pred_index]
+        }
+    }
+    else
+    {
+        preds <- rep.int(NA, times = NROW(block))
+        for(i in 1:4)
+        {
+            pred_index <- lib_segments[i,1]:lib_segments[i,2]
+            
+            temp <- block_lnlp(block, lib = lib_segments[-i,], pred = lib_segments[i,], 
+                               target_column = target_column, tp = 0, 
+                               first_column_time = TRUE, 
+                               columns = columns, stats_only = FALSE)
+            
+            preds[pred_index] <- temp$model_output[[1]]$pred[pred_index] #AI: changed from temp[[1]]$model_output$pred[pred_index]
+
+        }
+    }
+    return(preds)
+}
+
+
+simple_EDM <- function()
+{
+    forecast <- function(stock_df)
+    {  
+        make_forecasts <- function(block, mu_3, sigma_3, mu_4, sigma_4, mu_5, sigma_5)
+        {
+            rec3 <- block_lnlp_4(block, target_column = 2, columns = 1) #use function block_lnlp_4
+            rec4 <- block_lnlp_4(block, target_column = 3, columns = 1)
+            rec5 <- block_lnlp_4(block, target_column = 4, columns = 1)
+            
+            rec3 <- rec3*sigma_3 + mu_3
+            rec4 <- rec4*sigma_4 + mu_4
+            rec5 <- rec5*sigma_5 + mu_5
+            return(rec3 + c(NA, rec4[1:(NROW(block)-1)]) + c(NA, NA, rec5[1:(NROW(block)-2)]))
+        }
+        
+        # set up recruits and spawners
+        valid <- is.finite(stock_df$rec) & is.finite(stock_df$eff) #exclude NAs? Should we??
+        returns <- stock_df$ret[valid] #NAs left in here...
+        years <- stock_df$yr[valid]
+        spawners <- stock_df$eff_n[valid]
+        recruits_3 <- stock_df$rec3_n[valid]
+        mu_3 <- stock_df$rec3_mu[valid]
+        sigma_3 <- stock_df$rec3_sigma[valid]
+        recruits_4 <- stock_df$rec4_n[valid]
+        mu_4 <- stock_df$rec4_mu[valid]
+        sigma_4 <- stock_df$rec4_sigma[valid]
+        recruits_5 <- stock_df$rec5_n[valid]
+        mu_5 <- stock_df$rec5_mu[valid]
+        sigma_5 <- stock_df$rec5_sigma[valid]
+        
+        # make block
+        block <- data.frame(years = years, eff = spawners, 
+                            rec3=recruits_3, rec4 = recruits_4, rec5 = recruits_5)
+        
+        if(length(returns) < 2) # check for enough data
+            return(data.frame(year = NaN, obs = NaN, pred = NaN))
+        
+        forecasts <- make_forecasts(block,  mu_3, sigma_3, mu_4, sigma_4, mu_5, sigma_5)
+        return(data.frame(year = years, obs = returns, pred = forecasts))
+    }
+    
+    load("block_data.Rdata")
+    
+    # make forecasts for each stock
+    results <- lapply(names(block_data), 
+                      function(stk_name) {
+                          cat("forecasting for ", stk_name, "... ", sep = "")
+                          start_time <- proc.time()
+                          output <- forecast(block_data[[stk_name]])
+                          elapsed_time <- proc.time() - start_time
+                          cat("(", elapsed_time[3], " sec.)\n", sep = "")
+                          return(output)
+                      })
+    names(results) <- names(block_data)
+    saveRDS(results, file = "results_simple_EDM.RDS")
+    
+    # compute stats
+    stats <- do.call(rbind, lapply(results, function(stock_results) {
+        compute_stats(stock_results$obs, stock_results$pred)
+    }))
+    stats$stk <- names(block_data)
+    saveRDS(stats, file = "stats_simple_EDM.RDS")
+    return()
+}
+
+simple_EDM()
+
+```
+
+```{r}
+multivariate_EDM <- function()
+{
+    forecast <- function(stock_df)
+    {
+        load("block_data.Rdata")
+        env_names <- c("up_apr", "up_oct", "up_nov", 
+                       "pdo_win")
+        
+        # set up recruits and spawners
+        valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff) #exclude NAs
+        years <- stock_df$yr[valid]
+        returns <- stock_df$ret[valid]
+        spawners <- stock_df$eff_n[valid]
+        recruits_3 <- stock_df$rec3_n[valid]
+        mu_3 <- stock_df$rec3_mu[valid]
+        sigma_3 <- stock_df$rec3_sigma[valid]
+        recruits_4 <- stock_df$rec4_n[valid]
+        mu_4 <- stock_df$rec4_mu[valid]
+        sigma_4 <- stock_df$rec4_sigma[valid]
+        recruits_5 <- stock_df$rec5_n[valid]
+        mu_5 <- stock_df$rec5_mu[valid]
+        sigma_5 <- stock_df$rec5_sigma[valid]
+        env <- normalize(stock_df[c("up_apr", "up_oct", "up_nov", "pdo_win")])
+       
+        # make block
+        block <- data.frame(years = years, eff = spawners, 
+                            rec4 = recruits_4, rec5 = recruits_5)
+        block <- cbind(block, env[valid, ])
+        
+        if(length(returns) < 2) # check for enough data
+            return(data.frame(year = NaN, obs = NaN, pred = NaN))
+        
+        columns <- list()
+        for(E in 1:2)
+        {
+            columns <- c(columns, combn(env_names, E, simplify = FALSE))
+        }
+        columns <- lapply(columns, function(embedding) c("eff", embedding))
+        columns <- c(columns, "eff")
+        rec4_preds <- do.call(cbind, block_lnlp_4(block, target_column = 3, columns = columns))
+        rec5_preds <- do.call(cbind, block_lnlp_4(block, target_column = 4, columns = columns))
+        rec4_preds <- rec4_preds*sigma_4 + mu_4
+        rec5_preds <- rec5_preds*sigma_5 + mu_5
+        forecasts <- data.frame(rec4_preds + rbind(NA, rec5_preds[1:NROW(block)-1,]))
+        names(forecasts) <- lapply(columns, function(v) paste(v, sep = "", collapse = ", "))
+        output <- cbind(year = years, obs = returns, forecasts)
+        
+        return(output)
+    }
+    
+    load("block_data.Rdata")
+    
+    # make forecasts for each stock
+    results <- lapply(names(block_data), 
+                      function(stk_name) {
+                          cat("forecasting for ", stk_name, "... ", sep = "")
+                          start_time <- proc.time()
+                          output <- forecast(block_data[[stk_name]])
+                          elapsed_time <- proc.time() - start_time
+                          cat("(", elapsed_time[3], " sec.)\n", sep = "")
+                          return(output)
+                      })
+    names(results) <- names(block_data)
+    saveRDS(results, file = "results_multivariate_EDM.RDS")
+    
+    # compute stats
+    stats <- lapply(names(block_data), function(stk_name) {
+        output <- results[[stk_name]]
+        stats <- do.call(rbind, lapply(3:NCOL(output), function(j) {
+            compute_stats(output[,2], output[,j])
+        }))
+        stats$columns <- names(output)[3:NCOL(output)]
+        stats$stk <- stk_name
+        return(stats)        
+    })
+    
+    stats <- lapply(stats, function(stats_df) {
+        stats_df$E <- sapply(strsplit(stats_df$columns, ", "), length)
+        with_eff_only <- subset(stats_df, E == 1)
+        with_one_env_var <- subset(stats_df, E == 2)
+        if(max(with_one_env_var$rho) <= with_eff_only$rho)
+            return(subset(stats_df, E <= 2))
+        best_env_var <- strsplit(with_one_env_var$columns[which.max(with_one_env_var$rho)], 
+                                 ", ")[[1]][2]
+        with_two_env_var <- subset(stats_df, E == 3)
+        idx <- grep(best_env_var, with_two_env_var$columns)
+        return(rbind(with_eff_only, with_one_env_var, with_two_env_var[idx,]))
+    })
+    
+    saveRDS(stats, file = "stats_multivariate_EDM.RDS")
+    return()
+}
+
+multivariate_EDM()
+
+```
