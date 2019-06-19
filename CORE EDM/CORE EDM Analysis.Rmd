@@ -189,7 +189,7 @@ compute_nonlinearity_aggregated <- function(block_data, name)
     }
     x <- cbind(years,returns)
   
-    simplex_output <- simplex(x, lib = lib, pred = lib, E = 2:8, exclusion_radius = 0, silent = TRUE)
+    simplex_output <- simplex(x, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
             best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
             best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
             E <- min(best_rho_E, best_mae_E)
@@ -214,18 +214,18 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
         if(is.null(E))
         {
             # compute E using simplex on recruits time series
-            simplex_output <- simplex(x, E = 2:8, exclusion_radius = 0, silent = TRUE)
+            simplex_output <- simplex(x, E = 1:8, exclusion_radius = 0, silent = TRUE)
             best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
             best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
-            best_E <- min(best_rho_E, best_mae_E)
+            E <- min(best_rho_E, best_mae_E)
         }
         
         # compute theta using s-map and E 
-        smap_output <- s_map(x, lib = lib, pred = lib, E = best_E, exclusion_radius = 0, silent = TRUE)
+        smap_output <- s_map(x, lib = lib, pred = lib, E = E, exclusion_radius = 0, silent = TRUE)
         
         best_rho <- max(smap_output$rho)
         best_mae <- min(smap_output$mae)
-        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], best_E)
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], E)
         return(df)
     }
     
@@ -259,7 +259,7 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
     # null distribution. #shuffle the data but leave the NAs where they are because they generally line up with the beginning of the time series.
     cat("calculating for random shuffles... ", sep = "")
     start_time <- proc.time()
-    E <- actual$best_E
+    E <- actual$E
     null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
         returns_shuffle <- c()
         for(i in 1:length(block_data)) {
@@ -320,7 +320,7 @@ compute_nonlinearity_stock <- function()
         
         best_rho <- max(smap_output$rho)
         best_mae <- min(smap_output$mae)
-        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], best_E)
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], E)
         return(df)
     }
     
@@ -464,6 +464,17 @@ plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearit
 par(mfrow = c(2, 2))
 for (var in names(smap_out)) {                        
 plot(smap_out[[var]]$theta, smap_out[[var]]$mae, type = "l", xlab = "Nonlinearity (theta)", ylab = "Mean absolute error (MAE)", main=var)}
+
+
+```
+
+
+#Convergent Cross Mapping (CCM) with time delays
+To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship.
+
+
+
+```{r}
 
 
 ```
