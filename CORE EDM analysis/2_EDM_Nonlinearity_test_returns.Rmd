@@ -1,0 +1,329 @@
+---
+title: "2_EDM_Nonlinearity_test_returns"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+#library(rjags)
+library(reshape2)
+library(rgl)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+library(rlist)
+```
+
+
+#Concatenate the data and test for nonlinearity
+
+#The compute_nonlinearity_aggregated function is modified from the Ye et al 2015 paper to set up the data and library to give to Simplex and xmap and lib that includes with year and keeping NAs. This is because our data includes some NAs in the data for (Wenaha 1963, 1964 and Wellowa 1955) and there are some missing years. From the tutorial: Missing data can be recorded using either of the standard NA or NaN values. The program will automatically ignore such missing values when appropriate. For instance, simplex projection will not select nearest neighbors if any of the state vector coordinates is missing or if the corresponding target value is missing. Note that when there is no observed target value, it is still possible to make a prediction if the corresponding predictors have no missing values.
+
+```{R}
+compute_nonlinearity_aggregated <- function(block_data, name)
+{
+    
+     ag_ret_n <- lapply(block_data, function(x) {   
+        temp <- x$ret_n[3:length(x$ret_n)] #the first two points of return data are always NAs
+        return(temp) })
+     ag_yr <- lapply(block_data, function(x) {   
+        temp <- x$yr[3:length(x$yr)]
+        return(temp) })
+    returns <- c()
+    years <- c()
+    lib <- matrix(NA, nrow = length(block_data), ncol = 2)
+    last <- 0
+    for(i in 1:length(block_data))  #List in lib the begin and end points of each stock
+    {
+        returns <- c(returns, ag_ret_n[[i]])
+        years <- c(years, ag_yr[[i]])
+        lib[i,] <- c(last+1, last + length(ag_ret_n[[i]]))
+        last <- lib[i,2]
+    }
+    x <- cbind(years,returns)
+  
+    simplex_output <- simplex(x, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            E <- min(best_rho_E, best_mae_E)
+    
+    smap_output <- s_map(x, lib = lib, pred = lib, E = E, exclusion_radius = 0, silent = TRUE)
+            best_rho_theta <- smap_output$theta[which.max(smap_output$rho)]
+            best_mae_theta <- smap_output$theta[which.min(smap_output$mae)]   
+            theta <- max(best_rho_theta, best_mae_theta)
+    
+    save(simplex_output, E, smap_output, theta, file = paste("Output/Rdata/results_nonlinear_aggregated_",name,".Rdata", sep = "", collapse = NULL))
+    
+    return()
+}
+
+
+test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
+{
+    get_smap_stats <- function(x, lib, E)
+    {
+        if(is.null(E))
+        {
+            # compute E using simplex on recruits time series
+            simplex_output <- simplex(x, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            E <- min(best_rho_E, best_mae_E)
+        }
+        
+        # compute theta using s-map and E 
+        smap_output <- s_map(x, lib = lib, pred = lib, E = E, exclusion_radius = 0, silent = TRUE)
+        
+        best_rho <- max(smap_output$rho)
+        best_mae <- min(smap_output$mae)
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], E)
+        return(df)
+    }
+    
+     ag_ret_n <- lapply(block_data, function(x) {   
+         temp <- x$ret_n[3:length(x$ret_n)] #the first two points of return data are always NAs
+         return(temp) })
+     ag_yr <- lapply(block_data, function(x) {   
+        temp <- x$yr[3:length(x$yr)]
+        return(temp) })
+    returns <- c()
+    years <- c()
+    lib <- matrix(NA, nrow = length(block_data), ncol = 2)
+    last <- 0
+    for(i in 1:length(block_data))  #List in lib the begin and end points of each stock
+    {
+        returns <- c(returns, ag_ret_n[[i]])
+        years <- c(years, ag_yr[[i]])
+        lib[i,] <- c(last+1, last + length(ag_ret_n[[i]]))
+        last <- lib[i,2]
+    }
+    x <- cbind(years,returns)
+    
+    cat("calculating for actual data... ", sep = "")
+    start_time <- proc.time()
+    E <- NULL
+    actual <- get_smap_stats(x, lib, E)
+    delta_mae <- actual$delta_mae
+    elapsed_time <- proc.time() - start_time
+    cat("(", elapsed_time[3], " sec.)\n", sep = "")
+    
+    # null distribution. Shuffle the data including any NAs
+    cat("calculating for random shuffles... ", sep = "")
+    start_time <- proc.time()
+    E <- actual$E
+    null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
+        returns_shuffle <- c()
+        for(i in 1:length(block_data)) {
+          n <- length(ag_ret_n[[i]])
+            returns_shuffle <- c(returns_shuffle, ag_ret_n[[i]][sample(n, n)])
+            }
+        x_shuffle <- cbind(years,returns_shuffle)
+        return(get_smap_stats(x_shuffle, lib, E))
+    }))
+    
+    delta_mae_p = (sum(null_dist$delta_mae < delta_mae)+1) / num_shuffles
+    elapsed_time <- proc.time() - start_time
+    cat("(", elapsed_time[3], " sec.)\n", sep = "")
+    
+    save(delta_mae = delta_mae, delta_mae_p = delta_mae_p, 
+         file = paste("Output/Rdata/test_nonlinear_aggregated_",name,".Rdata", sep = "", collapse = NULL))
+    return()
+
+}
+
+###---- nonlinear test of returns data ----###
+
+load("Data/Rdata/block_data.Rdata")
+name <- "all"
+compute_nonlinearity_aggregated(block_data, name)
+test_nonlinearity_aggregated(block_data, name)
+
+###--- nonlinear test for different major population groups
+  mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+  
+  for(u in 1:5){
+    temp <- block_data[c(mpg==u)]
+    name <- as.character(temp[[1]]$mpg[1])
+    compute_nonlinearity_aggregated(temp, name)
+    test_nonlinearity_aggregated(temp, name)
+  }
+```
+
+#Nonlinear test for the individual stocks
+```{r}
+compute_nonlinearity_stock <- function()
+{
+    get_smap_stats <- function(x, E = E)
+    {
+        if(is.null(E))
+        {
+            # compute E using simplex on recruits time series
+            simplex_output <- simplex(x, E = 1:8, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            E <- min(best_rho_E, best_mae_E)
+        }
+        
+        # compute theta using s-map and E 
+        smap_output <- s_map(x, E = E, silent = TRUE)
+        
+        best_rho <- max(smap_output$rho)
+        best_mae <- min(smap_output$mae)
+        df <- data.frame(delta_mae = best_mae - smap_output$mae[smap_output$theta == 0], E)
+        return(df)
+    }
+    
+    
+    nonlinearity_for_stock <- function(stock_df, num_shuffles = 500)
+    {
+        returns <- stock_df$ret_n[3:length(stock_df$ret_n)] #the first two points of return data are always NAs
+        years <- stock_df$yr[3:length(stock_df$yr)]
+        n <- length(returns)
+        x <- cbind(years,returns)
+        
+        cat("calculating for actual data for ", as.character(stock_df$stk[1]), "... ", sep = "")
+        start_time <- proc.time()
+        simplex_output <- simplex(x, E = 1:8, silent = TRUE)
+        best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+        best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+        E <- min(best_rho_E, best_mae_E)
+        
+        # compute theta using s-map and E 
+        smap_output <- s_map(x, E = E, silent = TRUE)
+        
+        best_rho <- max(smap_output$rho)
+        best_mae <- min(smap_output$mae)
+        theta <- smap_output$theta[which.min(smap_output$mae)] 
+        delta_mae <- best_mae - smap_output$mae[smap_output$theta == 0]
+        elapsed_time <- proc.time() - start_time
+        cat("(", elapsed_time[3], " sec.)\n", sep = "")
+        
+        cat("calculating for random shuffles for ", as.character(stock_df$stk[1]), "... ", sep = "")
+        start_time <- proc.time()
+        null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
+              returns_shuffle <- returns[sample(n, n)]  
+              x_shuffle <- cbind(years,returns_shuffle)
+              return(get_smap_stats(x_shuffle, E))
+        }))
+        
+        
+        delta_mae_p = (sum(null_dist$delta_mae < delta_mae)+1) / num_shuffles #proportion of randomizations with change in mae less than observed with the real data
+        elapsed_time <- proc.time() - start_time
+        cat("(", elapsed_time[3], " sec.)\n", sep = "")
+        
+        return(list(simplex_output = simplex_output, 
+                    smap_output = smap_output, 
+                    E = E, 
+                    theta = theta, 
+                    delta_mae = delta_mae, 
+                    delta_mae_p = delta_mae_p))
+    }
+    
+    load("Data/Rdata/block_data.Rdata")
+    nonlinearity_results <- lapply(block_data, nonlinearity_for_stock)
+    saveRDS(nonlinearity_results, file = "Output/Rdata/results_nonlinearity_stock.RDS")
+    save(nonlinearity_results, file = "Output/Rdata/results_nonlinearity_stock.Rdata")
+    return(nonlinearity_results)
+}
+
+
+ compute_nonlinearity_stock()
+
+```
+
+
+#Testing the above functions with linear code on one mpg...
+```{r}
+load("block_data.Rdata")
+
+#Preparing the data for one major population group
+#construct a single composite time series with the normalized data
+
+#ID the different mpg
+    mpg <- c() 
+      for(stk in 1:length(block_data)) { 
+          mpg[stk] <- block_data[[stk]]$mpg[1]
+      } 
+Imnaha <- block_data[c(mpg==1)] #Only Imnaha for now
+    #compute_nonlinearity_aggregated(Imnaha) #saved as "results_nonlinear_aggregated_",name,".Rdata",       simplex_output, E, smap_output, theta
+    #test_nonlinearity_aggregated(Imnaha) #saved as "test_nonlinear_aggregated_",name,".Rdata",             delta_mae, delta_mae_p
+    #load("results_nonlinear_aggregated_Imnaha.Rdata")
+    #load("test_nonlinear_aggregated_Imnaha.Rdata")
+    #par(mfrow = c(1, 2)) 
+      #plot(simplex_output$E, simplex_output$rho, type = "l", xlab = "Embedding Dimension (E)", ylab = "Forecast Skill (rho)", main = "aggregate function dimensionality")
+      #plot(smap_output$theta, smap_output$rho, type = "l", xlab = "Nonlinearity (theta)", ylab = "Forecast skill (rho)", main="aggregate function nonlinearity")
+
+      
+Imnaha <- rbind(Imnaha[[1]],Imnaha[[2]],Imnaha[[3]],Imnaha[[4]],Imnaha[[5]],Imnaha[[6]]) #merge data into one data frame
+Imnaha <- Imnaha[c("stk", "yr", "eff_n", "rec3_n", "rec4_n", "rec5_n", "ret_n", "up_apr", "up_oct", "up_nov", "pdo_win")] #keep time, population, normalized spawners and rec4, environmental vars
+Imnaha <- droplevels(Imnaha) #drop unused levels from factors in a data frame
+# To prevent lagged vectors from being constructed that span separate populations, we need to create an appropriae index variable to identify different segments. We can then assess the predictive skill of EDM by using cross-validation and selecting random subsets of populations to use for the library and prediction sets
+      data_by_popn <- split(Imnaha, Imnaha$stk)
+      segments_end <- cumsum(sapply(data_by_popn, NROW))
+      segments_begin <- unname(c(1, segments_end[-length(segments_end)] + 1))
+      segments <- cbind(segments_begin, segments_end)
+       # Choose random segments for prediction
+      set.seed(7583)
+      rndlib <- sample(1:NROW(segments), floor(NROW(segments) * 0.75))
+      composite_lib <- segments[rndlib, ]  
+      composite_pred <- segments[-rndlib, ]
+
+      
+#Quantifying predictability and nonlinearity
+#We first use the rEDM function, simplex() to identify the best embedding dimension for the different aged recruits
+      vars <- c("rec3_n", "rec4_n", "rec5_n", "ret_n")
+simplex_out <- lapply(vars, function(var) { 
+  simplex(Imnaha[, c("yr", var)], E = 2:10, lib = segments, pred = segments, exclusion_radius = 0, silent = TRUE) #use all the segments for library and prediction defaults to leave one out cross-validation, tutorial code: lib = composite_lib, pred = composite_pred
+})
+
+names(simplex_out) <- vars
+
+  best_E <- sapply(simplex_out, function(df) {
+ df$E[which.max(df$rho)]
+ })
+best_E
+
+ par(mfrow = c(2, 2)) 
+ for (var in names(simplex_out)) {
+ plot(simplex_out[[var]]$E, simplex_out[[var]]$rho, type = "l", xlab = "Embedding Dimension (E)",
+ ylab = "Forecast Skill (rho)", main = var)
+ }
+ 
+
+#Using these best_E values for the embedding dimension, we can identify nonlinearity using the s_map() function:
+smap_out <- lapply(vars, function(var) {
+s_map(Imnaha[, c("yr", var)], E = best_E[var], lib = segments, pred = segments, exclusion_radius = 0, silent = TRUE) #use all the segments for library and prediction defaults to leave one out cross-validation, tutorial code: lib = composite_lib, pred = composite_pred, where they randomly choose some segments for the library and some for making predictions.
+})
+ names(smap_out) <- names(simplex_out)
+
+best_theta_rho <- sapply(smap_out, function(df) {
+ df$theta[which.max(df$rho)]
+ })
+best_theta_rho 
+
+best_theta_mae <- sapply(smap_out, function(df) {
+ df$theta[which.min(df$mae)]
+ })
+best_theta_mae 
+ 
+par(mfrow = c(2, 2))
+for (var in names(smap_out)) {                        
+plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", ylab = "Forecast skill (rho)", main=var)}
+
+par(mfrow = c(2, 2))
+for (var in names(smap_out)) {                        
+plot(smap_out[[var]]$theta, smap_out[[var]]$mae, type = "l", xlab = "Nonlinearity (theta)", ylab = "Mean absolute error (MAE)", main=var)}
+
+
+```

@@ -1,0 +1,61 @@
+---
+title: "3_EDM_CCM_pairwise_causality"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Convergent Cross Mapping (CCM) with time delays
+To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
+
+We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees latitude) and NPGO, even though with have apriori knowledge of which months are likely the most important for salmon. 
+
+
+
+
+```{r}
+# Set up data set
+
+# determine the best embedding dimension to use first with simplex
+
+
+compute_ccm <- function()
+{
+    load("block_data.Rdata")
+    env_names <- c("up_apr", "PDO_win")
+    
+    ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {
+        valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff)
+        block <- stock_df[valid,]
+        
+        ccm_rhos <- do.call(cbind, lapply(env_names, function(env_var) {
+            output <- block_lnlp(block, tp = 0, target_column = env_var, 
+                                 columns = c("rec45_n", "eff_n"), silent = TRUE)
+            return(output$rho)
+        }))
+        colnames(ccm_rhos) <- env_names
+        ccm_rhos <- cbind(N = sum(valid), ccm_rhos)
+        return(ccm_rhos)
+    }))
+    rownames(ccm_table) <- names(block_data)
+    saveRDS(ccm_table, file = "results_ccm.RDS")
+    return()
+}
+
+print_ccm_table <- function()
+{
+    ccm_table <- data.frame(readRDS("results_ccm.RDS"))
+    ccm_table <- cbind("N" = ccm_table$N,
+                       "95% p" = tanh(qnorm(0.95, sd = 1/sqrt(ccm_table$N - 3))), 
+                       ccm_table[,2:NCOL(ccm_table)])
+    my_table <- xtable(ccm_table, digits = 3)
+    print(my_table, type = "html", file = "tables/Table_S3.html")
+    return()
+}
+
+compute_ccm()
+print_ccm_table() # table S3 in Sockeye paper

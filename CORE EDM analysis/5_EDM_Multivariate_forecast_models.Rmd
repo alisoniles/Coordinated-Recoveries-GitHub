@@ -1,0 +1,108 @@
+---
+title: "5_EDM_Multivariate_forecast_models"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+multivariate_EDM <- function()
+{
+    forecast <- function(stock_df)
+    {
+        load("Data/Rdata/block_data.Rdata")
+        env_names <- c("up_apr", "up_oct", "up_nov", 
+                       "pdo_win")
+        
+        # set up recruits and spawners
+        valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff) #exclude NAs
+        years <- stock_df$yr[valid]
+        returns <- stock_df$ret[valid]
+        spawners <- stock_df$eff_n[valid]
+        recruits_3 <- stock_df$rec3_n[valid]
+        mu_3 <- stock_df$rec3_mu[valid]
+        sigma_3 <- stock_df$rec3_sigma[valid]
+        recruits_4 <- stock_df$rec4_n[valid]
+        mu_4 <- stock_df$rec4_mu[valid]
+        sigma_4 <- stock_df$rec4_sigma[valid]
+        recruits_5 <- stock_df$rec5_n[valid]
+        mu_5 <- stock_df$rec5_mu[valid]
+        sigma_5 <- stock_df$rec5_sigma[valid]
+        env <- normalize(stock_df[c("up_apr", "up_oct", "up_nov", "pdo_win")])
+       
+        # make block
+        block <- data.frame(years = years, eff = spawners, 
+                            rec4 = recruits_4, rec5 = recruits_5)
+        block <- cbind(block, env[valid, ])
+        
+        if(length(returns) < 2) # check for enough data
+            return(data.frame(year = NaN, obs = NaN, pred = NaN))
+        
+        columns <- list()
+        for(E in 1:2)
+        {
+            columns <- c(columns, combn(env_names, E, simplify = FALSE))
+        }
+        columns <- lapply(columns, function(embedding) c("eff", embedding))
+        columns <- c(columns, "eff")
+        rec4_preds <- do.call(cbind, block_lnlp_4(block, target_column = 3, columns = columns))
+        rec5_preds <- do.call(cbind, block_lnlp_4(block, target_column = 4, columns = columns))
+        rec4_preds <- rec4_preds*sigma_4 + mu_4
+        rec5_preds <- rec5_preds*sigma_5 + mu_5
+        forecasts <- data.frame(rec4_preds + rbind(NA, rec5_preds[1:NROW(block)-1,]))
+        names(forecasts) <- lapply(columns, function(v) paste(v, sep = "", collapse = ", "))
+        output <- cbind(year = years, obs = returns, forecasts)
+        
+        return(output)
+    }
+    
+    load("Data/Rdata/block_data.Rdata")
+    
+    # make forecasts for each stock
+    results <- lapply(names(block_data), 
+                      function(stk_name) {
+                          cat("forecasting for ", stk_name, "... ", sep = "")
+                          start_time <- proc.time()
+                          output <- forecast(block_data[[stk_name]])
+                          elapsed_time <- proc.time() - start_time
+                          cat("(", elapsed_time[3], " sec.)\n", sep = "")
+                          return(output)
+                      })
+    names(results) <- names(block_data)
+    saveRDS(results, file = "Output/Rdata/results_multivariate_EDM.RDS")
+    
+    # compute stats
+    stats <- lapply(names(block_data), function(stk_name) {
+        output <- results[[stk_name]]
+        stats <- do.call(rbind, lapply(3:NCOL(output), function(j) {
+            compute_stats(output[,2], output[,j])
+        }))
+        stats$columns <- names(output)[3:NCOL(output)]
+        stats$stk <- stk_name
+        return(stats)        
+    })
+    
+    stats <- lapply(stats, function(stats_df) {
+        stats_df$E <- sapply(strsplit(stats_df$columns, ", "), length)
+        with_eff_only <- subset(stats_df, E == 1)
+        with_one_env_var <- subset(stats_df, E == 2)
+        if(max(with_one_env_var$rho) <= with_eff_only$rho)
+            return(subset(stats_df, E <= 2))
+        best_env_var <- strsplit(with_one_env_var$columns[which.max(with_one_env_var$rho)], 
+                                 ", ")[[1]][2]
+        with_two_env_var <- subset(stats_df, E == 3)
+        idx <- grep(best_env_var, with_two_env_var$columns)
+        return(rbind(with_eff_only, with_one_env_var, with_two_env_var[idx,]))
+    })
+    
+    saveRDS(stats, file = "Output/Rdata/stats_multivariate_EDM.RDS")
+    return()
+}
+
+multivariate_EDM()
+
+```

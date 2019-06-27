@@ -1,0 +1,159 @@
+---
+title: "1_EDM_Preprocess_data"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+library(reshape2)
+library(rgl)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+library(rlist)
+```
+
+#load data
+```{R}
+data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
+```
+
+#normalize
+
+```{R}
+ # To focus on one stock to figure out what's going on
+#stock_df <- subset(data, stk == "Bear Valley Creek") 
+ 
+# The original code normalized by cycle line. Chinook don't demonstrate a strong cycle line, so I changed the normalize_by_cycle_line function to normalize on a 1 year cycle 
+    normalize_by_cycle_line <- function(ts)
+{
+    n <- length(ts)
+    means <- rep.int(NA, times = 4) #replicate NA 4 times
+    sds <- rep.int(NA, times = 4)
+    mu <- rep.int(NA, times = n)
+    sigma <- rep.int(NA, times = n)
+    for(k in 1:1) #for each cycle line (every 4 years the population cycles in sockeye, I've changed it to 1 because there are no cycle lines for chinook)
+    {
+        index <- seq(from = k, to = n, by = 1) #changed by=4 to b=1.
+        means[k] <- mean(ts[index], na.rm = TRUE) #mean of every 4th element of the time series
+        sds[k] <- sd(ts[index], na.rm = TRUE) #standard dev.
+        mu[index] <- means[k]
+        sigma[index] <- sds[k]
+    }
+    ts <- (ts - mu) / sigma  #normalize by cycle line
+    df <- data.frame(cbind(ts, mu, sigma))
+    return(df)
+    }
+    
+     preprocess_stock <- function(stock_df)
+    {
+        n <- NROW(stock_df)  #n is the number of observations for the stock
+         
+        stock_df$ret <- stock_df$rec3 + c(NA, stock_df$rec4[1:(n-1)]) + c(NA, NA, stock_df$rec5[1:(n-2)]) #+ c(NA, NA, NA, stock_df$rec6[1:(n-3)]) # age-3,4,5,and 6 fish (aligned to rec3) #total returns are calculated by adding 3 year old recruits plus 4 year old recruits from the previous brood year, plus 5 year olds from two years prior...etc. This value is aligned to the rec3 brood year, not the year they are actually returning together. 
+       
+# Normalize on a 1 year cycle line (i.e. NO cycle line!)
+        
+        temp <- normalize_by_cycle_line(stock_df$eff)
+        stock_df$eff_n <- temp$ts #normalized number of effective spawners
+        stock_df$eff_mu <- temp$mu
+        stock_df$eff_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rec3)
+        stock_df$rec3_n <- temp$ts #normalized 4 year old recruits
+        stock_df$rec3_mu <- temp$mu
+        stock_df$rec3_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rec4)
+        stock_df$rec4_n <- temp$ts #normalized 4 year old recruits
+        stock_df$rec4_mu <- temp$mu
+        stock_df$rec4_sigma <- temp$sigma
+
+        temp <- normalize_by_cycle_line(stock_df$rec5)
+        stock_df$rec5_n <- temp$ts #normalized 5 year old recruits
+        stock_df$rec5_mu <- temp$mu
+        stock_df$rec5_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rec)
+        stock_df$rec_n <- temp$ts #normalized total recruits
+        stock_df$rec_mu <- temp$mu
+        stock_df$rec_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$ret)
+        stock_df$ret_n <- temp$ts #normalized returns
+        stock_df$ret_mu <- temp$mu
+        stock_df$ret_sigma <- temp$sigma
+
+        return(stock_df)
+    }   
+
+     
+# filter stocks we don't want
+stock_data <- split(data, data$stk)    
+stock_data <- lapply(stock_data, preprocess_stock) 
+# lapply returns a list of the same length as X, each element of which is the result of applying FUN to the corresponding element of X.
+```
+
+#load environmental data
+
+```{R}
+env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+
+normalize <- function(block)
+{
+    if(NCOL(block) > 1)
+    {
+        n <- NROW(block)
+        means <- sapply(block, mean, na.rm = TRUE)
+        sds <- sapply(block, sd, na.rm = TRUE)
+        return((block - matrix(rep(means, each = n), nrow = n)) / 
+                   matrix(rep(sds, each = n), nrow = n))
+    }
+    else
+        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
+}
+
+
+make_block <- function(stock_df, env_data)
+    {
+        pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") # what is pdo_win?
+        upwelling_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
+        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec")
+        pdo <- normalize(env_data[, pdo_names])
+        upwelling <- normalize(env_data[, upwelling_names])
+        npgo <- normalize(env_data[, npgo_names])
+        
+        # line up environmental data
+        # lag temperature and upwelling 2 years
+        desired_years <- stock_df$yr + 2  #brood year + 2 
+        index_in_env_data <- match(desired_years, env_data$year)
+        index_in_stock_df <- 1:length(desired_years)
+        
+        upwelling_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(upwelling)))
+        upwelling_cols[index_in_stock_df,] <- upwelling[index_in_env_data, ]
+        stock_df[, upwelling_names] <- upwelling_cols
+        
+        # lag PDO by 2 years 
+        desired_years <- stock_df$yr + 2
+        index_in_env_data <- match(desired_years, env_data$year)
+        pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
+        pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data]
+        stock_df[, pdo_names] <- pdo_cols
+        
+        return(stock_df)
+    }
+
+block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_data)})
+
+    # save and return
+    save(block_data, file = "Data/Rdata/block_data.Rdata")
+
+```
