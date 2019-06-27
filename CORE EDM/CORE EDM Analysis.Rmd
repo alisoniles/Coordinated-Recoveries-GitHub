@@ -108,7 +108,6 @@ stock_data <- lapply(stock_data, preprocess_stock)
 ```
 
 #load environmental data
-Before we do this, we need to test all the lags for each environmental variable to figure out which is the best to use
 
 ```{R}
 env_data <- read.csv(paste(folder, "SRSS_env_prelim.csv", sep=''))
@@ -130,13 +129,15 @@ normalize <- function(block)
 
 make_block <- function(stock_df, env_data)
     {
-        pdo_names <- "pdo_win"
-        upwelling_names <- c("up_apr", "up_oct", "up_nov")
+        pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") # what is pdo_win?
+        upwelling_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
+        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec")
         pdo <- normalize(env_data[, pdo_names])
         upwelling <- normalize(env_data[, upwelling_names])
+        npgo <- normalize(env_data[, npgo_names])
         
         # line up environmental data
-        # lag temperature and river upwelling 2 years
+        # lag temperature and upwelling 2 years
         desired_years <- stock_df$yr + 2  #brood year + 2 
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
@@ -171,10 +172,10 @@ compute_nonlinearity_aggregated <- function(block_data, name)
 {
     
      ag_ret_n <- lapply(block_data, function(x) {   
-        temp <- x$ret_n
+        temp <- x$ret_n[3:length(x$ret_n)] #the first two points of return data are always NAs
         return(temp) })
      ag_yr <- lapply(block_data, function(x) {   
-        temp <- x$yr
+        temp <- x$yr[3:length(x$yr)]
         return(temp) })
     returns <- c()
     years <- c()
@@ -205,8 +206,6 @@ compute_nonlinearity_aggregated <- function(block_data, name)
 }
 
 
-
-
 test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
 {
     get_smap_stats <- function(x, lib, E)
@@ -214,7 +213,7 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
         if(is.null(E))
         {
             # compute E using simplex on recruits time series
-            simplex_output <- simplex(x, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            simplex_output <- simplex(x, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
             best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
             best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
             E <- min(best_rho_E, best_mae_E)
@@ -230,10 +229,10 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
     }
     
      ag_ret_n <- lapply(block_data, function(x) {   
-        temp <- x$ret_n
-        return(temp) })
+         temp <- x$ret_n[3:length(x$ret_n)] #the first two points of return data are always NAs
+         return(temp) })
      ag_yr <- lapply(block_data, function(x) {   
-        temp <- x$yr
+        temp <- x$yr[3:length(x$yr)]
         return(temp) })
     returns <- c()
     years <- c()
@@ -256,15 +255,15 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
     elapsed_time <- proc.time() - start_time
     cat("(", elapsed_time[3], " sec.)\n", sep = "")
     
-    # null distribution. #shuffle the data but leave the NAs where they are because they generally line up with the beginning of the time series.
+    # null distribution. Shuffle the data including any NAs
     cat("calculating for random shuffles... ", sep = "")
     start_time <- proc.time()
     E <- actual$E
     null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
         returns_shuffle <- c()
         for(i in 1:length(block_data)) {
-            temp <- replace(ag_ret_n[[i]], is.finite(ag_ret_n[[i]]), sample(ag_ret_n[[i]][is.finite(ag_ret_n[[i]])])) 
-            returns_shuffle <- c(returns_shuffle, temp)
+          n <- length(ag_ret_n[[i]])
+            returns_shuffle <- c(returns_shuffle, ag_ret_n[[i]][sample(n, n)])
             }
         x_shuffle <- cbind(years,returns_shuffle)
         return(get_smap_stats(x_shuffle, lib, E))
@@ -280,7 +279,7 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
 
 }
 
-###---- nonlinear test ----###
+###---- nonlinear test of returns data ----###
 load("block_data.Rdata")
 name <- "all"
 compute_nonlinearity_aggregated(block_data, name)
@@ -470,17 +469,78 @@ plot(smap_out[[var]]$theta, smap_out[[var]]$mae, type = "l", xlab = "Nonlinearit
 
 
 #Convergent Cross Mapping (CCM) with time delays
-To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship.
+To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
+
+We tested all monthly values of PDO, Upwelling index and NPGO, even though with have apriori knowledge of which months are likely the most important for salmon. 
+
+
+
 
 
 
 ```{r}
+# Set up data set
+
+# determine the best embedding dimension to use first with simplex
+
+
+compute_ccm <- function()
+{
+    load("block_data.Rdata")
+    env_names <- c("D_max", "D_apr", "D_may", "D_jun", 
+                   "ET_apr", "ET_may", "ET_jun", 
+                   "PT_apr", "PT_may", "PT_jun", "PT_jul", 
+                   "PDO_win")
+    
+    ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {
+        valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff)
+        block <- stock_df[valid,]
+        
+        ccm_rhos <- do.call(cbind, lapply(env_names, function(env_var) {
+            output <- block_lnlp(block, tp = 0, target_column = env_var, 
+                                 columns = c("rec45_n", "eff_n"), silent = TRUE)
+            return(output$rho)
+        }))
+        colnames(ccm_rhos) <- env_names
+        ccm_rhos <- cbind(N = sum(valid), ccm_rhos)
+        return(ccm_rhos)
+    }))
+    rownames(ccm_table) <- names(block_data)
+    saveRDS(ccm_table, file = "results_ccm.RDS")
+    return()
+}
+
+print_ccm_table <- function()
+{
+    ccm_table <- data.frame(readRDS("results_ccm.RDS"))
+    ccm_table <- cbind("N" = ccm_table$N,
+                       "95% p" = tanh(qnorm(0.95, sd = 1/sqrt(ccm_table$N - 3))), 
+                       ccm_table[,2:NCOL(ccm_table)])
+    my_table <- xtable(ccm_table, digits = 3)
+    print(my_table, type = "html", file = "tables/Table_S3.html")
+    return()
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 ```
+
+
+
+
 # Multivariate models
 
-Our next step is to produce forecast models. Recall that the best predictions were obtained using a high number of time lags - the dynamics were high dimensional. As such, it could be that adding additional information from other variables will improve predictions. Specifically, we compare models that predict recruits using lags of itself vs. models that also include environmental variables.
+After CCM, the next step is to produce forecast models. Recall that the best predictions were obtained using a high number of time lags - the dynamics were high dimensional. As such, it could be that adding additional information from other variables will improve predictions. Specifically, we compare models that predict recruits using lags of itself vs. models that also include environmental variables.
 
 ```{r}
 #We can do this using the block_lnlp() function, but first we need to construct lags for each variable. Here, we use the make_block() function, which automatically adds lags of the variables. However, we also need to be careful, since the raw data combines observations from multiple populations. By including the lib argument, we can indicate which parts of the time series correspond to different segments, so that lags indicate unknown values correctly.
