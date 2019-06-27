@@ -1,6 +1,6 @@
 ---
 title: "4_EDM_Univariate_forecast_models"
-author: "Alison Iles"
+author: "Alison Iles + Kurt Ingeman"
 date: "6/27/2019"
 output: html_document
 ---
