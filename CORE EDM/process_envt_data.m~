@@ -1,5 +1,0 @@
-csvread(
-PDO = zeros(72,12);
-for i=1117:size(PDOmonthly,1) %from 1947 to 2018
-    PDO(PDOmonthly(i,1)-1946,PDOmonthly(i,2))=PDOmonthly(i,3);
-end

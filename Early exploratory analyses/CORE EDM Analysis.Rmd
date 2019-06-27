@@ -138,7 +138,7 @@ make_block <- function(stock_df, env_data)
         
         # line up environmental data
         # lag temperature and upwelling 2 years
-        desired_years <- stock_df$yr + 2  #brood year + 2 
+        desired_years <- stock_df$yr + 2  #brood year + 2 do this after ccm???
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
         
@@ -147,9 +147,9 @@ make_block <- function(stock_df, env_data)
         stock_df[, upwelling_names] <- upwelling_cols
         
         # lag PDO by 2 years 
-        desired_years <- stock_df$yr + 2
+        desired_years <- stock_df$yr + 2 #do this after ccm????
         index_in_env_data <- match(desired_years, env_data$year)
-        pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
+        pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pdo)))
         pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data]
         stock_df[, pdo_names] <- pdo_cols
         
@@ -159,8 +159,10 @@ make_block <- function(stock_df, env_data)
 block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_data)})
 
     # save and return
-    save(block_data, file = "block_data.Rdata")
+    save(block_data, file = "Data/Rdata/block_data.Rdata")
 
+    
+    stock_df <- stock_data
 ```
 
 #Concatenate the data and test for nonlinearity
@@ -280,7 +282,8 @@ test_nonlinearity_aggregated <- function(block_data, name, num_shuffles = 500)
 }
 
 ###---- nonlinear test of returns data ----###
-load("block_data.Rdata")
+
+load("Data/Rdata/block_data.Rdata")
 name <- "all"
 compute_nonlinearity_aggregated(block_data, name)
 test_nonlinearity_aggregated(block_data, name)
@@ -326,8 +329,8 @@ compute_nonlinearity_stock <- function()
     
     nonlinearity_for_stock <- function(stock_df, num_shuffles = 500)
     {
-        returns <- stock_df$ret_n
-        years <- stock_df$yr
+        returns <- stock_df$ret_n[3:length(stock_df$ret_n)] #the first two points of return data are always NAs
+        years <- stock_df$yr[3:length(stock_df$yr)]
         n <- length(returns)
         x <- cbind(years,returns)
         
@@ -351,10 +354,11 @@ compute_nonlinearity_stock <- function()
         cat("calculating for random shuffles for ", as.character(stock_df$stk[1]), "... ", sep = "")
         start_time <- proc.time()
         null_dist <- do.call(rbind, lapply(1:num_shuffles, function(i) {
-        returns_shuffle <- replace(returns, is.finite(returns), sample(returns[is.finite(returns)])) 
-        x_shuffle <- cbind(years,returns_shuffle)  
-        return(get_smap_stats(x_shuffle, E))
+              returns_shuffle <- returns[sample(n, n)]  
+              x_shuffle <- cbind(years,returns_shuffle)
+              return(get_smap_stats(x_shuffle, E))
         }))
+        
         
         delta_mae_p = (sum(null_dist$delta_mae < delta_mae)+1) / num_shuffles #proportion of randomizations with change in mae less than observed with the real data
         elapsed_time <- proc.time() - start_time
@@ -380,9 +384,7 @@ compute_nonlinearity_stock <- function()
 
 ```
 
-# run EDM models 
-
-Testing the code...
+#Testing the code on one mpg...
 ```{r}
 load("block_data.Rdata")
 
@@ -487,10 +489,7 @@ We tested all monthly values of PDO, Upwelling index and NPGO, even though with 
 compute_ccm <- function()
 {
     load("block_data.Rdata")
-    env_names <- c("D_max", "D_apr", "D_may", "D_jun", 
-                   "ET_apr", "ET_may", "ET_jun", 
-                   "PT_apr", "PT_may", "PT_jun", "PT_jul", 
-                   "PDO_win")
+    env_names <- c("up_apr", "PDO_win")
     
     ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {
         valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff)
@@ -521,7 +520,8 @@ print_ccm_table <- function()
     return()
 }
 
-
+compute_ccm()
+print_ccm_table() # table S3 in Sockeye paper
 
 
 
