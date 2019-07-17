@@ -8,14 +8,18 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+```
+
 
 #Convergent Cross Mapping (CCM) with time delays
 To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
 
 We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees latitude) and NPGO, even though with have apriori knowledge of which months are likely the most important for salmon. 
-
-
-
 
 ```{r}
 # Set up data set
@@ -25,7 +29,7 @@ We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees
 
 compute_ccm <- function()
 {
-    load("block_data.Rdata")
+    load("Data/Rdata/block_data.Rdata")
     env_names <- c("up_apr", "PDO_win")
     
     ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {

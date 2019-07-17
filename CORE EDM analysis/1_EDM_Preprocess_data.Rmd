@@ -141,12 +141,15 @@ make_block <- function(stock_df, env_data)
         upwelling_cols[index_in_stock_df,] <- upwelling[index_in_env_data, ]
         stock_df[, upwelling_names] <- upwelling_cols
         
-        # lag PDO by 2 years 
-        desired_years <- stock_df$yr + 2
-        index_in_env_data <- match(desired_years, env_data$year)
-        pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
-        pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data]
+        # lag PDO by 2 years
+        pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pdo)))
+        pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data, ]
         stock_df[, pdo_names] <- pdo_cols
+        
+         # lag NPGO by 2 years 
+        npgo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(npgo)))
+        npgo_cols[index_in_stock_df,] <- npgo[index_in_env_data, ]
+        stock_df[, npgo_names] <- npgo_cols
         
         return(stock_df)
     }
