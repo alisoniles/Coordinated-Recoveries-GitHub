@@ -13,6 +13,12 @@ Note that the `echo = FALSE` parameter prevents printing of the R code.
 
 ```{r, echo=FALSE}
 library(rEDM)
+library(reshape2)
+library(rgl)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+library(rlist)
 ```
 
 
@@ -20,6 +26,9 @@ library(rEDM)
 To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
 
 We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees latitude) and NPGO, even though with have apriori knowledge of which months are likely the most important for salmon. 
+
+block_lnlp uses multiple time series given as input to generate an attractor reconstruction, and then applies the simplex projection or s-map algorithm to make forecasts. This method generalizes the simplex and s_map routines, and allows for "mixed" embeddings, where multiple time series can be used as different dimensions of an attractor reconstruction.
+
 
 ```{r}
 # Set up data set
@@ -30,15 +39,15 @@ We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees
 compute_ccm <- function()
 {
     load("Data/Rdata/block_data.Rdata")
-    env_names <- c("up_apr", "PDO_win")
-    
-    ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {
-        valid <- is.finite(stock_df$rec45) & is.finite(stock_df$eff)
+    env_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec")
+    ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) 
+         {
+        valid <- is.finite(stock_df$rec4_n) & is.finite(stock_df$eff_n)
         block <- stock_df[valid,]
         
         ccm_rhos <- do.call(cbind, lapply(env_names, function(env_var) {
             output <- block_lnlp(block, tp = 0, target_column = env_var, 
-                                 columns = c("rec45_n", "eff_n"), silent = TRUE)
+                                 columns = c("rec4_n", "eff_n"), silent = TRUE)
             return(output$rho)
         }))
         colnames(ccm_rhos) <- env_names
@@ -57,9 +66,10 @@ print_ccm_table <- function()
                        "95% p" = tanh(qnorm(0.95, sd = 1/sqrt(ccm_table$N - 3))), 
                        ccm_table[,2:NCOL(ccm_table)])
     my_table <- xtable(ccm_table, digits = 3)
-    print(my_table, type = "html", file = "tables/Table_S3.html")
+    print(my_table, type = "html", file = "Output/Tables/Table_S3.html")
     return()
 }
 
 compute_ccm()
 print_ccm_table() # table S3 in Sockeye paper
+```
