@@ -126,7 +126,7 @@ make_block <- function(stock_df, env_data)
     {
         pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") # what is pdo_win?
         upwelling_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
-        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec")
+        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
         pdo <- normalize(env_data[, pdo_names])
         upwelling <- normalize(env_data[, upwelling_names])
         npgo <- normalize(env_data[, npgo_names])
