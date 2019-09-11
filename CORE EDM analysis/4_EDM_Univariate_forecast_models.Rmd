@@ -40,7 +40,8 @@ load("Data/Rdata/block_data.Rdata")
       } 
 Imnaha <- block_data[c(mpg==1)] #Only Imnaha
 Imnaha <- rbind(Imnaha[[1]],Imnaha[[2]],Imnaha[[3]],Imnaha[[4]],Imnaha[[5]],Imnaha[[6]]) #merge data into one data frame
-Imnaha <- Imnaha[c("stk", "yr", "eff_n", "rec3_n", "rec4_n", "rec5_n", "ret_n", "up_apr", "up_oct", "up_nov", "pdo_win")] #keep time, population, normalized spawners and rec4, environmental vars
+Imnaha <- Imnaha[c("stk", "yr", "eff_n", "rec3_n", "rec4_n", "rec5_n", "ret_n", "up48_apr", "up48_oct", "up48_nov", "pdo_win")] 
+#keep time, population, normalized spawners and rec4, environmental vars
 Imnaha <- droplevels(Imnaha) #drop unused levels from factors in a data frame
 # To prevent lagged vectors from being constructed that span separate populations, we need to create an appropriae index variable to identify different segments. We can then assess the predictive skill of EDM by using cross-validation and selecting random subsets of populations to use for the library and prediction sets
       data_by_popn <- split(Imnaha, Imnaha$stk)
@@ -62,8 +63,6 @@ lib = segments)
 ```
 
 Next, we run the models, being sure to set up predictor variables (the columns argument) and the variable to be predicted (the target_column argument). By default, predictions are always for one step ahead. Note that some models include only lagged observations of the target variable, and other models also include environmental data
-
-
 
 
 ```{r}

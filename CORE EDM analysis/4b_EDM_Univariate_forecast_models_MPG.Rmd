@@ -1,0 +1,333 @@
+---
+title: "4b_EDM_Univariate_forecast_models"
+author: "Kurt Ingeman"
+date: "9/10/19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+library(dplyr)
+#library(rjags)
+library(reshape2)
+library(rgl)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+library(rlist)
+```
+
+After CCM, the next step is to produce univariate forecast models. Recall that the best predictions were obtained using a high number of time lags - the dynamics were high dimensional. As such, it could be that adding additional information from other variables will improve predictions. Specifically, we compare models that predict recruits using lags of itself (univariate) vs. models that also include spawners and eventually environmental variables (multivariate).
+
+We can do this using the block_lnlp() function, but first we need to construct lags for each variable. I will do so following the Ye tutorial (a combination of manual lagging and canned rEDM functions) rather than the make_block function. We also need to be careful, since the raw data combines observations from multiple stocks within each MPG. By including the lib argument, we can indicate which parts of the time series correspond to different segments, so that lags indicate unknown values correctly.
+
+```{r}
+### Preparing the data for one major population group at a time
+
+data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
+
+# Sort the data by stk name to avoid mismatch with segments
+data <-  data %>% 
+  arrange(stk, yr)
+
+normalize <- function(x, ...) {
+  (x - mean(x, ...))/sd(x, ...)
+}
+
+# the vars that we want to use for "univariate" prediction are simply the recruit cohorts and the number of spawners. Later we will bring in the env variables to improve forecasts
+
+# separate time column from data
+vars <- c("eff", "rec3", "rec4", "rec5", "rec")
+composite_ts <- data[, vars]
+
+# normalize each time series within a plot
+data_by_stk <- split(composite_ts, data$stk)
+normalized_data <- lapply(data_by_stk, function(df) sapply(df, normalize))
+composite_ts <- cbind(Year = data$yr, data.frame(do.call(rbind,normalized_data)))
+# KI Note: Now we have the year and 5 variables with no lagged variables
+
+# To prevent lagged vectors from being constructed that span separate stks, 
+# we need to create an appropriate index variable that identifies different segments.
+
+segments_end <- cumsum(sapply(data_by_stk, NROW))
+segments_begin <- c(1, segments_end[-length(segments_end)] + 1)
+segments <- cbind( segments_begin, segments_end) ## reversed by KI because it introduced an unnamed stock at begining and pushed Bear Valley segment down into next stock
+
+# Choose random segments for prediction
+set.seed(9837)
+rndlib <- sample(1:NROW(segments), floor(NROW(segments) * 0.75))
+composite_lib <- segments[rndlib, ]
+composite_pred <- segments[-rndlib, ]
+
+######################################################################
+### THESE ARE NOT RANDOM SEGMENTS; THEY ARE DIFFERENT STOCKS
+### WE NEED TO SPLIT BY STOCK AND CHOOSE RANDOM SEGMENTS WITHIN INSTEAD
+######################################################################
+
+set.seed(2312)
+rndlib <- sample(1:NROW(data), floor(NROW(data) * 0.75))
+comp_lib <- data[rndlib, ]
+comp_pred <- data[-rndlib, ]
+
+# Now we have normalized the data, split data into segments by plot, 
+# and created a series of chunks for training and prediction...
+
+#################
+## Run simplex ##
+## and S-map ####
+#################
+
+simplex_out <- lapply(names(composite_ts)[2:6], function(var) {
+simplex(composite_ts[, c("Year", var)], E = 2:8, lib = composite_lib, pred = composite_pred)
+})
+
+names(simplex_out) <- names(composite_ts)[-1]
+
+par(mar = c(4, 4, 1, 1), mfrow = c(2, 3), mgp = c(2.5, 1, 0))  # set up margins for plotting
+out <- lapply(names(simplex_out), function(var) {
+  plot(simplex_out[[var]]$E, simplex_out[[var]]$rho, type = "l", xlab = "Embedding Dimension (E)", 
+       ylab = "Forecast Skill (rho)", main = var)
+})
+
+best_E <- sapply(simplex_out, function(df) {df$E[which.max(df$rho)]})
+best_E
+
+smap_out <- lapply(names(composite_ts)[2:6], function(var) {
+  s_map(composite_ts[, c("Year", var)], E = best_E[var], lib = comp_lib, 
+        pred = comp_pred)
+})
+
+names(smap_out) <- names(simplex_out)
+
+par(mar = c(4, 4, 1, 1), mfrow = c(2, 3), mgp = c(2.5, 1, 0))  # set up margins for plotting
+lapply(names(smap_out), function(var) {
+  plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", 
+       ylab = "Forecast Skill (rho)", main = var)
+})
+
+### LEFT OFF HERE
+# Next time to visualize pred vs obs
+
+simplex_data <- lapply(names(composite_ts)[2:6], function(var) {
+simplex(composite_ts[, c("Year", var)], E = 2:6, lib = comp_lib, pred = comp_pred, stats_only = FALSE)
+})
+
+
+################## 
+## Multivariate ##
+##### Models #####
+################## 
+
+data_by_stk <- split(composite_ts, data$stk)
+
+lagged_data <- do.call(rbind, lapply(data_by_stk, function(df) {
+  n <- NROW(df)
+  temp <- data.frame(Year = df$Year)
+  temp$rec_t <- df$rec
+  temp$rec_tm1 <- c(NA, temp$rec_t[-n])
+  temp$rec_tm2 <- c(NA, temp$rec_tm1[-n])
+  temp$rec_tm3 <- c(NA, temp$rec_tm2[-n])
+  
+  temp$eff_t <- df$eff
+  temp$eff_tm1 <- c(NA, temp$eff_t[-n])
+  temp$eff_tm2 <- c(NA, temp$eff_tm1[-n])
+  temp$eff_tm3 <- c(NA, temp$eff_tm2[-n])
+  
+  temp$rec3_t <- df$rec3
+  temp$rec3_tm1 <- c(NA, temp$rec3_t[-n])
+  temp$rec3_tm2 <- c(NA, temp$rec3_tm1[-n])
+  temp$rec3_tm3 <- c(NA, temp$rec3_tm2[-n])
+  
+  temp$rec4_t <- df$rec4
+  temp$rec4_tm1 <- c(NA, temp$rec4_t[-n])
+  temp$rec4_tm2 <- c(NA, temp$rec4_tm1[-n])
+  temp$rec4_tm3 <- c(NA, temp$rec4_tm2[-n])
+  
+  temp$rec5_t <- df$rec5
+  temp$rec5_tm1 <- c(NA, temp$rec5_t[-n])
+  temp$rec5_tm2 <- c(NA, temp$rec5_tm1[-n])
+  temp$rec5_tm3 <- c(NA, temp$rec5_tm2[-n])
+  
+  return(temp)
+}))
+
+head(lagged_data)
+
+univ_cols <- c("rec_t", "rec_tm1", "rec_tm2", "rec_tm3")
+univ_output <- block_lnlp(lagged_data, lib = composite_lib, pred = composite_pred, 
+                        columns = univ_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+model_output <- univ_output[[1]]$model_output 
+
+observed <- model_output$obs
+predicted <- model_output$pred
+
+plot_range <- range(c(observed, predicted), na.rm = TRUE)
+plot(observed, predicted, xlim = plot_range, ylim = plot_range, xlab = "Observed", 
+     ylab = "Predicted", asp = 1)
+abline(a = 0, b = 1, lty = 2, col = "blue")
+
+multi_cols <- c("rec_t", "rec_tm1", "rec_tm2", "rec_tm3", "eff_t", "eff_tm1","eff_tm2","eff_tm3")
+
+multi_output <- block_lnlp(lagged_data, lib = composite_lib, pred = composite_pred, columns = multi_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+
+multi_model_output <- multi_output[[1]]$model_output 
+
+multi_observed <- multi_model_output$obs
+multi_predicted <- multi_model_output$pred
+
+
+par(mar = c(4, 4, 1, 1), mgp = c(2.5, 1, 0), pty = "s")  # set up margins for plotting
+plot_range <- range(c(univ_observed, univ_predicted), na.rm = TRUE)
+plot(univ_observed, univ_predicted, xlim = plot_range, ylim = plot_range, xlab = "Observed", 
+    ylab = "Predicted")
+abline(a = 0, b = 1, lty = 2, col = "darkgrey", lwd = 2)
+abline(lm(univ_predicted ~ univ_observed), col = "black", lty = 3, lwd = 2)
+
+points(multi_observed, multi_predicted, pch = 2, col = "red")
+abline(lm(multi_predicted ~ multi_observed), col = "red", lty = 3, lwd = 2)
+
+legend("topleft", legend = c(paste("rho =", round(AB_output[[1]]$stats$rho, 
+    2)), paste("rho =", round(ABNO_output[[1]]$stats$rho, 2))), lty = 3, lwd = 2, 
+    col = c("black", "red"), bty = "n")
+
+
+```
+
+
+Next, we run the models, being sure to set up predictor variables (the columns argument) and the variable to be predicted (the target_column argument). By default, predictions are always for one step ahead. Note that some models include only lagged observations of the target variable, and other models also include environmental data
+
+
+
+
+```{r}
+block_lnlp_4 <- function(block, target_column, columns, norm = FALSE)
+{
+    if(norm)
+    {
+        block[,columns] <- normalize(block[,columns])
+    }
+    
+    lib_segments <- matrix(NA, nrow = 4, ncol = 2)
+    segment_size <- NROW(block)/4
+    start_index <- 1
+    for(i in 1:4)
+    {
+        lib_segments[i,1] <- floor(start_index)
+        end_index <- start_index - 1 + segment_size
+        lib_segments[i,2] <- floor(end_index)
+        start_index <- end_index+1
+    }
+    
+    if(is.list(columns))
+    {
+        preds <- lapply(1:length(columns), function(x) {rep.int(NA, times = NROW(block))})
+        for(i in 1:4)
+        {
+            pred_index <- lib_segments[i,1]:lib_segments[i,2]
+            
+            temp <- block_lnlp(block, lib = lib_segments[-i,], pred = lib_segments[i,], 
+                               target_column = target_column, tp = 0, 
+                               first_column_time = TRUE, 
+                               columns = columns, stats_only = FALSE)
+            
+            for(j in 1:length(columns))
+                preds[[j]][pred_index] <- temp$model_output[[j]]$pred[pred_index] #AI: changed from temp[[j]]$model_output$pred[pred_index]
+        }
+    }
+    else
+    {
+        preds <- rep.int(NA, times = NROW(block))
+        for(i in 1:4)
+        {
+            pred_index <- lib_segments[i,1]:lib_segments[i,2]
+            
+            temp <- block_lnlp(block, lib = lib_segments[-i,], pred = lib_segments[i,], 
+                               target_column = target_column, tp = 0, 
+                               first_column_time = TRUE, 
+                               columns = columns, stats_only = FALSE)
+            
+            preds[pred_index] <- temp$model_output[[1]]$pred[pred_index] #AI: changed from temp[[1]]$model_output$pred[pred_index]
+
+        }
+    }
+    return(preds)
+}
+
+
+simple_EDM <- function()
+{
+    forecast <- function(stock_df)
+    {  
+        make_forecasts <- function(block, mu_3, sigma_3, mu_4, sigma_4, mu_5, sigma_5)
+        {
+            rec3 <- block_lnlp_4(block, target_column = 2, columns = 1) #use function block_lnlp_4
+            rec4 <- block_lnlp_4(block, target_column = 3, columns = 1)
+            rec5 <- block_lnlp_4(block, target_column = 4, columns = 1)
+            
+            rec3 <- rec3*sigma_3 + mu_3
+            rec4 <- rec4*sigma_4 + mu_4
+            rec5 <- rec5*sigma_5 + mu_5
+            return(rec3 + c(NA, rec4[1:(NROW(block)-1)]) + c(NA, NA, rec5[1:(NROW(block)-2)]))
+        }
+        
+        # set up recruits and spawners
+        valid <- is.finite(stock_df$rec) & is.finite(stock_df$eff) #exclude NAs? Should we??
+        returns <- stock_df$ret[valid] #NAs left in here...
+        years <- stock_df$yr[valid]
+        spawners <- stock_df$eff_n[valid]
+        recruits_3 <- stock_df$rec3_n[valid]
+        mu_3 <- stock_df$rec3_mu[valid]
+        sigma_3 <- stock_df$rec3_sigma[valid]
+        recruits_4 <- stock_df$rec4_n[valid]
+        mu_4 <- stock_df$rec4_mu[valid]
+        sigma_4 <- stock_df$rec4_sigma[valid]
+        recruits_5 <- stock_df$rec5_n[valid]
+        mu_5 <- stock_df$rec5_mu[valid]
+        sigma_5 <- stock_df$rec5_sigma[valid]
+        
+        # make block
+        block <- data.frame(years = years, eff = spawners, 
+                            rec3=recruits_3, rec4 = recruits_4, rec5 = recruits_5)
+        
+        if(length(returns) < 2) # check for enough data
+            return(data.frame(year = NaN, obs = NaN, pred = NaN))
+        
+        forecasts <- make_forecasts(block,  mu_3, sigma_3, mu_4, sigma_4, mu_5, sigma_5)
+        return(data.frame(year = years, obs = returns, pred = forecasts))
+    }
+    
+    load("Data/Rdata/block_data.Rdata")
+    
+    # make forecasts for each stock
+    results <- lapply(names(block_data), 
+                      function(stk_name) {
+                          cat("forecasting for ", stk_name, "... ", sep = "")
+                          start_time <- proc.time()
+                          output <- forecast(block_data[[stk_name]])
+                          elapsed_time <- proc.time() - start_time
+                          cat("(", elapsed_time[3], " sec.)\n", sep = "")
+                          return(output)
+                      })
+    names(results) <- names(block_data)
+    saveRDS(results, file = "Output/Rdata/results_simple_EDM.RDS")
+    
+    # compute stats
+    stats <- do.call(rbind, lapply(results, function(stock_results) {
+        compute_stats(stock_results$obs, stock_results$pred)
+    }))
+    stats$stk <- names(block_data)
+    saveRDS(stats, file = "Output/Rdata/stats_simple_EDM.RDS")
+    return()
+}
+
+simple_EDM()
+
+```
