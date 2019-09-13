@@ -46,7 +46,7 @@ normalize <- function(x, ...) {
 vars <- c("eff", "rec3", "rec4", "rec5", "rec")
 composite_ts <- data[, vars]
 
-# normalize each time series within a plot
+# normalize each time series within an individual stock
 data_by_stk <- split(composite_ts, data$stk)
 normalized_data <- lapply(data_by_stk, function(df) sapply(df, normalize))
 composite_ts <- cbind(Year = data$yr, data.frame(do.call(rbind,normalized_data)))
@@ -65,9 +65,16 @@ rndlib <- sample(1:NROW(segments), floor(NROW(segments) * 0.75))
 composite_lib <- segments[rndlib, ]
 composite_pred <- segments[-rndlib, ]
 
+# alternative when using leave-one-out, use all for lib and pred
+set.seed(9837)
+rndlib <- sample(1:NROW(segments), floor(NROW(segments)))
+full_lib <- segments[rndlib, ]
+full_pred <- full_lib
+
 ######################################################################
 ### THESE ARE NOT RANDOM SEGMENTS; THEY ARE DIFFERENT STOCKS
 ### WE NEED TO SPLIT BY STOCK AND CHOOSE RANDOM SEGMENTS WITHIN INSTEAD
+### I need to modify the code from the sockeye paper for knowing where segments are but stick to leave one out validation using the entire dataset
 ######################################################################
 
 set.seed(2312)
@@ -84,7 +91,7 @@ comp_pred <- data[-rndlib, ]
 #################
 
 simplex_out <- lapply(names(composite_ts)[2:6], function(var) {
-simplex(composite_ts[, c("Year", var)], E = 2:8, lib = composite_lib, pred = composite_pred)
+simplex(composite_ts[, c("Year", var)], E = 2:8, lib = full_lib, pred = full_pred)
 })
 
 names(simplex_out) <- names(composite_ts)[-1]
@@ -99,23 +106,18 @@ best_E <- sapply(simplex_out, function(df) {df$E[which.max(df$rho)]})
 best_E
 
 smap_out <- lapply(names(composite_ts)[2:6], function(var) {
-  s_map(composite_ts[, c("Year", var)], E = best_E[var], lib = comp_lib, 
-        pred = comp_pred)
+  s_map(composite_ts[, c("Year", var)], E = best_E[var], lib = full_lib, 
+        pred = full_pred)
 })
 
 names(smap_out) <- names(simplex_out)
 
-par(mar = c(4, 4, 1, 1), mfrow = c(2, 3), mgp = c(2.5, 1, 0))  # set up margins for plotting
+par(mar = c(4, 4, 1, 1), mfrow = c(2, 3), mgp = c(2.5, 1, 0))  
+# set up margins for plotting
+
 lapply(names(smap_out), function(var) {
   plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", 
        ylab = "Forecast Skill (rho)", main = var)
-})
-
-### LEFT OFF HERE
-# Next time to visualize pred vs obs
-
-simplex_data <- lapply(names(composite_ts)[2:6], function(var) {
-simplex(composite_ts[, c("Year", var)], E = 2:6, lib = comp_lib, pred = comp_pred, stats_only = FALSE)
 })
 
 
@@ -159,24 +161,29 @@ lagged_data <- do.call(rbind, lapply(data_by_stk, function(df) {
 
 head(lagged_data)
 
+
+```
+
+
+Run univariate and multivariate forecasts using block_lnlp function and plot the observed vs predicted
+
+```{r}
 univ_cols <- c("rec_t", "rec_tm1", "rec_tm2", "rec_tm3")
 univ_output <- block_lnlp(lagged_data, lib = composite_lib, pred = composite_pred, 
-                        columns = univ_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+                          columns = univ_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
 
-model_output <- univ_output[[1]]$model_output 
+univ_model_output <- univ_output[[1]]$model_output 
 
-observed <- model_output$obs
-predicted <- model_output$pred
+univ_observed <- univ_model_output$obs
+univ_predicted <- univ_model_output$pred
 
-plot_range <- range(c(observed, predicted), na.rm = TRUE)
-plot(observed, predicted, xlim = plot_range, ylim = plot_range, xlab = "Observed", 
+plot_range <- range(c(univ_observed, univ_predicted), na.rm = TRUE)
+plot(univ_observed, univ_predicted, xlim = plot_range, ylim = plot_range, xlab = "Observed", 
      ylab = "Predicted", asp = 1)
 abline(a = 0, b = 1, lty = 2, col = "blue")
 
 multi_cols <- c("rec_t", "rec_tm1", "rec_tm2", "rec_tm3", "eff_t", "eff_tm1","eff_tm2","eff_tm3")
-
 multi_output <- block_lnlp(lagged_data, lib = composite_lib, pred = composite_pred, columns = multi_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
-
 
 multi_model_output <- multi_output[[1]]$model_output 
 
@@ -187,19 +194,126 @@ multi_predicted <- multi_model_output$pred
 par(mar = c(4, 4, 1, 1), mgp = c(2.5, 1, 0), pty = "s")  # set up margins for plotting
 plot_range <- range(c(univ_observed, univ_predicted), na.rm = TRUE)
 plot(univ_observed, univ_predicted, xlim = plot_range, ylim = plot_range, xlab = "Observed", 
-    ylab = "Predicted")
+     ylab = "Predicted")
 abline(a = 0, b = 1, lty = 2, col = "darkgrey", lwd = 2)
 abline(lm(univ_predicted ~ univ_observed), col = "black", lty = 3, lwd = 2)
 
 points(multi_observed, multi_predicted, pch = 2, col = "red")
 abline(lm(multi_predicted ~ multi_observed), col = "red", lty = 3, lwd = 2)
 
-legend("topleft", legend = c(paste("rho =", round(AB_output[[1]]$stats$rho, 
-    2)), paste("rho =", round(ABNO_output[[1]]$stats$rho, 2))), lty = 3, lwd = 2, 
-    col = c("black", "red"), bty = "n")
-
-
+legend("topleft", legend = c(paste("rho =", round(univ_output[[1]]$stats$rho, 
+                                                  2)), paste("rho =", round(multi_output[[1]]$stats$rho, 2))), lty = 3, lwd = 2, 
+       col = c("black", "red"), bty = "n")
 ```
+Now, let's split recruits by cohort such that forecasts can be assembled into return estimates. Here looking at whether eff spawners improves predictions for rec 4
+
+```{r}
+data_by_stk <- split(composite_ts, data$stk)
+
+lag_rec4 <- do.call(rbind, lapply(data_by_stk, function(df) {
+  n <- NROW(df)
+  temp <- data.frame(Year = df$Year)
+  
+  temp$rec3_t <- df$rec3
+  temp$rec3_tm1 <- c(NA, temp$rec3_t[-n])
+ 
+  temp$rec4_t <- df$rec4
+  temp$rec4_tm1 <- c(NA, temp$rec4_t[-n])
+  temp$rec4_tm2 <- c(NA, temp$rec4_tm1[-n])
+  temp$rec4_tm3 <- c(NA, temp$rec4_tm2[-n])
+  temp$rec4_tm4 <- c(NA, temp$rec4_tm3[-n]) 
+  temp$rec4_tm5 <- c(NA, temp$rec4_tm4[-n])
+  
+  temp$eff_t <- df$eff
+  temp$eff_tm1 <- c(NA, temp$eff_t[-n])
+  temp$eff_tm2 <- c(NA, temp$eff_tm1[-n])
+  temp$eff_tm3 <- c(NA, temp$eff_tm2[-n])
+  temp$eff_tm4 <- c(NA, temp$eff_tm3[-n])
+  temp$eff_tm5 <- c(NA, temp$eff_tm4[-n])
+  
+  
+  return(temp)
+}))
+
+univ_cols <- c("rec4_t", "rec4_tm1", "rec4_tm2", "rec4_tm3", "rec4_tm4")
+univ_output <- block_lnlp(lag_rec4, lib = full_lib, pred = full_pred,columns = univ_cols, target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+univ_model_output <- univ_output[[1]]$model_output 
+
+univ_observed <- univ_model_output$obs
+univ_predicted <- univ_model_output$pred
+
+univ_output[[1]]$stats 
+
+
+#### And multivariate, using eff and lags of eff
+
+multi_cols <- c("rec4_t", "rec4_tm1", "rec4_tm2", "rec3_t", "eff_t")
+multi_output <- block_lnlp(lag_rec4, lib = full_lib, pred = full_pred, columns = multi_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+multi_model_output <- multi_output[[1]]$model_output 
+
+multi_observed <- multi_model_output$obs
+multi_predicted <- multi_model_output$pred
+
+multi_output[[1]]$stats
+```
+
+data_by_stk <- split(composite_ts, data$stk)
+
+lag_rec5 <- do.call(rbind, lapply(data_by_stk, function(df) {
+  n <- NROW(df)
+  temp <- data.frame(Year = df$Year)
+  temp$rec3_t <- df$rec3
+  temp$rec3_tm1 <- c(NA, temp$rec3_t[-n])
+ 
+  temp$rec4_t <- df$rec4
+  temp$rec4_tm1 <- c(NA, temp$rec4_t[-n])
+  temp$rec4_tm2 <- c(NA, temp$rec4_tm1[-n])
+  temp$rec4_tm3 <- c(NA, temp$rec4_tm2[-n])
+  temp$rec4_tm4 <- c(NA, temp$rec4_tm3[-n]) 
+  temp$rec4_tm5 <- c(NA, temp$rec4_tm4[-n])
+  
+  temp$rec5_t <- df$rec5
+  temp$rec5_tm1 <- c(NA, temp$rec5_t[-n])
+  temp$rec5_tm2 <- c(NA, temp$rec5_tm1[-n])
+  temp$rec5_tm3 <- c(NA, temp$rec5_tm2[-n])
+  temp$rec5_tm4 <- c(NA, temp$rec5_tm3[-n]) 
+  temp$rec5_tm5 <- c(NA, temp$rec4_tm4[-n])
+  
+  temp$eff_t <- df$eff
+  temp$eff_tm1 <- c(NA, temp$eff_t[-n])
+  temp$eff_tm2 <- c(NA, temp$eff_tm1[-n])
+  temp$eff_tm3 <- c(NA, temp$eff_tm2[-n])
+  temp$eff_tm4 <- c(NA, temp$eff_tm3[-n])
+  temp$eff_tm5 <- c(NA, temp$eff_tm4[-n])
+  
+  
+  return(temp)
+}))
+
+univ_cols <- c("rec5_t", "rec5_tm1", "rec5_tm2", "rec5_tm3", "rec5_tm4", "rec5_tm5")
+
+univ_output <- block_lnlp(lag_rec4, lib = full_lib, pred = full_pred,columns = univ_cols, target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+univ_model_output <- univ_output[[1]]$model_output 
+
+univ_observed <- univ_model_output$obs
+univ_predicted <- univ_model_output$pred
+
+#### And multivariate, using eff and lags of eff
+
+multi_cols <- c("rec4_t", "rec4_tm1", "rec4_tm2", "rec4_tm3", "rec3_t", "eff_t")
+multi_output <- block_lnlp(lag_rec4, lib = full_lib, pred = full_pred, columns = multi_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+multi_model_output <- multi_output[[1]]$model_output 
+
+multi_observed <- multi_model_output$obs
+multi_predicted <- multi_model_output$pred
+
+multi_output[[1]]$stats
+```
+
 
 
 Next, we run the models, being sure to set up predictor variables (the columns argument) and the variable to be predicted (the target_column argument). By default, predictions are always for one step ahead. Note that some models include only lagged observations of the target variable, and other models also include environmental data
