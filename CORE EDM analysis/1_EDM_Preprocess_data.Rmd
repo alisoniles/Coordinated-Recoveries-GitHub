@@ -131,6 +131,7 @@ make_block <- function(stock_df, env_data)
         upwelling <- normalize(env_data[, upwelling_names])
         npgo <- normalize(env_data[, npgo_names])
         
+        
         # line up environmental data
         # lag temperature and upwelling 2 years
         desired_years <- stock_df$yr + 2  #brood year + 2 

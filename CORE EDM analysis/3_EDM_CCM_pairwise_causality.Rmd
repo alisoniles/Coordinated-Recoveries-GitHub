@@ -14,7 +14,6 @@ Note that the `echo = FALSE` parameter prevents printing of the R code.
 ```{r, echo=FALSE}
 library(rEDM)
 library(reshape2)
-library(rgl)
 library(ggplot2)
 library(gridExtra)
 library(xtable)
@@ -94,3 +93,70 @@ vioplot(ccm_table[,27:39], names=c("Jan",	"Feb",	"Mar",	"Apr",	"May",	"Jun",	"Ju
 vioplot(ccm_table[,40:52], names=c("Jan",	"Feb",	"Mar",	"Apr",	"May",	"Jun",	"Jul",	"Aug",	"Sep",	"Oct",	"Nov",	"Dec", "Year"), title("CCM of NPGO"))
 
 ```
+
+#Convergent cross-mapping test for the major population groups 
+
+```{r}
+
+compute_ccm_mpg <- function(data, name)
+{
+    #concatenate the time series of each variable together
+        keys <-c(names(data[[1]]))
+        merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+        merged_data <- as.data.frame(merged_data)
+        valid <- is.finite(merged_data$rec4_n) & is.finite(merged_data$rec5_n) & is.finite(merged_data$eff_n)
+        block <- merged_data[valid,]  
+        
+    #List in lib the begin and end points of each stock
+        lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
+        lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
+        lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+        ## NOTE: library includes breaks between stocks AND non-continuous breaks within stocks
+     
+        env_names <- c(names(data[[1]][28:77]))
+  
+        ccm_table <- do.call(cbind, lapply(env_names, function(env_var) 
+          {  output <- block_lnlp(block, lib, target_column = env_var, method = c("s-map"), theta = 2, tp=0, columns = c("rec4_n", "rec5_n", "eff_n"), save_smap_coefficients = TRUE)
+            #For the tp parameter, the default value of 1 means that the program will predict the target variable 1 time step into the future (based on the row-structure of the input data). In some cases, the data may already be processed into a format where one wants to predict a different column that has already been aligned correctly. In that case, one can set tp = 0 when calling block_lnlp.
+            return(output$rho)
+        }))
+        colnames(ccm_table) <- env_names
+        ccm_table <- cbind(N = sum(valid), ccm_table)
+        rownames(ccm_table) <- name
+        
+        ccm_table <- as.data.frame(ccm_table)
+        ccm_table <- cbind("N" = ccm_table$N,
+                       "95% p" = tanh(qnorm(0.95, sd = 1/sqrt(ccm_table$N - 3))), 
+                       ccm_table[,2:NCOL(ccm_table)])
+        ccm_table <- xtable(ccm_table, digits = 3)
+
+        saveRDS(ccm_table, file = paste("Output/Rdata/results_ccm_",name,".RDS", sep = "", collapse = NULL))
+    
+    return()
+}
+
+###--- nonlinear test for different major population groups
+load("Data/Rdata/block_data.Rdata")  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+  
+  for(u in c(1, 3, 4, 5)){
+    data <- block_data[c(mpg==u)]
+    name <- as.character(data[[1]]$mpg[1])
+    compute_ccm_mpg(data, name)
+  }
+
+    ccm_table_I <- data.frame(readRDS("Output/Rdata/results_ccm_Imnaha.RDS"))
+    ccm_table_MFS <- data.frame(readRDS("Output/Rdata/results_ccm_Middle Fork Salmon.RDS"))
+    ccm_table_SFS <- data.frame(readRDS("Output/Rdata/results_ccm_South Fork Salmon.RDS"))
+    ccm_table_US <- data.frame(readRDS("Output/Rdata/results_ccm_Upper Salmon.RDS"))
+    
+    ccm_table <- rbind(ccm_table_I, ccm_table_MFS, ccm_table_SFS, ccm_table_US)
+    saveRDS(ccm_table, file = "Output/Rdata/results_ccm_mpg.RDS", compress = FALSE)
+    
+    print(ccm_table, type = "html", file = "Output/Tables/CCM_MPG.html")
+```
+
+
