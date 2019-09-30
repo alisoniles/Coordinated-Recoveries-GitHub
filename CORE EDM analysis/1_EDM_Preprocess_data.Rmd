@@ -68,7 +68,7 @@ data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
         stock_df$eff_sigma <- temp$sigma
         
         temp <- normalize_by_cycle_line(stock_df$rec3)
-        stock_df$rec3_n <- temp$ts #normalized 4 year old recruits
+        stock_df$rec3_n <- temp$ts #normalized 3 year old recruits
         stock_df$rec3_mu <- temp$mu
         stock_df$rec3_sigma <- temp$sigma
         
@@ -155,7 +155,7 @@ make_block <- function(stock_df, env_data)
         return(stock_df)
     }
 
-block_data <- lapply(stock_data, function(stock_df) { make_block(stock_df, env_data)})
+block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data)})
 
     # save and return
     save(block_data, file = "Data/Rdata/block_data.Rdata")

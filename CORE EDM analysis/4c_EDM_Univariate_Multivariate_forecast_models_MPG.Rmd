@@ -30,37 +30,149 @@ We can do this using the block_lnlp() function, but first we need to construct l
 ```{r}
 load("Data/Rdata/block_data.Rdata")
 
-#Preparing the data for one major population group
-#construct a single composite time series with the normalized data
+# Preparing the data for one major population group
+# construct a single composite time series with the normalized data
 
-#ID the different mpg
+# ID the different mpg
     mpg <- c() 
       for(stk in 1:length(block_data)) { 
           mpg[stk] <- block_data[[stk]]$mpg[1]
       } 
-Imnaha <- block_data[c(mpg==1)] #Only Imnaha
-Imnaha <- rbind(Imnaha[[1]],Imnaha[[2]],Imnaha[[3]],Imnaha[[4]],Imnaha[[5]],Imnaha[[6]]) #merge data into one data frame
+    
+Imnaha <- block_data[c(mpg==1)] # Only Imnaha
+Imnaha <- rbind(Imnaha[[1]],Imnaha[[2]],Imnaha[[3]],Imnaha[[4]],Imnaha[[5]],Imnaha[[6]]) # Merge lists of stocks into one dataframe
 Imnaha <- Imnaha[c("stk", "yr", "eff_n", "rec3_n", "rec4_n", "rec5_n", "ret_n", "up48_apr", "up48_oct", "up48_nov", "pdo_win")] 
 #keep time, population, normalized spawners and rec4, environmental vars
 Imnaha <- droplevels(Imnaha) #drop unused levels from factors in a data frame
-# To prevent lagged vectors from being constructed that span separate populations, we need to create an appropriae index variable to identify different segments. We can then assess the predictive skill of EDM by using cross-validation and selecting random subsets of populations to use for the library and prediction sets
+
+# To prevent lagged vectors from being constructed that span separate populations, we need to create an appropriae index variable to identify different segments. But, here we depart from Ye by employing leave-one-out forecasting on all sections. We still feed the function a matrix of beginning and end points for each stock, but now we pred and lib on all points, not a random selection stocks
+
       data_by_popn <- split(Imnaha, Imnaha$stk)
       segments_end <- cumsum(sapply(data_by_popn, NROW))
       segments_begin <- unname(c(1, segments_end[-length(segments_end)] + 1))
       segments <- cbind(segments_begin, segments_end)
        # Choose random segments for prediction
-      set.seed(7583)
-      rndlib <- sample(1:NROW(segments), floor(NROW(segments) * 0.75))
-      composite_lib <- segments[rndlib, ]  
-      composite_pred <- segments[-rndlib, ]
+lib <- matrix(NA, nrow = length(segments_begin), ncol = 2)
+lib[,1] <- segments_begin 
+lib[,2] <- segments_end
 
-      
-block_Imnaha <- make_block(Imnaha[, 2:11], t = Imnaha$yr, max_lag = 5,
-lib = segments) 
+pred <- lib
+```
 
-# Note that the lagged columns begin with NA values because there are no observations of the variables for times t < 1. The vectors that include NA values are excluded if that specific value is needed for computation.
+## Get embeddings from simplex
+
+```{r}
+simplex_out <- lapply(names(Imnaha)[3:11], function(var) {
+simplex(Imnaha[, c("yr", var)], E = 2:10, lib = lib, pred = pred)
+})
+
+names(simplex_out) <- names(Imnaha)[-c(1,2)]
+
+best_E <- sapply(simplex_out, function(df) {df$E[which.max(df$rho)]})
+best_E
 
 ```
+
+## Test non-linearity with S-map
+
+```{r}
+
+smap_out <- lapply(names(Imnaha)[3:11], function(var) {
+  s_map(Imnaha[, c("yr", var)], E = best_E[var], lib = lib, 
+        pred = pred)
+})
+
+names(smap_out) <- names(simplex_out)
+
+par(mar = c(4, 4, 1, 1), mfrow = c(3, 3), mgp = c(2.5, 1, 0))  
+# set up margins for plotting
+
+lapply(names(smap_out), function(var) {
+  plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", 
+       ylab = "Forecast Skill (rho)", main = var)
+})
+
+```
+
+## Univariate and Multivariate Forecast Models
+
+```{r}
+## Really need to write a function that lags variables automatically
+
+data_by_stk <- split(Imnaha, Imnaha$stk)
+
+lag_dat <- do.call(rbind, lapply(data_by_stk, function(df) {
+  n <- NROW(df)
+  temp <- data.frame(Year = df$yr)
+  
+  temp$rec3_t <- df$rec3_n
+  temp$rec3_tm1 <- c(NA, temp$rec3_t[-n])
+  temp$rec3_tm2 <- c(NA, temp$rec3_tm1[-n])
+  
+  temp$rec4_t <- df$rec4_n
+  temp$rec4_tm1 <- c(NA, temp$rec4_t[-n])
+  temp$rec4_tm2 <- c(NA, temp$rec4_tm1[-n])
+  temp$rec4_tm3 <- c(NA, temp$rec4_tm2[-n])
+  temp$rec4_tm4 <- c(NA, temp$rec4_tm3[-n])
+  temp$rec4_tm5 <- c(NA, temp$rec4_tm4[-n])  
+  temp$rec4_tm6 <- c(NA, temp$rec4_tm5[-n])
+  
+  temp$rec5_t <- df$rec5_n
+  temp$rec5_tm1 <- c(NA, temp$rec5_t[-n])
+  temp$rec5_tm2 <- c(NA, temp$rec5_tm1[-n])
+ 
+  temp$eff_t <- df$eff_n
+  temp$eff_tm1 <- c(NA, temp$eff_t[-n])
+  temp$eff_tm2 <- c(NA, temp$eff_tm1[-n])
+
+  temp$apr_t <- df$up48_apr
+  temp$apr_tm1 <- c(NA, temp$apr_t[-n])
+  temp$apr_tm2 <- c(NA, temp$apr_tm1[-n])
+  
+  temp$oct_t <- df$up48_oct
+  temp$oct_tm1 <- c(NA, temp$oct_t[-n])
+  temp$oct_tm2 <- c(NA, temp$oct_tm1[-n])
+  
+  temp$nov_t <- df$up48_nov
+  temp$nov_tm1 <- c(NA, temp$nov_t[-n])
+  temp$nov_tm2 <- c(NA, temp$nov_tm1[-n])
+  
+  temp$pdo_t <- df$pdo_win
+  temp$pdo_tm1 <- c(NA, temp$pdo_t[-n])
+  temp$pdo_tm2 <- c(NA, temp$pdo_tm1[-n])
+
+  return(temp)
+}))
+
+head(lag_dat)
+```
+
+
+```{r}
+univ_cols <- c("rec4_t", "rec4_tm1", "rec4_tm2", "rec4_tm3", "rec4_tm4", "rec4_tm5")
+univ_output <- block_lnlp(lag_dat, lib = lib, pred = pred,columns = univ_cols, target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+univ_model_output <- univ_output[[1]]$model_output 
+univ_observed <- univ_model_output$obs
+univ_predicted <- univ_model_output$pred
+
+univ_output[[1]]$stats 
+```
+
+
+```{r}
+names(lag_dat)
+multi_cols <- c("rec4_t", "rec4_tm1", "rec4_tm2", "apr_t", "eff_t", "oct_t")
+multi_output <- block_lnlp(lag_dat, lib = lib, pred = pred, columns = multi_cols , target_column = 1, stats_only = FALSE, first_column_time = TRUE)
+
+multi_model_output <- multi_output[[1]]$model_output 
+
+multi_observed <- multi_model_output$obs
+multi_predicted <- multi_model_output$pred
+
+multi_output[[1]]$stats
+```
+
 
 Next, we run the models, being sure to set up predictor variables (the columns argument) and the variable to be predicted (the target_column argument). By default, predictions are always for one step ahead. Note that some models include only lagged observations of the target variable, and other models also include environmental data
 
