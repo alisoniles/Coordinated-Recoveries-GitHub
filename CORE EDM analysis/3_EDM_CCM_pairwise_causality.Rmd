@@ -159,4 +159,79 @@ mpg <- c()
     print(ccm_table, type = "html", file = "Output/Tables/CCM_MPG.html")
 ```
 
+#univariate ccm
+Setup the cross mapping runs we want to do:
+```{R}
+load("Data/Rdata/block_data.Rdata")  
 
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+  
+  #for(u in c(3)){   # for each mpg
+    data <- block_data[c(mpg==u)]
+    name <- as.character(data[[1]]$mpg[1])
+  
+    #concatenate the time series of each variable together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <- is.finite(merged_data$rec4_n) & is.finite(merged_data$rec5_n) & is.finite(merged_data$eff_n)
+    block <- merged_data[valid,]  
+    
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
+    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+
+    library_vars <- c("rec4_n", "rec5_n", "eff_n")
+    target_vars <- env_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
+    
+    # generate all combinations of lib_column, target_column, tp
+    params <- expand.grid( target_column = target_vars, 
+                           tp = -5:5)
+     
+    #params <- params[params$lib_column != params$target_column, ] # throw out cases where lib == target. Not need as library stays the same
+    
+     #what is the best theta? First determine the best embedding dimension of each variable in the library
+            simplex_output <- simplex(block$eff_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            eff_E <- min(best_rho_E, best_mae_E)
+            
+            simplex_output <- simplex(block$rec5_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            rec5_E <- min(best_rho_E, best_mae_E)
+            
+            simplex_output <- simplex(block$rec4_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
+            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
+            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
+            rec4_E <- min(best_rho_E, best_mae_E)
+            
+            best_E <- max(eff_E, rec5_E, rec4_E)
+            
+            s_map_output <- s_map(block$eff_n, lib, pred = lib, E=eff_E)
+            best_rho_theta <- s_map_output$theta[which.max(s_map_output$rho)]
+            best_mae_theta <- s_map_output$theta[which.min(s_map_output$mae)]
+            
+            
+    #Perform cross mapping runs:  
+    output <- do.call(rbind, lapply(seq_len(NROW(params)), function(i) {
+        block_lnlp(block, lib, 
+        columns = library_vars, 
+        target_column = params$target_column[i], 
+        method = c("s-map"), theta = 2,
+        tp = params$tp[i], silent = FALSE)
+        }))
+
+    
+#Create an additional column to describe the direction of the cross mapping:
+output$direction <- paste("xmap to", output$target_column)
+
+#Plot the results (cross map skill vs. tp):
+ggplot(output, aes(x = tp, y = rho, color = direction))  + geom_line() + theme_bw()
+
+}
+```
