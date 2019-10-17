@@ -1,2 +1,4 @@
 load("/Users/kurt/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/results_simple_EDM.RDS")
 load("/Users/kurt/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/stats_simple_EDM.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/CCM Middle Fork Salmonlibrary_E.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/CCM Middle Fork Salmonlibrary_E.RDS")

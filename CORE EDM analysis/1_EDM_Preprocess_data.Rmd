@@ -30,7 +30,7 @@ data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
 #normalize
 
 ```{R}
- # To focus on one stock to figure out what's going on
+ # To focus on one stock to figure out what's going on use
 #stock_df <- subset(data, stk == "Bear Valley Creek") 
  
 # The original code normalized by cycle line. Chinook don't demonstrate a strong cycle line, so I changed the normalize_by_cycle_line function to normalize on a 1 year cycle 
@@ -133,31 +133,38 @@ make_block <- function(stock_df, env_data)
         
         
         # line up environmental data
-        # lag temperature and upwelling 2 years
-        desired_years <- stock_df$yr + 2  #brood year + 2 
+        for(i in 0:8) { # lag environmental data from 0 to 6 years after brood year. 
+        desired_years <- stock_df$yr + i
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
         
+        # lag upwelling
         upwelling_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(upwelling)))
         upwelling_cols[index_in_stock_df,] <- upwelling[index_in_env_data, ]
-        stock_df[, upwelling_names] <- upwelling_cols
+        m2 <- cbind(1,1:4)
+        colnames <- paste(upwelling_names, i, sep = "_")
+        stock_df[, colnames] <- upwelling_cols
         
-        # lag PDO by 2 years
+        # lag PDO 
         pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pdo)))
         pdo_cols[index_in_stock_df,] <- pdo[index_in_env_data, ]
-        stock_df[, pdo_names] <- pdo_cols
+        colnames <- paste(pdo_names, i, sep = "_")
+        stock_df[, colnames] <- pdo_cols
         
-         # lag NPGO by 2 years 
+         # lag NPGO  
         npgo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(npgo)))
         npgo_cols[index_in_stock_df,] <- npgo[index_in_env_data, ]
-        stock_df[, npgo_names] <- npgo_cols
+        colnames <- paste(npgo_names, i, sep = "_")
+        stock_df[, colnames] <- npgo_cols
+        }
         
         return(stock_df)
     }
 
 block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data)})
 
-    # save and return
+    
+# save and return
     save(block_data, file = "Data/Rdata/block_data.Rdata")
 
 ```

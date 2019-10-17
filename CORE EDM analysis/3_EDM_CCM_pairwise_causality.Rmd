@@ -15,9 +15,12 @@ Note that the `echo = FALSE` parameter prevents printing of the R code.
 library(rEDM)
 library(reshape2)
 library(ggplot2)
+library(viridis)
 library(gridExtra)
 library(xtable)
 library(rlist)
+library(Kendall) #for MannKendall test
+library(psych) #for paired.r function
 ```
 
 
@@ -39,18 +42,18 @@ library(vioplot)
 compute_ccm <- function()
 {
     load("Data/Rdata/block_data.Rdata")
-    env_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
+    env_vars <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
     ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) 
          {
         valid <- is.finite(stock_df$rec5_n) & is.finite(stock_df$eff_n)
         block <- stock_df[valid,]
         
-        ccm_rhos <- do.call(cbind, lapply(env_names, function(env_var) {
+        ccm_rhos <- do.call(cbind, lapply(env_vars, function(env_var) {
             output <- block_lnlp(block, tp = 0, target_column = env_var, 
                                  columns = c("rec5_n", "eff_n"), silent = TRUE)
             return(output$rho)
         }))
-        colnames(ccm_rhos) <- env_names
+        colnames(ccm_rhos) <- env_vars
         ccm_rhos <- cbind(N = sum(valid), ccm_rhos)
         return(ccm_rhos)
     }))
@@ -113,14 +116,14 @@ compute_ccm_mpg <- function(data, name)
         lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
         ## NOTE: library includes breaks between stocks AND non-continuous breaks within stocks
      
-        env_names <- c(names(data[[1]][28:77]))
+        env_vars <- c(names(data[[1]][28:77]))
   
-        ccm_table <- do.call(cbind, lapply(env_names, function(env_var) 
+        ccm_table <- do.call(cbind, lapply(env_vars, function(env_var) 
           {  output <- block_lnlp(block, lib, target_column = env_var, method = c("s-map"), theta = 2, tp=0, columns = c("rec4_n", "rec5_n", "eff_n"), save_smap_coefficients = TRUE)
             #For the tp parameter, the default value of 1 means that the program will predict the target variable 1 time step into the future (based on the row-structure of the input data). In some cases, the data may already be processed into a format where one wants to predict a different column that has already been aligned correctly. In that case, one can set tp = 0 when calling block_lnlp.
             return(output$rho)
         }))
-        colnames(ccm_table) <- env_names
+        colnames(ccm_table) <- env_vars
         ccm_table <- cbind(N = sum(valid), ccm_table)
         rownames(ccm_table) <- name
         
@@ -159,7 +162,7 @@ mpg <- c()
     print(ccm_table, type = "html", file = "Output/Tables/CCM_MPG.html")
 ```
 
-#univariate ccm
+#ccm
 Setup the cross mapping runs we want to do:
 ```{R}
 load("Data/Rdata/block_data.Rdata")  
@@ -168,8 +171,24 @@ mpg <- c()
   for(stk in 1:length(block_data)) { 
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
-  
-  #for(u in c(3)){   # for each mpg
+
+normalize <- function(block)
+{
+    if(NCOL(block) > 1)
+    {
+        n <- NROW(block)
+        means <- sapply(block, mean, na.rm = TRUE)
+        sds <- sapply(block, sd, na.rm = TRUE)
+        return((block - matrix(rep(means, each = n), nrow = n)) / 
+                   matrix(rep(sds, each = n), nrow = n))
+    }
+    else
+        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
+}
+     
+
+ 
+for(u in c(1:5)){   # for each mpg
     data <- block_data[c(mpg==u)]
     name <- as.character(data[[1]]$mpg[1])
   
@@ -185,53 +204,85 @@ mpg <- c()
     lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
     lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
 
-    library_vars <- c("rec4_n", "rec5_n", "eff_n")
-    target_vars <- env_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
-    
-    # generate all combinations of lib_column, target_column, tp
-    params <- expand.grid( target_column = target_vars, 
-                           tp = -5:5)
-     
-    #params <- params[params$lib_column != params$target_column, ] # throw out cases where lib == target. Not need as library stays the same
-    
-     #what is the best theta? First determine the best embedding dimension of each variable in the library
-            simplex_output <- simplex(block$eff_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
-            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
-            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
-            eff_E <- min(best_rho_E, best_mae_E)
-            
-            simplex_output <- simplex(block$rec5_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
-            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
-            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
-            rec5_E <- min(best_rho_E, best_mae_E)
-            
-            simplex_output <- simplex(block$rec4_n, lib = lib, pred = lib, E = 1:8, exclusion_radius = 0, silent = TRUE)
-            best_rho_E <- simplex_output$E[which.max(simplex_output$rho)]
-            best_mae_E <- simplex_output$E[which.min(simplex_output$mae)]
-            rec4_E <- min(best_rho_E, best_mae_E)
-            
-            best_E <- max(eff_E, rec5_E, rec4_E)
-            
-            s_map_output <- s_map(block$eff_n, lib, pred = lib, E=eff_E)
-            best_rho_theta <- s_map_output$theta[which.max(s_map_output$rho)]
-            best_mae_theta <- s_map_output$theta[which.min(s_map_output$mae)]
-            
-            
-    #Perform cross mapping runs:  
-    output <- do.call(rbind, lapply(seq_len(NROW(params)), function(i) {
-        block_lnlp(block, lib, 
-        columns = library_vars, 
-        target_column = params$target_column[i], 
-        method = c("s-map"), theta = 2,
-        tp = params$tp[i], silent = FALSE)
-        }))
+    #set up output table
+    library_vars <- c("rec3_n", "rec4_n", "rec5_n", "eff_n")
+    env_vars <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
+    lags <- c(0,1,2,3,4,5,6)
+    CCM_outputlist <- expand.grid(env_vars, library_vars, lags, stringsAsFactors = FALSE) 
+    CCM_outputlist[,4] <- paste(CCM_outputlist[,1], CCM_outputlist[,3], sep = "_")
+    CCM_outputlist[,5:10] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 6)
+    colnames( CCM_outputlist) <- c("env_fac","library","offset","target","target E","rho","95%CI lower","95%CI upper","MK test","FZ test")
 
+    #Perform cross mappings:      
+    libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
+    for(i in c(1:NROW(CCM_outputlist)) ){  #c(1:100)
     
-#Create an additional column to describe the direction of the cross mapping:
-output$direction <- paste("xmap to", output$target_column)
+      library_var <- CCM_outputlist[i,2]
+      target_var <- CCM_outputlist[i,4]
+      env_factor <- CCM_outputlist[i,1]
+      
+          # determine the best univariate embedding dimension and theta for the target variables - use time series of environemtnal vars from 1957 to 2009+7(lags)=2016 for ALL lags, so all lags of the same environmental variable have the same E
+            env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+            env_data <- env_data[ which(env_data$year>1956 & env_data$year<2017),] #select 1957 to 2016
+            timeyr <- env_data[,1]
+            env_data <- normalize(env_data[2:51]) #normalize
+            data <- as.matrix(cbind(timeyr, env_data[env_factor]))
+            simplex_output <- simplex(data, E = 1:12, silent = TRUE)
+            CCM_outputlist[i,5] <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
+    
+          # CCM from library var to target var   
+            data <- as.matrix(cbind(block$yr, block[library_var],block[target_var]))
+            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            xmap <-  ccm(data, lib = lib, E = CCM_outputlist[i,5], lib_column = library_var, target_column = target_var, lib_sizes = libsize, silent = TRUE)
+    
+    #for(v in c(1:NROW(target_vars))){output <- do.call(rbind, lapply(seq_len(NCOL(target_vars)), function(l) {block_lnlp(block, lib, columns = library_vars, target_column = target_vars[v,l], method = c("simplex"), tp = 0, silent = TRUE)}
+                
+    # Calculate the median, maximum, and 1st & 3rd quantile of rho
+            rho_quant=as.matrix(aggregate(xmap[,c('rho')],by = list(as.factor(xmap$lib_size)), quantile, na.rm = TRUE)[,'x'])
+            rho_quant <- rho_quant[complete.cases(rho_quant*0),1:5] #removes rows with inf values
+            CCM_outputlist[i,6] <- signif(rho_quant[dim(rho_quant)[1],3],2) #save the cross map skill at max library size (50th percentile)
+            CCM_outputlist[i,7:8] <- r.con(rho_quant[dim(rho_quant)[1],3], libsize[dim(rho_quant)[1]], p=.95, twotailed=FALSE) # Test if rho is significantly different from 0 at p=0.05 level (done for Sockey in Ye et al. 2015)
+            
+            #Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
+            #Here the median, maximum, and 1st & 3rd quantiles are tested, all need to be <0.05.
+            MK <- apply(rho_quant[,2:5],2,MannKendall) 
+            CCM_outputlist[i,9] <- (MK$`25%`[[2]]<0.05 & MK$`50%`[[2]]<0.05 & MK$`75%`[[2]]<0.05 & MK$`100%`[[2]]<0.05)
+            
+            # Transforms the rho at the min library and max library length to a normally distributed Fisher's z value
+            # Tests that the max library z is significantly higher than the begining. 
+            # Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
+            FZ <- paired.r(rho_quant[1,3],rho_quant[dim(rho_quant)[1],3], NULL, libsize[1], libsize[dim(rho_quant)[1]], twotailed=FALSE)
+            CCM_outputlist[i,10] <- FZ$p
+      }
 
-#Plot the results (cross map skill vs. tp):
-ggplot(output, aes(x = tp, y = rho, color = direction))  + geom_line() + theme_bw()
+     saveRDS(CCM_outputlist, file = paste("Output/Rdata/CCM ",name,".RDS", sep = ""), compress = FALSE)
+
+# figure
+# sort output table by environmental var, then by library var, then by lag
+d <-  CCM_outputlist[order(CCM_outputlist$offset),]
+d <-  d[order(d$library),]
+d <-  d[order(d$env_fac),]
+d[,11] <- paste(d$library, 'xmap', d$env_fac)
+colnames(d)[11] <- "xmap"
+d <- separate(d,env_fac, into=c("env_fac","month"), sep = "_")
+
+p1 <- ggplot(d, aes(x=offset, y=rho)) +
+    geom_line(aes(col=month)) +
+    geom_point(aes(col=month, shape=d$`MK test`)) +
+    theme_bw() + 
+    labs(title=name, x="Offset", y="Rho") +  
+    scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year")) +
+  scale_shape_manual(name="Mann Kendall test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
+
+# Rows are MEF and columns are library factor
+p2 <- p1 + facet_grid(env_fac ~ library)  
+
+print(p2)
+
+ggsave(filename = paste("Output/Figures/3_CCM_",name,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
 
 }
+
+
+
 ```
