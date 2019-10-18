@@ -163,7 +163,7 @@ normalize <- function(block)
             CCM_outputlist[i,7] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
     }
     
-saveRDS(CCM_outputlist, file = paste("Output/Rdata/block_lnlp ",name,".RDS", sep = ""), compress = FALSE)
+saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM_multivar_spawn_rec_",name,".RDS", sep = ""), compress = FALSE)
 
 
 # figure
@@ -178,19 +178,16 @@ p1 <- ggplot(d, aes(x=offset, y=rho)) +
     geom_line(aes(col=month)) +
     geom_point(aes(col=month, shape=(d$rho>d$'95p_crit'))) +
     theme_bw() + 
-    labs(title=paste(name, "MPG", sep=" "), subtitle = "Multivariate CCM (block_lnlp) with the number of spawners included", x="Offset", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
-    scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year")) +
+    labs(title=paste(name, "MPG", sep=" "), subtitle = "Multivariate CCM with spawners included in the attractor reconstruction", x="Environmental variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
+    scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "yr"='#a9a9a9', "win"='#a9a9a9'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "yr", "win"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "NPGO year", "PDO window")) +
   scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
-
-
-
 
 # Rows are MEF and columns are library factor
 p2 <- p1 + facet_grid(env_fac ~ library)  
 
 print(p2)
 
-ggsave(filename = paste("Output/Figures/3_block_lnlp_",name,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
+ggsave(filename = paste("Output/Figures/3_CCM_multivar_spawn_rec_",name,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
 
   }
  
