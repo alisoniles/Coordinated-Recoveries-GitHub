@@ -108,6 +108,20 @@ mpg <- c()
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
   
+normalize <- function(block)
+{
+    if(NCOL(block) > 1)
+    {
+        n <- NROW(block)
+        means <- sapply(block, mean, na.rm = TRUE)
+        sds <- sapply(block, sd, na.rm = TRUE)
+        return((block - matrix(rep(means, each = n), nrow = n)) / 
+                   matrix(rep(sds, each = n), nrow = n))
+    }
+    else
+        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
+  }
+  
   for(u in c(1:5)){
     data <- block_data[c(mpg==u)]
     name <- as.character(data[[1]]$mpg[1])
@@ -125,35 +139,28 @@ mpg <- c()
     lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
 
     #set up output table
-    library_vars <- c("rec3_n", "rec4_n", "rec5_n", "eff_n")
+    library_vars <- c("rec3_n", "rec4_n", "rec5_n", "rec_n")
     env_vars <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
     lags <- c(0,1,2,3,4,5,6)
-    CCM_outputlist <- expand.grid(env_vars, lags, stringsAsFactors = FALSE) 
-    CCM_outputlist[,3] <- paste(CCM_outputlist[,1], CCM_outputlist[,2], sep = "_")
-    CCM_outputlist[,4:6] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 6)
-    colnames( CCM_outputlist) <- c("env_fac","offset","target","target E","rho","95p_crit")
+    CCM_outputlist <- expand.grid(env_vars, lags, library_vars, stringsAsFactors = FALSE) 
+    CCM_outputlist[,4] <- paste(CCM_outputlist[,1], CCM_outputlist[,2], sep = "_")
+    CCM_outputlist[,5:7] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 6)
+    colnames( CCM_outputlist) <- c("env_fac","offset","library", "target","rho", "N", "95p_crit")
 
     #Perform cross mappings:      
     for(i in c(1:NROW(CCM_outputlist)) ){  
     
-      target_var <- CCM_outputlist[i,3]
+      library_vars <- c(CCM_outputlist[i,3], "eff_n")
+      target_var <- CCM_outputlist[i,4]
       env_factor <- CCM_outputlist[i,1]
       
-          # determine the best univariate embedding dimension and theta for the target variables - use time series of environemtnal vars from 1957 to 2009+7(lags)=2016 for ALL lags, so all lags of the same environmental variable have the same E
-            env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
-            env_data <- env_data[ which(env_data$year>1956 & env_data$year<2017),] #select 1957 to 2016
-            timeyr <- env_data[,1]
-            env_data <- normalize(env_data[2:51]) #normalize
-            data <- as.matrix(cbind(timeyr, env_data[env_factor]))
-            simplex_output <- simplex(data, E = 1:12, silent = TRUE)
-            CCM_outputlist[i,4] <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
-    
           # CCM from library var to target var   
             data <- as.matrix(cbind(block$yr, block[library_vars], block[target_var]))
             rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             xmap <-  block_lnlp(data, lib, columns = library_vars, target_column = target_var, method = c("simplex"), tp = 0, silent = TRUE)
             CCM_outputlist[i,5] <- xmap$rho
-            CCM_outputlist[i,6] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
+            CCM_outputlist[i,6] <- xmap$num_pred
+            CCM_outputlist[i,7] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
     }
     
 saveRDS(CCM_outputlist, file = paste("Output/Rdata/block_lnlp ",name,".RDS", sep = ""), compress = FALSE)
@@ -163,20 +170,23 @@ saveRDS(CCM_outputlist, file = paste("Output/Rdata/block_lnlp ",name,".RDS", sep
 # sort output table by environmental var, then by library var, then by lag
 d <-  CCM_outputlist[order(CCM_outputlist$offset),]
 d <-  d[order(d$env_fac),]
-d[,7] <- paste('Spawner*recruit xmap', d$env_fac)
-colnames(d)[7] <- "xmap"
+d[,8] <- paste('Spawner*recruit xmap', d$env_fac)
+colnames(d)[8] <- "xmap"
 d <- separate(d,env_fac, into=c("env_fac","month"), sep = "_")
 
 p1 <- ggplot(d, aes(x=offset, y=rho)) +
     geom_line(aes(col=month)) +
     geom_point(aes(col=month, shape=(d$rho>d$'95p_crit'))) +
     theme_bw() + 
-    labs(title=paste(name, "MPG", sep=" "), x="Offset", y="Rho") +  
+    labs(title=paste(name, "MPG", sep=" "), subtitle = "Multivariate CCM (block_lnlp) with the number of spawners included", x="Offset", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
     scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year")) +
-  scale_shape_manual(name="Mann Kendall test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
+  scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
+
+
+
 
 # Rows are MEF and columns are library factor
-p2 <- p1 + facet_grid(env_fac ~ month)  
+p2 <- p1 + facet_grid(env_fac ~ library)  
 
 print(p2)
 
@@ -186,7 +196,7 @@ ggsave(filename = paste("Output/Figures/3_block_lnlp_",name,".pdf", sep = ""), p
  
 ```
 
-#Pairwise CCM between all stock variables and all environmental variables
+#Univariate CCM between all stock variables and all environmental variables
 ```{R}
 load("Data/Rdata/block_data.Rdata")  
 
