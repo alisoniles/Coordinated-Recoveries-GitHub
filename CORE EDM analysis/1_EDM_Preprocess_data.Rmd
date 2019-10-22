@@ -15,7 +15,7 @@ Note that the `echo = FALSE` parameter prevents printing of the R code.
 ```{r, echo=FALSE}
 library(rEDM)
 library(reshape2)
-library(rgl)
+#library(rgl)
 library(ggplot2)
 library(gridExtra)
 library(xtable)
@@ -106,6 +106,9 @@ stock_data <- lapply(stock_data, preprocess_stock)
 
 ```{R}
 env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+sealion_data <- read.csv("Data/csv_data/sealion.csv")
+SRKW_data <- read.csv("Data/csv_data/SRKW.csv")
+
 
 normalize <- function(block)
 {
@@ -122,18 +125,21 @@ normalize <- function(block)
 }
 
 
-make_block <- function(stock_df, env_data)
+make_block <- function(stock_df, env_data, sealion_data, SRKW_data)
     {
-        pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") # what is pdo_win?
-        upwelling_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
-        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
+        pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") 
         pdo <- normalize(env_data[, pdo_names])
+        upwelling_names <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
         upwelling <- normalize(env_data[, upwelling_names])
+        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
         npgo <- normalize(env_data[, npgo_names])
-        
+        sealion_names <- c("Spp.Int_SL.pups", "Spp.Int_SL.males")
+        sealion <- normalize(sealion_data[, sealion_names])
+        SRKW_names <- "Spp.Int_SRKW"
+        SRKW <- normalize(SRKW_data[, SRKW_names]) 
         
         # line up environmental data
-        for(i in 0:8) { # lag environmental data from 0 to 6 years after brood year. 
+        for(i in 0:6) { # lag environmental data from 0 to 6 years after brood year. 
         desired_years <- stock_df$yr + i
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
@@ -158,10 +164,34 @@ make_block <- function(stock_df, env_data)
         stock_df[, colnames] <- npgo_cols
         }
         
+        # line up sealion data
+        for(i in 0:6) { # lag sealion data from 0 to 6 years after brood year. 
+        desired_years <- stock_df$yr + i
+        index_in_spp_data <- match(desired_years, sealion_data$Year)
+        index_in_stock_df <- 1:length(desired_years)
+        sl_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(sealion)))
+        sl_cols[index_in_stock_df,] <- sealion[index_in_spp_data, ]
+        colnames <- paste(sealion_names, i, sep = "_")
+        stock_df[, colnames] <- sl_cols
+        }
+        
+        # line up orca data
+        for(i in 0:6) { # lag orca data from 0 to 6 years after brood year. 
+        desired_years <- stock_df$yr + i
+        index_in_spp_data <- match(desired_years, SRKW_data$Year)
+        index_in_stock_df <- 1:length(desired_years)
+               
+        orca_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(SRKW)))
+        orca_cols[index_in_stock_df,] <- SRKW[index_in_spp_data]
+        colnames <- paste(SRKW_names, i, sep = "_")
+        stock_df[, colnames] <- orca_cols
+        }
+        
+        
         return(stock_df)
     }
 
-block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data)})
+block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data, sealion_data, SRKW_data)})
 
     
 # save and return
