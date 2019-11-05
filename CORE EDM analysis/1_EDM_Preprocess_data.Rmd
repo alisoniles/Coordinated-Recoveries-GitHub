@@ -58,10 +58,14 @@ data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
     {
         n <- NROW(stock_df)  #n is the number of observations for the stock
          
-        stock_df$ret <- stock_df$rec3 + c(NA, stock_df$rec4[1:(n-1)]) + c(NA, NA, stock_df$rec5[1:(n-2)]) #+ c(NA, NA, NA, stock_df$rec6[1:(n-3)]) # age-3,4,5,and 6 fish (aligned to rec3) #total returns are calculated by adding 3 year old recruits plus 4 year old recruits from the previous brood year, plus 5 year olds from two years prior...etc. This value is aligned to the rec3 brood year, not the year they are actually returning together. 
+        stock_df$ret <- stock_df$rec3 + c(NA, stock_df$rec4[1:(n-1)]) + c(NA, NA, stock_df$rec5[1:(n-2)]) #+ c(NA, NA, NA, stock_df$rec6[1:(n-3)]) # age-3,4,5,and 6 fish (aligned to rec3) #total returns in a given year are calculated by adding 3 year old recruits plus 4 year old recruits from the previous brood year, plus 5 year olds from two years prior...etc. This value is aligned to the rec3 brood year, not the year they are actually returning together. 
        
-# Normalize on a 1 year cycle line (i.e. NO cycle line!)
-        
+        stock_df$rat <- stock_df$rec/stock_df$eff #ratio of recruits-per-spawner; the total recruits per spawner from a given brood year.
+        stock_df$rat3 <- stock_df$rec3/stock_df$eff #ratio of 3 year old recruits-per-spawner from a given brood year.
+        stock_df$rat4 <- stock_df$rec4/stock_df$eff #ratio of 4 year old recruits-per-spawner from a given brood year.
+        stock_df$rat5 <- stock_df$rec5/stock_df$eff #ratio of 5 year old recruits-per-spawner from a given brood year.
+
+        # Normalize on a 1 year cycle line (i.e. NO cycle line!)
         temp <- normalize_by_cycle_line(stock_df$eff)
         stock_df$eff_n <- temp$ts #normalized number of effective spawners
         stock_df$eff_mu <- temp$mu
@@ -92,6 +96,26 @@ data <- read.csv("Data/csv_data/SRSS_cohort_prelim.csv")
         stock_df$ret_mu <- temp$mu
         stock_df$ret_sigma <- temp$sigma
 
+        temp <- normalize_by_cycle_line(stock_df$rat)
+        stock_df$rat_n <- temp$ts #normalized returns
+        stock_df$rat_mu <- temp$mu
+        stock_df$rat_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rat3)
+        stock_df$rat3_n <- temp$ts #normalized returns
+        stock_df$rat3_mu <- temp$mu
+        stock_df$rat3_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rat4)
+        stock_df$rat4_n <- temp$ts #normalized returns
+        stock_df$rat4_mu <- temp$mu
+        stock_df$rat4_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rat5)
+        stock_df$rat5_n <- temp$ts #normalized returns
+        stock_df$rat5_mu <- temp$mu
+        stock_df$rat5_sigma <- temp$sigma
+        
         return(stock_df)
     }   
 
