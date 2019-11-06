@@ -10,8 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-multivariate_EDM <- function()
-{
+
     forecast <- function(stock_df)
     {
         load("Data/Rdata/block_data.Rdata")
@@ -101,8 +100,6 @@ multivariate_EDM <- function()
     
     saveRDS(stats, file = "Output/Rdata/stats_multivariate_EDM.RDS")
     return()
-}
 
-multivariate_EDM()
 
 ```
