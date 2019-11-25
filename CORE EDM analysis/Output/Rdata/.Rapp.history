@@ -24,3 +24,5 @@ load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Co
 load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM_multivar_stock_Sulphur Creek.RDS")
 load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM_multivar_stock_Tucannon River.RDS")
 load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM_multivar_stock_Valley Creek.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM_multivar_MPG_Imnaha.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM_multivar_MPG_Imnaha.RDS")

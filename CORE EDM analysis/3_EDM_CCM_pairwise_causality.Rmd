@@ -129,6 +129,7 @@ ggsave(filename = paste("Output/Figures/3_CCM_multivar_MPG_",mpgname,".pdf", sep
 ```
 
 #Univariate CCM for the major population groups using CCM
+
 ```{R}
 load("Data/Rdata/block_data.Rdata")  
 
@@ -153,7 +154,7 @@ normalize <- function(block)
      
 
  
-for(u in c(2:5)){   # for each mpg
+for(u in c(1:5)){   # for each mpg
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
   
@@ -187,11 +188,8 @@ for(u in c(2:5)){   # for each mpg
       env_factor <- CCM_outputlist[i,1]
       
           # determine the best univariate embedding dimension and theta for the target variables - use time series of environemtnal vars from 1957 to 2009+7(lags)=2016 for ALL lags, so all lags of the same environmental variable have the same E
-            env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
-            env_data <- env_data[ which(env_data$year>1956 & env_data$year<2017),] #select 1957 to 2016
-            timeyr <- env_data[,1]
-            env_data <- normalize(env_data[2:51]) #normalize
-            data <- as.matrix(cbind(timeyr, env_data[env_factor]))
+            data <- as.matrix(cbind(block$yr, block[target_var]))
+            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             simplex_output <- simplex(data, E = 1:12, silent = TRUE)
             CCM_outputlist[i,5] <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
     
