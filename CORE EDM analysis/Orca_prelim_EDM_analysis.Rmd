@@ -1,0 +1,350 @@
+---
+title: "Orca_prelim_EDM_analysis"
+author: "Alison Iles"
+date: "12/8/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+library(reshape2)
+library(ggplot2)
+library(viridis)
+library(gridExtra)
+library(xtable)
+library(rlist)
+library(Kendall) #for MannKendall test
+library(psych) #for paired.r function
+library(tidyr)
+library(stringr)
+library(dplyr)
+```
+# Prepare data files
+#load environmental data and data for other species
+
+```{R}
+SRKW_data <- read.csv("Data/csv_data/SRKW/SRKW.csv")
+env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+sealion_data <- read.csv("Data/csv_data/sealion.csv")
+BON_data <- read.csv("Data/csv_data/BON.csv")
+
+
+normalize <- function(block)
+{
+    if(NCOL(block) > 1)
+    {
+        n <- NROW(block)
+        means <- sapply(block, mean, na.rm = TRUE)
+        sds <- sapply(block, sd, na.rm = TRUE)
+        return((block - matrix(rep(means, each = n), nrow = n)) / 
+                   matrix(rep(sds, each = n), nrow = n))
+    }
+    else
+        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
+}
+
+
+#normalize everything
+        SRKW_names <- c( "SRKW_Jpod" ,     "SRKW_Kpod"  ,    "SRKW_Lpod" )
+        Orca_block <- subset(SRKW_data, select=-c(SRKW_KLpods,SRKW_JKLpods,SRKW_JKLdeaths,	SRKW_JKLbirths)) 
+        Orca_block[, SRKW_names] <- normalize(SRKW_data[, SRKW_names]) 
+
+        pdo_names <- c("pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win") 
+        pdo <- normalize(env_data[, pdo_names])
+        upwelling_names <- c("up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec")	
+        upwelling <- normalize(env_data[, upwelling_names])
+        npgo_names <- c("npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr")
+        npgo <- normalize(env_data[, npgo_names])
+        #sealion_names <- c("SL_pups", "SL_males")
+        sealion_pups <- normalize(sealion_data[, "SL_pups"])
+        sealion_males <- normalize(sealion_data[, "SL_males"])
+        fish_names <- c("fish_coho","fish_steelhead","fish_unclipsteelhead","fish_sockeye","fish_pink","fish_chum","fish_lamprey",	"fish_shad","fish_SSchinook","fish_Fchinook")
+        fish <- normalize(BON_data[, fish_names])
+
+        
+# line up environmental data
+        for(i in -5:0) { # lag environmental data
+              desired_years <- Orca_block$Year + i
+              index_in_env_data <- match(desired_years, env_data$year)
+              index_in_orca_df <- 1:length(desired_years)
+        
+              # lag upwelling
+              upwelling_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(upwelling)))
+              upwelling_cols[index_in_orca_df,] <- upwelling[index_in_env_data, ]
+              m2 <- cbind(1,1:4)
+              colnames <- paste(upwelling_names, i, sep = "_")
+              Orca_block[, colnames] <- upwelling_cols
+              
+              # lag PDO 
+              pdo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pdo)))
+              pdo_cols[index_in_orca_df,] <- pdo[index_in_env_data, ]
+              colnames <- paste(pdo_names, i, sep = "_")
+              Orca_block[, colnames] <- pdo_cols
+              
+               # lag NPGO  
+              npgo_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(npgo)))
+              npgo_cols[index_in_orca_df,] <- npgo[index_in_env_data, ]
+              colnames <- paste(npgo_names, i, sep = "_")
+              Orca_block[, colnames] <- npgo_cols
+              }
+        
+        # line up sealion data
+        for(i in -5:0) { # lag sealion data from 2 to 5 years after brood year - assuming sea lions eat smolts and returns
+              desired_years <- Orca_block$Year + i
+              index_in_spp_data <- match(desired_years, sealion_data$Year)
+              index_in_orca_df <- 1:length(desired_years)
+              
+              sl_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(sealion_males)))
+              sl_cols[index_in_orca_df,] <- sealion_males[index_in_spp_data ]
+              colnames <- paste("SL_males", i, sep = "_")
+              Orca_block[, colnames] <- sl_cols
+        }
+        for(i in -5:0) { # lag sealion pup data from 2 to 5 years after brood year plus 3 years as only 3+ year old sea lion males swim up to oregon
+              desired_years <- Orca_block$Year + i
+              index_in_spp_data <- match(desired_years, sealion_data$Year)
+              index_in_orca_df <- 1:length(desired_years)
+              
+              sl_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(sealion_pups)))
+              sl_cols[index_in_orca_df,] <- sealion_pups[index_in_spp_data ]
+              colnames <- paste("SL_pups", i, sep = "_")
+              Orca_block[, colnames] <- sl_cols
+              }
+        
+        # line up fish data
+        for(i in -5:0) { # lag orca data from 3 to 5 years after brood year - assuming orcas just eat the returning fish
+              desired_years <- Orca_block$Year + i
+              index_in_spp_data <- match(desired_years, BON_data$year)
+              index_in_orca_df <- 1:length(desired_years)
+                     
+              fish_cols <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(fish)))
+              fish_cols[index_in_orca_df,] <- fish[index_in_spp_data, ]
+              colnames <- paste(fish_names, i, sep = "_")
+              Orca_block[, colnames] <- fish_cols
+              }
+        
+
+# save and return
+    save(Orca_block, file = "Data/Rdata/Orca_block_data.Rdata")
+
+```
+
+#Convergent Cross Mapping (CCM) with time delays
+To test whether pairwise causality exists between the Southern Resident Killer Whales and various environmental and species variables. Also to test all the lags for each variable to figure out which is the best to use in the multivariate embeddings.
+
+We tested all monthly values of PDO, Upwelling index at 48 degrees latitude and NPGO
+
+block_lnlp uses multiple time series given as input to generate an attractor reconstruction, and then applies the simplex projection or s-map algorithm to make forecasts. This method generalizes the simplex and s_map routines, and allows for "mixed" embeddings, where multiple time series can be used as different dimensions of an attractor reconstruction.
+
+#Univariate CCM for the orcas using CCM
+
+```{R}
+load("Data/Rdata/Orca_block_data.Rdata")  
+
+      a <- t(data.frame(as.list(names(Orca_block))))
+      rownames(a) <- NULL #remove rownames
+      b <- data.frame(a[-c(1:4),]) 
+      colnames(b) <- c("variable")
+      c <- str_split_fixed(b$variable, "_", 3)
+      var_names <- cbind(b,c)
+      colnames(var_names) <- c("name","cat","subcat","offset")
+      
+
+    Jpod <- subset(Orca_block, select=-c(SRKW_Kpod,SRKW_Lpod))
+      names(Jpod)[names(Jpod) == 'SRKW_Jpod'] <- 'SRKW'
+    Kpod <- subset(Orca_block, select=-c(SRKW_Jpod,SRKW_Lpod))
+      names(Kpod)[names(Kpod) == 'SRKW_Kpod'] <- 'SRKW'
+    Lpod <- subset(Orca_block, select=-c(SRKW_Jpod,SRKW_Kpod))
+      names(Lpod)[names(Lpod) == 'SRKW_Lpod'] <- 'SRKW'
+
+#concatenate the time series of the separate orca pods together
+    block <- rbind(Jpod,Kpod,Lpod)
+    names(block)[names(block) == 'Year'] <- 'yr'
+    
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
+    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+
+   #set up output table
+    library_vars <- c("SRKW")
+    env_vars <- as.character(var_names[,1])
+    CCM_outputlist <- expand.grid(env_vars, library_vars, stringsAsFactors = FALSE) 
+    CCM_outputlist$temp <- CCM_outputlist$Var1
+    CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "_")
+    CCM_outputlist[,6:11] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 6)
+    colnames( CCM_outputlist) <- c("target","library", "cat","subcat","offset","target E","rho","95%CI lower","95%CI upper","MK test","FZ test")
+
+    #Perform cross mappings:      
+    libsize <- round(seq(NROW(block)/5, NROW(block), by = NROW(block)/5))
+    
+    for(i in c(1:NROW(CCM_outputlist)) ){  #c(1:1)
+  
+      library_var <- CCM_outputlist[i,2]
+      target_var <- CCM_outputlist[i,1]
+      env_factor <- CCM_outputlist[i,3]
+      
+          # determine the best univariate embedding dimension and theta for the target variables - use time series of environemtnal vars from 1957 to 2009+7(lags)=2016 for ALL lags, so all lags of the same environmental variable have the same E
+            data <- as.matrix(cbind(block$yr, block[target_var]))
+            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            simplex_output <- simplex(data, E = 1:12, silent = TRUE)
+            CCM_outputlist[i,6] <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
+    
+          # CCM from library var to target var   
+            data <- as.matrix(cbind(block$yr, block[library_var],block[target_var]))
+            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            xmap <-  ccm(data, lib = lib, E = CCM_outputlist[i,6], lib_column = library_var, target_column = target_var, lib_sizes = libsize, silent = TRUE)
+    
+    # Calculate the median, maximum, and 1st & 3rd quantile of rho
+            rho_quant=as.matrix(aggregate(xmap[,c('rho')],by = list(as.factor(xmap$lib_size)), quantile, na.rm = TRUE)[,'x'])
+            rho_quant <- rho_quant[complete.cases(rho_quant*0),1:5] #removes rows with inf values
+            CCM_outputlist[i,7] <- signif(rho_quant[dim(rho_quant)[1],3],2) #save the cross map skill at max library size (50th percentile)
+            CCM_outputlist[i,8:9] <- r.con(rho_quant[dim(rho_quant)[1],3], libsize[dim(rho_quant)[1]], p=.95, twotailed=FALSE) # Test if rho is significantly different from 0 at p=0.05 level (done for Sockey in Ye et al. 2015)
+            
+            #Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
+            #Here the median, maximum, and 1st & 3rd quantiles are tested, all need to be <0.05.
+            MK <- apply(rho_quant[,2:5],2,MannKendall) 
+            CCM_outputlist[i,10] <- (MK$`25%`[[2]]<0.05 & MK$`50%`[[2]]<0.05 & MK$`75%`[[2]]<0.05 & MK$`100%`[[2]]<0.05)
+            
+            # Transforms the rho at the min library and max library length to a normally distributed Fisher's z value
+            # Tests that the max library z is significantly higher than the begining. 
+            # Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
+            FZ <- paired.r(rho_quant[1,3],rho_quant[dim(rho_quant)[1],3], NULL, libsize[1], libsize[dim(rho_quant)[1]], twotailed=FALSE)
+            CCM_outputlist[i,11] <- FZ$p
+      }
+
+     saveRDS(CCM_outputlist, file = "Output/Rdata/CCM_Orcas.RDS", compress = FALSE)
+
+```
+
+# CCM figure
+
+```{R}
+# sort output table by environmental var, then by library var, then by lag
+d <-  CCM_outputlist[order(CCM_outputlist$offset),]
+d <-  d[order(d$cat),]
+d[,12] <- paste('Orca xmap', d$env_fac)
+colnames(d)[12] <- "xmap"
+
+
+
+p1 <- ggplot(d, aes(x=offset, y=rho)) +
+    geom_line(aes(col=subcat)) +
+    geom_point(aes(col=subcat, shape=(d$`95%CI lower`>0))) +
+    theme_bw() + 
+    labs( subtitle = "Univariate CCM to determine the causal factors affecting SRKW", x="Environmental variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
+    scale_color_manual(values = c("chum"='#42d4f4', "coho"='#4363d8', "Fchinook"='#000075', "lamprey"='#911eb4', "pink"='#f032e6',"shad"='#800000', "sockeye"='#e6194b', "SSchinook"='#f58231', "steelhead"='#ffe119', "unclipsteelhead"='#bfef45', "jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "yr"='#a9a9a9', "win"='#a9a9a9', "pups"='pink', "males"='chocolate'), name="Time series", breaks = c("chum", "coho", "Fchinook", "lamprey", "pink", "shad", "sockeye", "SSchinook", "steelhead", "unclipsteelhead", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "yr", "win", "pups", "males"), labels = c("Chum", "Coho", "Fall chinook", "Lamprey", "Pink", "Shad", "Sockeye", "Spring/Summer chinook", "Steelhead", "Uncliped steelhead", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "NPGO year", "PDO window","Sea lion pups", "Sea lion males")) +
+  scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
+
+# Rows are MEF and columns are library factor
+p2 <- p1 + facet_grid(cat ~ library)  
+
+print(p2)
+
+ggsave(filename = "Output/Figures/3_CCM_Orcas.pdf", plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
+
+```
+
+
+
+#Multiview Embeddings
+
+```{R}
+
+ # determine the best univariate embedding dimension and theta for the target variable (Orca)
+    target_var <- "SRKW"
+    data_target <- as.matrix(cbind(block$yr, block[target_var]))
+    rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+    simplex_output <- simplex(data_target, E = 1:10, silent = TRUE, tau=1)
+    best_E <- 4 #simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
+    smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E) 
+    best_T <- smap_output$theta[which.max(smap_output$rho)] 
+            
+    #determine all the combinations of library variables to test        
+    vars <- readRDS("Output/Rdata/CCM_Orcas.RDS")
+    vars[,12] <- matrix(0, nrow = NROW(vars), ncol = 1)
+    names(vars)[names(vars) == 'V12'] <- 'chosen'
+    
+    chosen_vars=c("npgo_yr_0", "pdo_win_0", "SL_pups_0", "SL_males_0", "fish_chum_0", "fish_coho_0", "fish_Fchinook_0", "fish_lamprey_0", "fish_shad_0", "fish_sockeye_0", "fish_SSchinook_0", "fish_steelhead_0", "fish_unclipsteelhead_0")
+    
+    MVE_data <- as.matrix(cbind(block[target_var], block[chosen_vars]))
+    colnames(MVE_data) <- sub("_0.*", "", colnames(MVE_data)) #remove '_0' from all the co-factor names
+    MVE <- multiview(MVE_data, lib=lib, pred=lib, E=best_E, target_column = 1, max_lag=3, stats_only=FALSE, save_lagged_block = TRUE)
+    
+    save(MVE, file = "Output/Rdata/MVE_Orcas.Rda")
+
+```
+
+
+#Figures
+```{R}
+# plot of observed vs predicted for the multiview embeddings
+d <- MVE$model_output[[1]]
+
+p3 <- ggplot() +
+    geom_line(data=d, aes(x=time, y=obs, color="observed")) +
+    geom_line(data=d, aes(x=time, y=pred, color="predicted")) +
+    labs( subtitle = "Observed SRKW population size vs predicted", x="time", y="SRKW population size", color="Data") +
+    theme_bw() 
+
+print(p3)
+```
+
+#S-map Coefficients
+Calculate interaction strengths from the top k multiview embeddings.
+
+As described in (Deyle et al. 2016), the S-map coefficients from the appropriate multivariate embedding can be interpreted as dynamic, time-varying interaction strengths. The smap_coefficients column of the block_lnlp output is a list-column with the data.frames for the S-map coefficients in the first element of that list. The result is a data.frame with a row for each prediction and a columns for each of the predictor variables plus a constant.
+
+```{R}
+load("Output/Rdata/MVE_Orcas.Rda")
+  MVE_laggedblock <- MVE$lagged_block[[1]]
+  MVE_embeddings <- MVE$embeddings[[1]]
+
+  smapcoeffs = list()
+for(i in 1:NROW(MVE_embeddings)) {   
+  cols <- MVE_embeddings[[i]]+1
+  data <- MVE_laggedblock[,cols]
+  smap <- block_lnlp(data, lib=lib, pred=lib, method="s-map", target_column = 1, stats_only = FALSE, theta = best_T, save_smap_coefficients = TRUE, silent=TRUE)
+  a <- data.frame(smap$smap_coefficients[[1]])
+  colnames(a) <- paste(i, c(names(data),"constant"))
+  smapcoeffs[[i]] <- a
+}
+
+#convert large smap coefficients list into plottable data frame
+d = do.call(cbind, smapcoeffs)  
+pod <- c(matrix("J pod",nrow=48,ncol=1),matrix("K pod",nrow=48,ncol=1),matrix("L pod",nrow=48,ncol=1))
+
+d <- cbind(block$yr, pod, d)
+colnames(d)[1:2] <- c("yr","pod")
+d <- gather(d, key, coeff, -yr, -pod)  #create long data for plotting
+d <- separate(d,key, into=c("model","var"), sep = " ")  #add columns for model number, variable offset
+d <- separate(d,var, into=c("cat","var","offset"), sep = "_")  
+d <- d %>% filter(!grepl('constant', cat)) %>%  #remove coefficients for constants
+  replace_na(list(var = "SRKW", offset = 0)) #replace NAs for the SRKW variable and offset values
+
+# For each variable, plot the changing coefficients over time from different mutivariate embeddings
+# loop through the different chosen variables
+chosen_vars=c("yr", "win", "pups", "males", "chum", "Fchinook", "lamprey", "shad", "sockeye", "SSchinook", "steelhead", "unclipsteelhead")
+chosen_var_names=c("NPGO", "PDO", "Seal lion pup count", "Seal lion male estimates", "chum salmon", "Fall chinook salmon", "lamprey", "shad", "sockeye salmon", "Spring/Summer Chinook", "steelhead", "unclipped stealhead")
+for(i in 1:NROW(chosen_vars)) {  
+df <- filter(d,var==chosen_vars[i])
+p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(model, offset), colour = offset)) +
+    geom_line() +
+    theme_bw() + 
+    labs( subtitle = paste("Effect of", chosen_var_names[i], "on SRKW across top k multiview embeddings", sep = " "), x="year", y="interaction coefficient") + 
+    facet_grid(cat~pod)  # rows are categories, columns are pods
+print(p)
+ggsave(filename = paste("Output/Figures/Interaction_coeffs/", chosen_vars[i], "_SRKW.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+}
+
+```
+
+
+
+
+

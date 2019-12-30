@@ -25,7 +25,7 @@ mpg <- c()
   for(stk in 1:length(block_data)) { 
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
-for(u in c(1:5)){ #For each MPG
+for(u in c(1,2,3,5)){ #For each MPG excluding lower Snake for which there is only one stock
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
     
@@ -51,9 +51,17 @@ for(u in c(1:5)){ #For each MPG
     best_T <- smap_output$theta[which.max(smap_output$rho)] 
             
     #determine all the combinations of library variables to test        
-    ccm <- readRDS(paste("Output/Rdata/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
+    vars <- readRDS(paste("Output/Rdata/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
+    vars[,9:12] <- matrix(0, nrow = NROW(ccm), ncol = 4)
+    colnames(vars) <- c("variable" ,  "target",  "cat", "subcat", "offset", "rho",  "N",  "95p_crit", "rec3 vars", "rec4 vars", "rec5 vars", "Total rec vars")
+vars$offset==2
+
         # plot the distribution of rho values: ggplot(ccm, aes(x=rho, color=library)) + geom_histogram(fill="white")
     ccm <- ccm %>% filter(library==target_var) %>% filter(!grepl('up45', env_fac)) #focus on total recruits and remove upwelling at 45 degrees
+    # Top two months of PDO, NPGO, and Upwelling 48 at lags 2, 3, 4 (only for rec4 and rec5), and 5 (only for rec5)
+    # Seal lion pup count data: offset by 3 years, then lag 2 and return year
+    # Male count not offset: lag 2 and return year
+    # Orcas are not eating smolts, only include return year lag.
     ccm <- ccm[ccm$rho>(3*ccm$`95p_crit`),] #only include variables whose CCM rho was 2* the critical value
     fac_combn <- t(combn(ccm$target, m=best_E-3, FUN = NULL, simplify = TRUE))  # Generate all combinations of variables in sets the size of the embedding dimension minus 2 because recruits 3 and the number of effective spawners are included by default. 
     
@@ -91,163 +99,3 @@ ggplot(MultiEDM_outputlist, aes(x=rho)) + geom_histogram()
 }
 ```
 
-#Multiview Embedding
-The generality of Taken’s Theorem means that in situations with multivariate time series, there
-can often be many different, valid attractor reconstructions. As described in (Ye and Sugihara
-2016), combining these different models can result in improved forecasts.
-
- multiview() operates by constructing all possible embeddings of dimension E, with
-lag up to max_lag (and excluding embeddings that don’t have at least one coordinate with 0
-time lag). These embeddings are ranked by forecast skill (rho) over the lib portion of the
-data. The individual forecasts for the top k embeddings are then averaged together.
-
-```{R}
-load("Data/Rdata/block_data.Rdata")  
-mpg <- c() 
-  for(stk in 1:length(block_data)) { 
-      mpg[stk] <- block_data[[stk]]$mpg[1]
-  } 
-for(u in c(1:5)){ #For each MPG
-    data <- block_data[c(mpg==u)]
-    mpgname <- as.character(data[[1]]$mpg[1])
-    
-#concatenate the time series of the different stocks in the MPG together
-    keys <-c(names(data[[1]]))
-    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
-    merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$rec_n) & is.finite(merged_data$eff_n) & is.finite(merged_data$Spp.Int_SRKW_0) & is.finite(merged_data$Spp.Int_SL.pups_0)
-    block <- merged_data[valid,]  
-    
-    #List in lib the begin and end points of each stock and the break points within stocks
-    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
-
-    # determine the best univariate embedding dimension and theta for the target variable (total recruitment)
-    target_var <- "rec4_n"
-    data_target <- as.matrix(cbind(block$yr, block[target_var]))
-    rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
-    simplex_output <- simplex(data_target, E = 1:10, silent = TRUE)
-    best_E <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
-    
-    #determine which library variables to include     
-    ccm <- readRDS(paste("Output/Rdata/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
-        # plot the distribution of rho values: ggplot(ccm, aes(x=rho, color=library)) + geom_histogram(fill="white")
-    ccm <- ccm %>% filter(grepl('_0', target))#use only the unlagged time series
-    ccm <- ccm %>% filter(library==target_var) %>% filter(!grepl('up45', env_fac)) #focus on 4 yr recruits and remove upwelling at 45 degrees
-    ccm <- ccm[ccm$rho>(2*ccm$`95p_crit`),] #only include variables whose CCM rho was 2* the critical value
-    
-
-    MVE_block <- as.matrix(cbind(block[target_var], block$rec3_n, block$eff_n, block[ccm$target]))   #block$yr, 
-    rownames(MVE_block) <- NULL #remove rownames to supress error 
-multiview_output <- multiview(MVE_block, lib = lib, pred = lib, E = best_E, max_lag = 5, k = "sqrt", target_column = target_var, stats_only = FALSE, save_lagged_block = TRUE, first_column_time = FALSE, silent = FALSE)
-# `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
-# 'lagged_block' gives the block that includes lags constructed for multiview embedding
-# 'embeddings' gives the list of the embeddings whose predictions were averaged together for each model.
-
-saveRDS(multiview_output, file = paste("Output/Rdata/5_Multiview_MPG_",mpgname,"_",target_var,".RDS", sep = ""), compress = FALSE)
- 
-}
-
-MVE_lagged_block <- multiview_output$lagged_block[[1]]
-MVE_var_list <- colnames(MVE_lagged_block)
-MVE_k_embeddings <- multiview_output$embeddings[[1]]
-MVE <- matrix(NA, nrow = length(MVE_k_embeddings), ncol = best_E)
-for(i in 1:length(MVE_k_embeddings)) { 
-      MVE[i,] <-  MVE_var_list[unlist(MVE_k_embeddings[i])]
-}
-x <- melt(MVE) 
-count(x$value)
-
-```
-
-```{r}
-    forecast <- function(stock_df)
-    {
-  
-        # set up recruits and spawners
-        valid <- is.finite(stock_df$rec) & is.finite(stock_df$eff) #exclude NAs
-        years <- stock_df$yr[valid]
-        returns <- stock_df$ret[valid]
-        spawners <- stock_df$eff_n[valid]
-        recruits_3 <- stock_df$rec3_n[valid]
-        mu_3 <- stock_df$rec3_mu[valid]
-        sigma_3 <- stock_df$rec3_sigma[valid]
-        recruits_4 <- stock_df$rec4_n[valid]
-        mu_4 <- stock_df$rec4_mu[valid]
-        sigma_4 <- stock_df$rec4_sigma[valid]
-        recruits_5 <- stock_df$rec5_n[valid]
-        mu_5 <- stock_df$rec5_mu[valid]
-        sigma_5 <- stock_df$rec5_sigma[valid]
-        env <- normalize(stock_df[c("up_apr", "up_oct", "up_nov", "pdo_win")])
-       
-        # make block
-        block <- data.frame(years = years, eff = spawners, 
-                            rec4 = recruits_4, rec5 = recruits_5)
-        block <- cbind(block, env[valid, ])
-        
-        if(length(returns) < 2) # check for enough data
-            return(data.frame(year = NaN, obs = NaN, pred = NaN))
-        
-        columns <- list()
-        for(E in 1:2)
-        {
-            columns <- c(columns, combn(env_names, E, simplify = FALSE))
-        }
-        columns <- lapply(columns, function(embedding) c("eff", embedding))
-        columns <- c(columns, "eff")
-        rec4_preds <- do.call(cbind, block_lnlp_4(block, target_column = 3, columns = columns))
-        rec5_preds <- do.call(cbind, block_lnlp_4(block, target_column = 4, columns = columns))
-        rec4_preds <- rec4_preds*sigma_4 + mu_4
-        rec5_preds <- rec5_preds*sigma_5 + mu_5
-        forecasts <- data.frame(rec4_preds + rbind(NA, rec5_preds[1:NROW(block)-1,]))
-        names(forecasts) <- lapply(columns, function(v) paste(v, sep = "", collapse = ", "))
-        output <- cbind(year = years, obs = returns, forecasts)
-        
-        return(output)
-    }
-    
-    load("Data/Rdata/block_data.Rdata")
-    
-    # make forecasts for each stock
-    results <- lapply(names(block_data), 
-                      function(stk_name) {
-                          cat("forecasting for ", stk_name, "... ", sep = "")
-                          start_time <- proc.time()
-                          output <- forecast(block_data[[stk_name]])
-                          elapsed_time <- proc.time() - start_time
-                          cat("(", elapsed_time[3], " sec.)\n", sep = "")
-                          return(output)
-                      })
-    names(results) <- names(block_data)
-    saveRDS(results, file = "Output/Rdata/results_multivariate_EDM.RDS")
-    
-    # compute stats
-    stats <- lapply(names(block_data), function(stk_name) {
-        output <- results[[stk_name]]
-        stats <- do.call(rbind, lapply(3:NCOL(output), function(j) {
-            compute_stats(output[,2], output[,j])
-        }))
-        stats$columns <- names(output)[3:NCOL(output)]
-        stats$stk <- stk_name
-        return(stats)        
-    })
-    
-    stats <- lapply(stats, function(stats_df) {
-        stats_df$E <- sapply(strsplit(stats_df$columns, ", "), length)
-        with_eff_only <- subset(stats_df, E == 1)
-        with_one_env_var <- subset(stats_df, E == 2)
-        if(max(with_one_env_var$rho) <= with_eff_only$rho)
-            return(subset(stats_df, E <= 2))
-        best_env_var <- strsplit(with_one_env_var$columns[which.max(with_one_env_var$rho)], 
-                                 ", ")[[1]][2]
-        with_two_env_var <- subset(stats_df, E == 3)
-        idx <- grep(best_env_var, with_two_env_var$columns)
-        return(rbind(with_eff_only, with_one_env_var, with_two_env_var[idx,]))
-    })
-    
-    saveRDS(stats, file = "Output/Rdata/stats_multivariate_EDM.RDS")
-    return()
-
-
-```
