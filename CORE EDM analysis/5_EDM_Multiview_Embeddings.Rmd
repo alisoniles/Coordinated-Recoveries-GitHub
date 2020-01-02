@@ -14,6 +14,7 @@ library(rEDM)
 library(plyr)
 library(reshape)
 library(stringr)
+library(tidyr)
 ```
 
 #Multiview Embedding
@@ -68,9 +69,10 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
           simplex_output <- simplex(data_target, E = 1:8, silent = TRUE)
           best_E[i,tv] <- min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho)
           smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E[i,tv]) 
+          theta <- smap_output$theta[which.max(smap_output$rho)] 
           best_theta[i,tv] <- smap_output$theta[which.max(smap_output$rho)] 
- 
-    
+  
+# MVE    
           # determine which library variables to include from the CCM analysis    
           ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
                # ccm <- ccm %>% filter(grepl('_0', target))#use only the unlagged time series
@@ -81,12 +83,13 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
           # run the multiview embedding
           MVE_block <- as.matrix(cbind(block$yr,block[target_var[tv]], block$eff_n, block[chosen_vars]))  
           rownames(MVE_block) <- NULL #remove rownames to supress error 
+          colnames(MVE_block) <- c("yr", target_var[tv], eff, "block$eff_n"    "npgo_yr_4"      "pdo_win_4"      "up48_oct_4"     "SL_pups_7"      "SL_males_4"     "SRKW_JKLpods_4") #change colnames to streamline data analysis later
           MVE <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = (2+tv), k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)
               # `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
               # 'lagged_block' gives the block that includes lags constructed for multiview embedding
               # 'embeddings' gives the list of the embeddings whose predictions were averaged together for each model.
         
-          save(MVE, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var,".RData", sep = "")[1])
+          save(MVE, theta, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
         }
     
     i <- i+1 
@@ -107,7 +110,7 @@ count(x$value)
 ```
 
 
-#Figures
+#Figure: MVE, observed vs predicted
 ```{R}
 # plot of observed vs predicted for the multiview embeddings
 d <- MVE$model_output[[1]]
@@ -120,6 +123,7 @@ p3 <- ggplot() +
 
 print(p3)
 ```
+
 
 #S-map Coefficients
 Calculate interaction strengths from the top k multiview embeddings.
@@ -135,50 +139,78 @@ mpg <- c()
   } 
 
 k <- 1
-for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
+u <- 1
+tv <- 1
+
+for(u in c(1,3,4,5)){  #For each MPG except Lower Snake 
   data <- block_data[c(mpg==u)] 
   mpgname <- as.character(data[[1]]$mpg[1])
-load(paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_rec4_n.RData", sep = ""))
-MVE_laggedblock <- MVE$lagged_block[[1]]
-MVE_embeddings <- MVE$embeddings[[1]]
+    
+  # concatenate the time series of the different stocks in the MPG together
+  keys <-c(names(data[[1]]))
+  merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+  merged_data <- as.data.frame(merged_data)
+  valid <-  is.finite(merged_data$rec_n) & is.finite(merged_data$eff_n)
+  block <- merged_data[valid,]  
+    
+  # list the begin and end points of each stock and the break points within stocks
+  lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
+      lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
+      lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+ 
+            #  for each target variable 
+            target_var <- c("rec4_n", "rec5_n")
+            for(tv in 1:length(target_var)){
+            load(paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
+            MVE_laggedblock <- MVE$lagged_block[[1]]
+            MVE_embeddings <- MVE$embeddings[[1]]
 
-  smapcoeffs = list()
-for(i in 1:NROW(MVE_embeddings)) {   
-  cols <- MVE_embeddings[[i]]+1
-  data <- MVE_laggedblock[,cols]
-  smap <- block_lnlp(data, lib=lib, pred=lib, method="s-map", target_column = 1, stats_only = FALSE, theta = best_theta[k,1], save_smap_coefficients = TRUE, silent=TRUE)
-  a <- data.frame(smap$smap_coefficients[[1]])
-  colnames(a) <- paste(i, c(names(data),"constant"))
-  smapcoeffs[[i]] <- a
-}
-
-#convert large smap coefficients list into plottable data frame
-d = do.call(cbind, smapcoeffs)  
-pod <- c(matrix("J pod",nrow=48,ncol=1),matrix("K pod",nrow=48,ncol=1),matrix("L pod",nrow=48,ncol=1))
-
-d <- cbind(block$yr, pod, d)
-colnames(d)[1:2] <- c("yr","pod")
-d <- gather(d, key, coeff, -yr, -pod)  #create long data for plotting
-d <- separate(d,key, into=c("model","var"), sep = " ")  #add columns for model number, variable offset
-d <- separate(d,var, into=c("cat","var","offset"), sep = "_")  
-d <- d %>% filter(!grepl('constant', cat)) %>%  #remove coefficients for constants
-  replace_na(list(var = "SRKW", offset = 0)) #replace NAs for the SRKW variable and offset values
-
-# For each variable, plot the changing coefficients over time from different mutivariate embeddings
-# loop through the different chosen variables
-chosen_vars=c("yr", "win", "pups", "males", "chum", "Fchinook", "lamprey", "shad", "sockeye", "SSchinook", "steelhead", "unclipsteelhead")
-chosen_var_names=c("NPGO", "PDO", "Seal lion pup count", "Seal lion male estimates", "chum salmon", "Fall chinook salmon", "lamprey", "shad", "sockeye salmon", "Spring/Summer Chinook", "steelhead", "unclipped stealhead")
-for(i in 1:NROW(chosen_vars)) {  
-df <- filter(d,var==chosen_vars[i])
-p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(model, offset), colour = offset)) +
-    geom_line() +
-    theme_bw() + 
-    labs( subtitle = paste("Effect of", chosen_var_names[i], "on SRKW across top k multiview embeddings", sep = " "), x="year", y="interaction coefficient") + 
-    facet_grid(cat~pod)  # rows are categories, columns are pods
-print(p)
-ggsave(filename = paste("Output/Figures/Interaction_coeffs/", chosen_vars[i], "_SRKW.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+            
+           # for each embedding, use smaps to calculate the coefficients over time
+                  smapcoeffs = list()
+                  for(i in 1:NROW(MVE_embeddings)) {   
+                  smapcols <- MVE_embeddings[[i]]+1
+                  smapdata <- MVE_laggedblock[,smapcols]
+                  smap <- block_lnlp(smapdata, lib=lib, pred=lib, method="s-map", target_column = 1, stats_only = FALSE, theta = theta, save_smap_coefficients = TRUE, silent=TRUE)
+                  a <- data.frame(smap$smap_coefficients[[1]])
+                  colnames(a) <- paste(i, c(names(smapdata),"constant"))
+                  smapcoeffs[[i]] <- a
+                  }
+            
+            #convert large smap coefficients list into plottable data frame
+            d = do.call(cbind, smapcoeffs)  
+            d <- cbind(block$yr, d)
+            colnames(d)[1] <- c("yr")
+            d <- gather(d, key, coeff, -yr)  #create long data for plotting
+            d <- separate(d, key, into=c("model","var"), sep = " ")  #add columns for model number, variable
+            d <- d %>% filter(!grepl('constant', var))  #remove coefficients for constants
+            # rename some of the variables
+            d$var <- gsub('rec4_n', 'rec4', d$var) 
+            d$var <- gsub('rec5_n', 'rec5', d$var)
+            d$var <- gsub('pdo_win_4', 'pdowin4', d$var)
+            d$var <- gsub('up48_oct_4', 'up48oct4', d$var)
+            d$var <- gsub("eff_n", 'eff', d$var)
+            d$var <- gsub('npgo_yr_4', 'npgo4', d$var)
+           
+            
+            d <- separate(d, var, into=c("var","offset"), extra = "merge", sep = "_")  
+            d$offset <- d$offset %>% replace_na(0) #replace NAs for the target variable and offset values
+            
+            # For each variable, plot the changing coefficients over time from different mutivariate embeddings
+            # loop through the different chosen variables
+            chosen_vars <- unique(d$var)
+            for(i in 1:NROW(chosen_vars)) {  
+            df <- filter(d,var==chosen_vars[i])
+            p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(model, offset), colour = offset)) +
+                geom_line() +
+                theme_bw() + 
+                labs( subtitle = paste("Effect of", chosen_vars[i], "on", target_var[tv], "across top k multiview embeddings", sep = " "), x="year", y="interaction coefficient") 
+                #facet_grid(cat~pod)  # rows are categories, columns are pods
+            print(p)
+            ggsave(filename = paste("Output/Figures/5_MVE/coeff_", chosen_vars[i], "_on_" ,target_var[tv], "_", mpgname, ".pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
 k <- k+1
-}
+              }
+        }
 }
 ```
 
