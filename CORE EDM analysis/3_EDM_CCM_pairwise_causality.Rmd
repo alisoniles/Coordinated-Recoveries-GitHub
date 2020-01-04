@@ -37,13 +37,13 @@ block_lnlp uses multiple time series given as input to generate an attractor rec
 
 ```{r}
 ###--- nonlinear test for different major population groups
-load("Data/Rdata/block_data.Rdata")  
-      a <- t(data.frame(as.list(names(block_data[[1]]))))
-      rownames(a) <- NULL #remove rownames
-      b <- data.frame(a[-c(1:43),]) 
-      colnames(b) <- c("variable")
-      c <- str_split_fixed(b$variable, "_", 3)
-      var_names <- cbind(b,c)
+ load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(aa[-c(1:30),]) 
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+      var_names <- cbind(bb,cc)
       colnames(var_names) <- c("name","cat","subcat","offset")
 
 mpg <- c() 
@@ -65,7 +65,7 @@ normalize <- function(block)
         return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
   }
   
-  for(u in c(1,2,3,5)){
+  for(u in c(1,3,4,5)){
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
   
@@ -77,28 +77,28 @@ normalize <- function(block)
     block <- merged_data[valid,]  
     
     #List in lib the begin and end points of each stock and the break points within stocks
-    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+    lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
 
     #set up output table
     library_vars <- c("rec3_n", "rec4_n", "rec5_n", "rec_n")
     env_vars <- as.character(var_names[,1])
     CCM_outputlist <- expand.grid(env_vars, library_vars, stringsAsFactors = FALSE) 
     CCM_outputlist$temp <- CCM_outputlist$Var1
-    CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "_")
+    CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "[.]")
     CCM_outputlist[,6:8] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 3)
     colnames( CCM_outputlist) <- c("target","library", "cat","subcat","offset","rho", "N", "95p_crit")
 
     #Perform cross mappings:      
     for(i in c(1:NROW(CCM_outputlist)) ){  
     
-      library_vars <- c(CCM_outputlist[i,1], "eff_n")
-      target_var <- CCM_outputlist[i,2]
+      library_vars <- c(CCM_outputlist[i,2], "eff_n")
+      target_var <- CCM_outputlist[i,1]
       env_factor <- CCM_outputlist[i,4]
       
           # CCM from library var to target var   
-            data <- as.matrix(cbind(block$yr, block[library_vars], block[target_var]))
+            data <- as.matrix(cbind(block$year, block[library_vars], block[target_var]))
             rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             xmap <-  block_lnlp(data, lib, columns = library_vars, target_column = target_var, method = c("simplex"), tp = 0, silent = TRUE)
             CCM_outputlist[i,6] <- xmap$rho
@@ -109,158 +109,65 @@ normalize <- function(block)
 saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""), compress = FALSE)
 
 
-# figure
-# sort output table by environmental var, then by library var, then by lag
+#Figures
+
+# sort output table by offset then category
 d <-  CCM_outputlist[order(CCM_outputlist$offset),]
 d <-  d[order(d$cat),]
 d[,9] <- paste('Spawner*recruit xmap', d$env_fac)
 colnames(d)[9] <- "xmap"
 
+# split into 2 figures, one for physical covariates and one for biological covariates
+phys_d <- d[d$cat=="flow" | d$cat=="npgo" | d$cat=="pdo" | d$cat=="up48", ]
+biol_d <- d[d$cat=="hatch" | d$cat=="pinn" | d$cat=="smelt" | d$cat=="SRKW", ]
+  
+values <-  rbind("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9', "mean"='#469990', "peak"='#42d4f4', "gageht"='#4363d8', "peakday"='#000075')
+breaks  <- rbind("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr", "mean", "peak", "gageht", "peakday")
+labels <-  rbind("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year", "River mean discharge", "River peak flow", "River gage hight", "River peak flow day")
+phys_scm <- cbind(values,breaks,labels)
+colnames(phys_scm) <- c("values","breaks","labels")
 
+values <-  rbind("spring"='#800000', "summer"='#e6194b', "total"='#f58231', "CSLbonn"='#ffe119', "CSLhaulout"='#bfef45', "CSLmales"='#3cb44b', "HSaerial"='#469990', "HSbonn"='#42d4f4', "SSLaerial"='#000075', "SSLbonn"='#911eb4', "SSLrookORraw"='#f032e6', "TOTbonn"='#800000', "CSLpup"='#e6194b',  "CPUE"='#f58231', "ssb"='#ffe119', "Jpod"='#bfef45',"Kpod"='#3cb44b', "Lpod"='#469990', "KLpods"='#42d4f4', "JKLpods"='#4363d8', "JKLdeaths"='#000075', "JKLbirths"='#911eb4')
+breaks  <- rbind("spring", "summer", "total", "CSLbonn", "CSLhaulout", "CSLmales", "HSaerial", "HSbonn", "SSLaerial", "SSLbonn", "SSLrookORraw", "TOTbonn", "CSLpup", "CPUE", "ssb", "Jpod", "Kpod", "Lpod", "KLpods", "JKLpods", "JKLdeaths",     "JKLbirths")
+labels <-  rbind("Hatchery spring", "Hatchery summer", "Hatchery total", "CSL Bonneville Dam", "CSL haulout", "CSL males", "HS aerial survey", "HS Bonneville Dam", "SSL aerial survey", "SSL Bonneville Dam", "SSL rookery OR raw", "TOT Bonneville Dam", "CSL pups","Smelt CPUE", "Smelt ssb", "SRKW J pod", "SRKW K pod", "SRKW L pod", "SRKW KL pods", "SRKW JKL pods", "SRKW deaths", "SRKW births")
+biol_scm <- cbind(values,breaks,labels)
+colnames(biol_scm) <- c("values","breaks","labels")
 
-p1 <- ggplot(d, aes(x=offset, y=rho)) +
+#Plot of CCM of physical covariates
+p1 <- ggplot(phys_d, aes(x=offset, y=rho)) +
     geom_line(aes(col=subcat)) +
-    geom_point(aes(col=subcat, shape=(d$rho>d$'95p_crit'))) +
+    geom_point(aes(col=subcat, shape=(phys_d$rho>phys_d$'95p_crit'))) +
     theme_bw() + 
     labs(title=paste(mpgname, "MPG", sep=" "), subtitle = "Multivariate CCM with spawners included in the attractor reconstruction", x="Environmental variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
-    scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "yr"='#a9a9a9', "win"='#a9a9a9', "pups"='pink', "males"='chocolate', "Jpod"='#42d4f4', "Kpod"='#4363d8', "Lpod"='#911eb4', "KLpods"='#f032e6', "JKLpods"='#000000', "JKLbirths"='#3cb44b', "JKLdeaths"='#e6194b'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "yr", "win", "pups", "males", "Jpod", "Kpod", "Lpod", "KLpods", "JKLpods", "JKLbirths", "JKLdeaths"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "NPGO year", "PDO window","Sea lion pups", "Sea lion males", "SRKW J pod", "SRKW K pod", "SRKW L pod", "SRKW KL pods", "SRKW JKL pods", "SRKW births", "SRKW deaths")) +
+    scale_color_manual(values = phys_scm[,1], name="Time series", breaks = phys_scm[,2], labels = phys_scm[,3]) +
   scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
-
-# Rows are MEF and columns are library factor
 p2 <- p1 + facet_grid(cat ~ library)  
+ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_physical_covariates_",mpgname,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 
-print(p2)
+#Plot of CCM of biological covariates
+p1 <- ggplot(biol_d, aes(x=offset, y=rho)) +
+    geom_line(aes(col=subcat)) +
+    geom_point(aes(col=subcat, shape=(biol_d$rho>biol_d$'95p_crit'))) +
+    theme_bw() + 
+    labs(title=paste(mpgname, "MPG", sep=" "), subtitle = "Multivariate CCM with spawners included in the attractor reconstruction", x="Environmental variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
+    scale_color_manual(values = biol_scm[,1], name="Time series", breaks = biol_scm[,2], labels = biol_scm[,3]) +
+  scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
+p2 <- p1 + facet_grid(cat ~ library)  
+ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_biological_covariates_",mpgname,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 
-ggsave(filename = paste("Output/Figures/3_CCM_multivar_MPG_",mpgname,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
 
   }
  
 ```
 
-#Univariate CCM for the major population groups using CCM
-
-```{R}
-load("Data/Rdata/block_data.Rdata")  
-
-mpg <- c() 
-  for(stk in 1:length(block_data)) { 
-      mpg[stk] <- block_data[[stk]]$mpg[1]
-  } 
-
-normalize <- function(block)
-{
-    if(NCOL(block) > 1)
-    {
-        n <- NROW(block)
-        means <- sapply(block, mean, na.rm = TRUE)
-        sds <- sapply(block, sd, na.rm = TRUE)
-        return((block - matrix(rep(means, each = n), nrow = n)) / 
-                   matrix(rep(sds, each = n), nrow = n))
-    }
-    else
-        return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
-}
-     
-
- 
-for(u in c(1:5)){   # for each mpg
-    data <- block_data[c(mpg==u)]
-    mpgname <- as.character(data[[1]]$mpg[1])
-  
-    #concatenate the time series of each variable together
-    keys <-c(names(data[[1]]))
-    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
-    merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$rec3_n) & is.finite(merged_data$rec4_n) & is.finite(merged_data$rec5_n) & is.finite(merged_data$eff_n)
-    block <- merged_data[valid,]  
-    
-    #List in lib the begin and end points of each stock and the break points within stocks
-    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
-
-    #set up output table
-    library_vars <- c("rec3_n", "rec4_n", "rec5_n", "eff_n")
-    env_vars <- c("up45_jan",	"up45_feb",	"up45_mar",	"up45_apr",	"up45_may",	"up45_jun",	"up45_jul",	"up45_aug",	"up45_sep",	"up45_oct",	"up45_nov",	"up45_dec",	"up48_jan",	"up48_feb",	"up48_mar",	"up48_apr",	"up48_may",	"up48_jun",	"up48_jul",	"up48_aug",	"up48_sep",	"up48_oct",	"up48_nov",	"up48_dec", "pdo_jan",	"pdo_feb",	"pdo_mar",	"pdo_apr",	"pdo_may",	"pdo_jun",	"pdo_jul",	"pdo_aug",	"pdo_sep",	"pdo_oct",	"pdo_nov",	"pdo_dec", "pdo_win", "npgo_jan",	"npgo_feb",	"npgo_mar",	"npgo_apr",	"npgo_may",	"npgo_jun",	"npgo_jul",	"npgo_aug",	"npgo_sep",	"npgo_oct",	"npgo_nov",	"npgo_dec",	"npgo_yr", "Spp.Int_SL.pups", "Spp.Int_SL.males", "Spp.Int_SRKW")
-    lags <- c(0,1,2,3,4,5,6)
-    CCM_outputlist <- expand.grid(env_vars, library_vars, lags, stringsAsFactors = FALSE) 
-    CCM_outputlist[,4] <- paste(CCM_outputlist[,1], CCM_outputlist[,3], sep = "_")
-    CCM_outputlist[,5:10] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 6)
-    colnames( CCM_outputlist) <- c("env_fac","library","offset","target","target E","rho","95%CI lower","95%CI upper","MK test","FZ test")
-
-    #Perform cross mappings:      
-    libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
-    for(i in c(1:NROW(CCM_outputlist)) ){  #c(1:100)
-    
-      library_var <- CCM_outputlist[i,2]
-      target_var <- CCM_outputlist[i,4]
-      env_factor <- CCM_outputlist[i,1]
-      
-          # determine the best univariate embedding dimension and theta for the target variables - use time series of environemtnal vars from 1957 to 2009+7(lags)=2016 for ALL lags, so all lags of the same environmental variable have the same E
-            data <- as.matrix(cbind(block$yr, block[target_var]))
-            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
-            simplex_output <- simplex(data, E = 1:12, silent = TRUE)
-            CCM_outputlist[i,5] <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
-    
-          # CCM from library var to target var   
-            data <- as.matrix(cbind(block$yr, block[library_var],block[target_var]))
-            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
-            xmap <-  ccm(data, lib = lib, E = CCM_outputlist[i,5], lib_column = library_var, target_column = target_var, lib_sizes = libsize, silent = TRUE)
-    
-    #for(v in c(1:NROW(target_vars))){output <- do.call(rbind, lapply(seq_len(NCOL(target_vars)), function(l) {block_lnlp(block, lib, columns = library_vars, target_column = target_vars[v,l], method = c("simplex"), tp = 0, silent = TRUE)}
-                
-    # Calculate the median, maximum, and 1st & 3rd quantile of rho
-            rho_quant=as.matrix(aggregate(xmap[,c('rho')],by = list(as.factor(xmap$lib_size)), quantile, na.rm = TRUE)[,'x'])
-            rho_quant <- rho_quant[complete.cases(rho_quant*0),1:5] #removes rows with inf values
-            CCM_outputlist[i,6] <- signif(rho_quant[dim(rho_quant)[1],3],2) #save the cross map skill at max library size (50th percentile)
-            CCM_outputlist[i,7:8] <- r.con(rho_quant[dim(rho_quant)[1],3], libsize[dim(rho_quant)[1]], p=.95, twotailed=FALSE) # Test if rho is significantly different from 0 at p=0.05 level (done for Sockey in Ye et al. 2015)
-            
-            #Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
-            #Here the median, maximum, and 1st & 3rd quantiles are tested, all need to be <0.05.
-            MK <- apply(rho_quant[,2:5],2,MannKendall) 
-            CCM_outputlist[i,9] <- (MK$`25%`[[2]]<0.05 & MK$`50%`[[2]]<0.05 & MK$`75%`[[2]]<0.05 & MK$`100%`[[2]]<0.05)
-            
-            # Transforms the rho at the min library and max library length to a normally distributed Fisher's z value
-            # Tests that the max library z is significantly higher than the begining. 
-            # Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
-            FZ <- paired.r(rho_quant[1,3],rho_quant[dim(rho_quant)[1],3], NULL, libsize[1], libsize[dim(rho_quant)[1]], twotailed=FALSE)
-            CCM_outputlist[i,10] <- FZ$p
-      }
-
-     saveRDS(CCM_outputlist, file = paste("Output/Rdata/CCM_univar_MPG_ ",mpgname,".RDS", sep = ""), compress = FALSE)
-
-# figure
-# sort output table by environmental var, then by library var, then by lag
-d <-  CCM_outputlist[order(CCM_outputlist$offset),]
-d <-  d[order(d$library),]
-d <-  d[order(d$env_fac),]
-d[,11] <- paste(d$library, 'xmap', d$env_fac)
-colnames(d)[11] <- "xmap"
-d <- separate(d,env_fac, into=c("env_fac","month"), sep = "_")
-
-p1 <- ggplot(d, aes(x=offset, y=rho)) +
-    geom_line(aes(col=month)) +
-    geom_point(aes(col=month, shape=d$`MK test`)) +
-    theme_bw() + 
-    labs(title=paste(mpgname, "MPG", sep=" "), x="Offset", y="Rho") +  
-    scale_color_manual(values = c("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9', "SL.pups"='pink', "SL.males"='chocolate', "SRKW"='#000000'), name="Time series", breaks = c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr", "SL.pups", "SL.males", "SRKW"), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year","Sea lion pups", "Sea lion males", "SRKW")) +
-  scale_shape_manual(name="Mann Kendall test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
-
-# Rows are MEF and columns are library factor
-p2 <- p1 + facet_grid(env_fac ~ library)  
-
-print(p2)
-
-ggsave(filename = paste("Output/Figures/3_CCM_univar_MPG_",mpgname,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
-
-}
 
 
 
-```
+
 
 
 #Multivariate CCM for the individual stocks
+currently set up for 2019 data file... need to modify if we want this...
 
 ```{r}
 ###--- nonlinear test for different major population groups
@@ -292,9 +199,9 @@ normalize <- function(block)
     block <- merged_data[valid,]  
     
     #List in lib the begin and end points of each stock and the break points within stocks
-    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-    lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-    lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+    lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
 
     #set up output table
     library_vars <- c("rec3_n", "rec4_n", "rec5_n", "rec_n")
@@ -313,7 +220,7 @@ normalize <- function(block)
       env_factor <- CCM_outputlist[i,1]
       
           # CCM from library var to target var   
-            data <- as.matrix(cbind(block$yr, block[library_vars], block[target_var]))
+            data <- as.matrix(cbind(block$year, block[library_vars], block[target_var]))
             rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             xmap <-  block_lnlp(data, lib, columns = library_vars, target_column = target_var, method = c("simplex"), tp = 0, silent = TRUE)
             CCM_outputlist[i,5] <- xmap$rho

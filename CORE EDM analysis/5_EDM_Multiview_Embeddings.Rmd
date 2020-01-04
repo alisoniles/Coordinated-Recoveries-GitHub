@@ -55,16 +55,16 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
     block <- merged_data[valid,]  
     
     # list the begin and end points of each stock and the break points within stocks
-    lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-            lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-            lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
  
     #  for each target variable 
     target_var <- c("rec4_n", "rec5_n")
         for(tv in 1:2){
           
           # determine the best univariate embedding dimension and theta
-          data_target <- as.matrix(cbind(block$yr, block[target_var[tv]]))
+          data_target <- as.matrix(cbind(block$year, block[target_var[tv]]))
           rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
           simplex_output <- simplex(data_target, E = 1:8, silent = TRUE)
           best_E[i,tv] <- min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho)
@@ -81,7 +81,7 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
           chosen_vars=c(paste("npgo_yr_",tv+3, sep = ""), paste("pdo_win_",tv+3, sep = ""), paste("up48_oct_",tv+3, sep = ""), paste("SL_pups_",tv+6, sep = ""), paste("SL_males_",tv+3, sep = ""), paste("SRKW_JKLpods_",tv+3, sep = ""))
      
           # run the multiview embedding
-          MVE_block <- as.matrix(cbind(block$yr,block[target_var[tv]], block$eff_n, block[chosen_vars]))  
+          MVE_block <- as.matrix(cbind(block$year,block[target_var[tv]], block$eff_n, block[chosen_vars]))  
           rownames(MVE_block) <- NULL #remove rownames to supress error 
           colnames(MVE_block) <- c("yr", target_var[tv], eff, "block$eff_n"    "npgo_yr_4"      "pdo_win_4"      "up48_oct_4"     "SL_pups_7"      "SL_males_4"     "SRKW_JKLpods_4") #change colnames to streamline data analysis later
           MVE <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = (2+tv), k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)
@@ -142,7 +142,7 @@ k <- 1
 u <- 1
 tv <- 1
 
-for(u in c(1,3,4,5)){  #For each MPG except Lower Snake 
+for(u in c(4)){  #For each MPG except Lower Snake 1,3,4,5
   data <- block_data[c(mpg==u)] 
   mpgname <- as.character(data[[1]]$mpg[1])
     
@@ -154,9 +154,9 @@ for(u in c(1,3,4,5)){  #For each MPG except Lower Snake
   block <- merged_data[valid,]  
     
   # list the begin and end points of each stock and the break points within stocks
-  lib <- matrix(NA, nrow = length(which(diff(block$yr)!=1))+1, ncol = 2)
-      lib[,1] <- c(1, which(diff(block$yr)!=1)+1)
-      lib[,2] <- c(which(diff(block$yr)!=1), nrow(block))
+  lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+      lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+      lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
  
             #  for each target variable 
             target_var <- c("rec4_n", "rec5_n")
@@ -179,7 +179,7 @@ for(u in c(1,3,4,5)){  #For each MPG except Lower Snake
             
             #convert large smap coefficients list into plottable data frame
             d = do.call(cbind, smapcoeffs)  
-            d <- cbind(block$yr, d)
+            d <- cbind(block$year, d)
             colnames(d)[1] <- c("yr")
             d <- gather(d, key, coeff, -yr)  #create long data for plotting
             d <- separate(d, key, into=c("model","var"), sep = " ")  #add columns for model number, variable
