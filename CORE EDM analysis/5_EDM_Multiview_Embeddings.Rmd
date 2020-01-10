@@ -22,7 +22,7 @@ The generality of Taken’s Theorem means that in situations with multivariate t
 can often be many different, valid attractor reconstructions. As described in (Ye and Sugihara
 2016), combining these different models can result in improved forecasts.
 
- multiview() operates by constructing all possible embeddings of dimension E, with
+Multiview() operates by constructing all possible embeddings of dimension E, with
 lag up to max_lag (and excluding embeddings that don’t have at least one coordinate with 0
 time lag). These embeddings are ranked by forecast skill (rho) over the lib portion of the
 data. The individual forecasts for the top k embeddings are then averaged together.
@@ -51,13 +51,15 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
     keys <-c(names(data[[1]]))
     merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
     merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$rec_n) & is.finite(merged_data$eff_n)
+    valid <-  is.finite(merged_data$rec4_n)
     block <- merged_data[valid,]  
     
     # list the begin and end points of each stock and the break points within stocks
     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
             lib[,1] <- c(1, which(diff(block$year)!=1)+1)
             lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+            
+            
  
     #  for each target variable 
     target_var <- c("rec4_n", "rec5_n")
@@ -75,39 +77,101 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
 # MVE    
           # determine which library variables to include from the CCM analysis    
           ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
-               # ccm <- ccm %>% filter(grepl('_0', target))#use only the unlagged time series
-               # ccm <- ccm %>% filter(library==target_var) %>% filter(!grepl('up45', env_fac)) #focus on 4 yr recruits and remove upwelling at 45 degrees
-               # ccm <- ccm[ccm$rho>(2*ccm$`95p_crit`),] #only include variables whose CCM rho was 2* the critical value
-          chosen_vars=c(paste("npgo_yr_",tv+3, sep = ""), paste("pdo_win_",tv+3, sep = ""), paste("up48_oct_",tv+3, sep = ""), paste("SL_pups_",tv+6, sep = ""), paste("SL_males_",tv+3, sep = ""), paste("SRKW_JKLpods_",tv+3, sep = ""))
-     
-          # run the multiview embedding
-          MVE_block <- as.matrix(cbind(block$year,block[target_var[tv]], block$eff_n, block[chosen_vars]))  
+          ccm <- ccm %>% filter(library==target_var[tv]) 
+          
+          ccm <- ddply(ccm, .(cat, offset), subset, rho==max(rho)) #Keep the variable with the maximum rho in each category*offset.
+          ccm <- ccm[ccm$rho>(ccm$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
+          #remove specific category*offset combinations
+          #Third year river and hatchery variables
+          ccm<-ccm[!(ccm$cat=='flow' & ccm$offset==3),] 
+          
+          ccm<-ccm[!(ccm$cat=='hatch' & ccm$offset==3),] 
+          #remove either fourth year (if rec_5), or fifth year (if rec4) river and hatchery variables
+          a <- c(4,5) 
+          ccm<-ccm[!(ccm$cat=='flow' & ccm$offset==(subset(a,a!=tv+3))),] 
+          ccm<-ccm[!(ccm$cat=='hatch' & ccm$offset==(subset(a,a!=tv+3))),] 
+          #remove offsets greater than return year 
+          ccm <- ccm[ccm$offset<=(tv+3),]
+          
+          chosen_vars <- ccm$target
+
+# run the multiview embedding
+          MVE_block <- as.matrix(cbind(block["year"],block[target_var[tv]], block["eff_n"], block[chosen_vars]))  
           rownames(MVE_block) <- NULL #remove rownames to supress error 
-          colnames(MVE_block) <- c("yr", target_var[tv], eff, "block$eff_n"    "npgo_yr_4"      "pdo_win_4"      "up48_oct_4"     "SL_pups_7"      "SL_males_4"     "SRKW_JKLpods_4") #change colnames to streamline data analysis later
-          MVE <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = (2+tv), k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)
-              # `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
+          
+          
+          
+#trouble shooting the MVE code:          
+          
+          num_vars <- NCOL(MVE_block)
+          num_vars <- num_vars - 1 #because first col is time
+          max_lag <-3
+          E <- 3
+          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)])#, max_lag = max_lag,t = MVE_block[, 1], lib = lib, tau = tau,restrict_to_lib = FALSE)
+          
+          embeddings_list <- t(combn(num_vars * max_lag, E, simplify = TRUE))
+          valid_embeddings_idx <- apply(embeddings_list %% max_lag, 1, 
+                                  function(x) {1 %in% x}) #Attempts to exclude embeddings without at least one coordinate with 0 time lag! I don't think this is working properly because when max-lag is set to zero or one it doesn't work. 
+          embeddings_list <- embeddings_list[valid_embeddings_idx, ]
+          my_embeddings <- lapply(seq_len(NROW(embeddings_list)),
+                            function(i) {embeddings_list[i, ]})
+          
+          
+          
+          MVE_mine <- MVE_function(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)        
+          
+           MVE_orig <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)# `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
               # 'lagged_block' gives the block that includes lags constructed for multiview embedding
               # 'embeddings' gives the list of the embeddings whose predictions were averaged together for each model.
         
-          save(MVE, theta, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
+          #save(MVE, theta, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
         }
     
     i <- i+1 
 }
 
-
+lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = 1, t = MVE_block[, 1], lib = lib, tau = 1, restrict_to_lib = FALSE)
+    
+    
       
 MVE_lagged_block <- MVE$lagged_block[[1]]
 MVE_var_list <- colnames(MVE_lagged_block)
 MVE_k_embeddings <- MVE$embeddings[[1]]
-MVE <- matrix(NA, nrow = length(MVE_k_embeddings), ncol = MVE$E)
+MVE_k_embeddingsnames <- matrix(NA, nrow = length(MVE_k_embeddings), ncol = MVE$E)
 for(i in 1:length(MVE_k_embeddings)) { 
-      MVE[i,] <-  MVE_var_list[unlist(MVE_k_embeddings[i])]
+      MVE_k_embeddingsnames[i,] <-  MVE_var_list[unlist(MVE_k_embeddings[i])+1]
 }
+
+
 x <- melt(MVE) 
 count(x$value)
 
 ```
+
+
+#Multiview Embedding test code
+```{R}
+data("block_3sp")
+testblock <- block_3sp[, c(2, 5, 8)] # use only the unlagged time series
+testlib <- c(1, floor(NROW(block_3sp)/2))
+testpred <- c(floor(NROW(block_3sp)/2) + 1, NROW(block_3sp))
+
+testMVE <- multiview(testblock, lib = testlib, pred = testpred, E = 2, max_lag =2,
+k = "all", target_column = 1, stats_only = FALSE, save_lagged_block =TRUE, silent = TRUE)
+
+testMVE_lagged_block <- testMVE$lagged_block[[1]]
+testMVE_var_list <- colnames(testMVE_lagged_block)
+testMVE_k_embeddings <- testMVE$embeddings[[1]]
+testMVE_k_embeddingsnames <- matrix(NA, nrow = length(testMVE_k_embeddings), ncol = testMVE$E)
+for(i in 1:length(testMVE_k_embeddings)) { 
+      testMVE_k_embeddingsnames[i,] <-  testMVE_var_list[unlist(testMVE_k_embeddings[i])+1]
+}
+
+#Notes:
+# Embeddings do not have to include the target variable
+```
+
+
 
 
 #Figure: MVE, observed vs predicted

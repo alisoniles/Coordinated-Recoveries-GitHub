@@ -94,6 +94,11 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
         stock_df$ret_mu <- temp$mu
         stock_df$ret_sigma <- temp$sigma
         
+        temp <- normalize_by_cycle_line(stock_df$harvest)
+        stock_df$harv_n <- temp$ts #normalized returns
+        stock_df$harv_mu <- temp$mu
+        stock_df$harv_sigma <- temp$sigma
+        
         return(stock_df)
     }   
      
@@ -118,7 +123,7 @@ mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
 mpg_data$flow.peakdate <- NULL
 
 # use this to focus on one stock to trouble-shoot the function code:
-#stock_df <- subset(data, stk == "Wallow River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 
 normalize <- function(block)
@@ -175,8 +180,8 @@ make_block <- function(stock_df, env_data, esu_data)
         
         # line up species data at ESU level
       
-        # offset hatchery data from 2 to 5 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
-        for(i in 2:5) { 
+        # offset hatchery data from 1 to 5 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
+        for(i in 1:5) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -186,8 +191,8 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-        # offset pinniped data from 2 to 5 years after brood year - assuming sea lions eat smolts and returns
-        for(i in 2:5) { 
+        # offset pinniped data from 2, 4 and 5 years after brood year - assuming sea lions eat smolts and returns
+        for(i in c(2,4,5)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -197,8 +202,8 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
   
-        # offset CA sealion pup data from 2 to 5 years after brood year plus 3 years as only 3+ year old sea lion males swim up to Oregon
-        for(i in 5:8) { 
+        # offset CA sealion pup data from 2, 4 and 5 years after brood year. Add 3 years to each as only 3+ year old sea lion males swim up to Oregon
+        for(i in c(5,7,8)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -208,8 +213,8 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-        # offset smelt data by 2 years
-        for(i in 2) { 
+        # offset smelt data by return year (4,5)
+        for(i in 4:5) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -219,7 +224,7 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         # line up orca data
-        for(i in 3:5) { # offset orca data from 3 to 5 years after brood year - assuming orcas just eat the returning fish
+        for(i in 4:5) { # offset orca data from 4 to 5 years after brood year - assuming orcas just eat the returning fish
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -228,8 +233,8 @@ make_block <- function(stock_df, env_data, esu_data)
               df[index_in_stock_df,] <- SRKW_data[index_in_spp_data, ]
               df.colnames <- paste(SRKW_names, i, sep = ".")
               stock_df[, df.colnames] <- df
-              }
-    
+        }
+        
         
         
         
