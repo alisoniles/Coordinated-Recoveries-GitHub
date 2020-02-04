@@ -8,11 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(dplyr)
-library(ggplot2)
+library(tidyr)
 library(rEDM)
-library(plyr)
-library(reshape)
+
 ```
 
 Excerpt from methods of McGowen et al.: With multiple environmental drivers to choose from, there are many ways to construct multivariate models (Ye and Sugihara 2016). We limit our models to a maximum of four coordinates to keep
@@ -162,7 +160,7 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             smap <- block_lnlp(MultiEDM_data, lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = TRUE, save_smap_coefficients = TRUE)
             #smap <- block_lnlp(MultiEDM_data[,2:4], lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = FALSE, save_smap_coefficients = TRUE)
            
-                  a <- data.frame(smap$smap_coefficients[[1]])
+                  a <- data.frame(smap[[1]]$smap_coefficients)
                   colnames(a) <- paste(i, c(colnames(MultiEDM_data[,2:4]),"constant"))
                   smapcoeffs[[i]] <- a
                    
@@ -192,11 +190,10 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             p1 <- p + facet_grid(offset~subcat)  # rows are offset, columns are Spring, summer, total hatchery
             print(p1)
             ggsave(filename = paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
-
-                  
 }
                    
-                  
+# Save an object to a file
+save(df, file = "CORE EDM visual/Data/F1_Inter_Coeff_Hatch.RData")                  
     
 
 ```
