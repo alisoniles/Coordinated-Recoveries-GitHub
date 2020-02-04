@@ -1,0 +1,20 @@
+---
+title: "Fig_EDM_Interaction_Strengths_Univariate"
+author: "Kurt Ingeman"
+date: "Feb 4, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr)
+library(rEDM)
+
+```
+
+
+```{r}
+load("F1_Inter_Coeff_Hatch.Rdata") 
+```
+
