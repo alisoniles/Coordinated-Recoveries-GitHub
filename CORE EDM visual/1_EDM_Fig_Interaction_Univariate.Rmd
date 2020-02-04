@@ -1,4 +1,5 @@
 ---
+<<<<<<< HEAD
 title: "F1_EDM_Interaction_Coeffs"
 author: "Kurt Ingeman"
 date: "2/4/2020"
@@ -7,10 +8,14 @@ output: html_document
 
 ```{r}
 
-rm(list = ls())
-
 library(rEDM)
 library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+# devtools::install_github("jakelawlor/PNWColors")
+library(PNWColors)
 ```
 
 
@@ -22,8 +27,7 @@ hatch_models <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/
 
 ## Filter for the right offset
 ```{r}
-dat <-  hatch_models %>% 
-  filter(offset %in% c("1", "2"))
+dat <-  hatch_models 
 ```
 
 
@@ -31,14 +35,13 @@ dat <-  hatch_models %>%
 
 ```{r}
 
-p <- ggplot(dat, aes(x=offset, y=coeff)) + 
-  geom_boxplot()
+pal=pnw_palette("Shuksan2",5, type = "discrete")
+
+p <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
+  geom_boxplot() +
+  scale_fill_manual(values = pal)
 
 p + facet_wrap(~subcat)
   
 
 ```
-
-
-
-
