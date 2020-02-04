@@ -1,0 +1,44 @@
+---
+title: "F1_EDM_Interaction_Coeffs"
+author: "Kurt Ingeman"
+date: "2/4/2020"
+output: html_document
+---
+
+```{r}
+
+rm(list = ls())
+
+library(rEDM)
+library(tidyr)
+```
+
+
+## Load data object from Alison's 5_EDM_Multivariate... that contains interaction coefficients for all top models including hatchery vars right now just for the Upper Salmon MPG
+```{r}
+hatch_models <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/hatch_models.rds")
+```
+
+
+## Filter for the right offset
+```{r}
+dat <-  hatch_models %>% 
+  filter(offset %in% c("1", "2"))
+```
+
+
+## Boxplot 
+
+```{r}
+
+p <- ggplot(dat, aes(x=offset, y=coeff)) + 
+  geom_boxplot()
+
+p + facet_wrap(~subcat)
+  
+
+```
+
+
+
+

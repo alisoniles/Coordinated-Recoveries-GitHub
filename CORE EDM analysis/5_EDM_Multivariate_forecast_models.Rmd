@@ -8,9 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(tidyr)
+library(dplyr)
+library(ggplot2)
 library(rEDM)
-
+library(plyr)
+library(reshape)
 ```
 
 Excerpt from methods of McGowen et al.: With multiple environmental drivers to choose from, there are many ways to construct multivariate models (Ye and Sugihara 2016). We limit our models to a maximum of four coordinates to keep
@@ -190,10 +192,20 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             p1 <- p + facet_grid(offset~subcat)  # rows are offset, columns are Spring, summer, total hatchery
             print(p1)
             ggsave(filename = paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+   
+            ggsave(filename =         
+paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG_Facet.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
+
+                  
 }
                    
-# Save an object to a file
-save(df, file = "CORE EDM visual/Data/F1_Inter_Coeff_Hatch.RData")                  
-    
 
 ```
+
+
+
+```{r}
+saveRDS(df, file = "~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/hatch_models.rds")
+
+```
+
