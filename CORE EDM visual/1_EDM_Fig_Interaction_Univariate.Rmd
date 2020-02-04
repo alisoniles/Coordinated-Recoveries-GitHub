@@ -1,4 +1,5 @@
 ---
+<<<<<<< HEAD
 title: "F1_EDM_Interaction_Coeffs"
 author: "Kurt Ingeman"
 date: "2/4/2020"
@@ -42,3 +43,24 @@ p + facet_wrap(~subcat)
 
 
 
+=======
+title: "Fig_EDM_Interaction_Strengths_Univariate"
+author: "Kurt Ingeman"
+date: "Feb 4, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr)
+library(rEDM)
+
+```
+
+
+```{r}
+load("F1_Inter_Coeff_Hatch.Rdata") 
+```
+
+>>>>>>> d92b21d4dc16cd99ae13b9c07c8ef77b917e9094
