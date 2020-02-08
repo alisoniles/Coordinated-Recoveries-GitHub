@@ -1,5 +1,4 @@
 ---
-<<<<<<< HEAD
 title: "F1_EDM_Interaction_Coeffs"
 author: "Kurt Ingeman"
 date: "2/4/2020"
@@ -57,6 +56,7 @@ p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) +
 #multivariate model to look at interaction coeffs of hatchery output on wild chinook salmon
 
 ```{R}
+
 load("Data/block_data.Rdata")  
 mpg <- c() 
   for(stk in 1:length(block_data)) { 
@@ -64,8 +64,9 @@ mpg <- c()
   } 
 
 target_var <- "rec4_n" #the focal variable of the analysis
+
 testvar <- c("hatch.spring.1","hatch.spring.2","hatch.spring.3","hatch.spring.4","hatch.spring.5","hatch.summer.1","hatch.summer.2","hatch.summer.3","hatch.summer.4","hatch.summer.5","hatch.total.1","hatch.total.2","hatch.total.3","hatch.total.4","hatch.total.5")
-  
+
 for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which there is only one stock
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
@@ -123,6 +124,7 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
                    
  }
  
+
  
             #convert large smap coefficients list into plottable data frame
             d = do.call(cbind, smapcoeffs)  
@@ -158,9 +160,9 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
   facet_wrap(~subcat)
             
             
-           ggsave(filename = paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/HatcheryTEST/ALL_Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+           ggsave(filename =  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/HatcheryTEST/ALL_Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
    
-            ggsave(filename =         
+           ggsave(filename =         
  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/HatcheryTEST/FACET_Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
             ggsave(filename =         
  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/HatcheryTEST/BOX_Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p3, width = 7, height = 9.5, units = "in") 
@@ -168,8 +170,8 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
                         ggsave(filename =         
  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/HatcheryTEST/DATA_Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p4, width = 7, height = 9.5, units = "in") 
                   
-}
-                   
+
+}                   
 
 ```
 

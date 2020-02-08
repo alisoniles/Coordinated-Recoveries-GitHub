@@ -1,0 +1,180 @@
+---
+title: "F1_EDM_Interaction_Coeffs"
+author: "Kurt Ingeman"
+date: "2/4/2020"
+output: html_document
+---
+
+```{r}
+rm(list = ls(all.names = TRUE)) 
+
+library(rEDM)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+# devtools::install_github("jakelawlor/PNWColors")
+library(PNWColors)
+```
+
+
+## Load data object from Alison's 5_EDM_Multivariate... that contains interaction coefficients for all top models including hatchery vars right now just for the Upper Salmon MPG?
+```{r}
+hatch_models <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/hatch_models.rds")
+```
+
+
+## Filter for the right offset
+```{r}
+dat <-  hatch_models 
+```
+
+
+## Boxplot 
+
+```{r}
+
+pal=pnw_palette("Shuksan2",5, type = "discrete")
+
+p <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
+  geom_boxplot() + scale_fill_manual(values = pal) + 
+  facet_wrap(~subcat)
+
+p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
+  geom_hline(yintercept = 0, color = 1) +
+  geom_jitter(position=position_jitter(width=0.3, height=0.2), 
+                aes(colour = offset), alpha=0.8) + scale_color_manual(values = pal) +
+#  geom_boxplot(alpha = 1) + scale_fill_manual(values = pal) + 
+  facet_wrap(~subcat)
+
+```
+
+##
+
+
+#multivariate model to look at interaction coeffs of hatchery output on wild chinook salmon
+
+```{R}
+
+load("Data/block_data.Rdata")  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+
+target_var <- "rec4_n" #the focal variable of the analysis
+
+
+testvar <- c("harv_n","up48.apr.2", "up48.may.2", "pdo.may.2", "pdo.win.2", "up48.oct.2", "up48.nov.2", "npgo.yr.2", "hatch.spring.2", "pinn.CSLmales.4", "pinn.CSLbonn.4","pinn.SSLaerial.4", "SRKW.Lpod.4", "SRKW.JKLpods.5", "flow.gageht.4")
+
+  
+for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which there is only one stock
+    data <- block_data[c(mpg==u)]
+    mpgname <- as.character(data[[1]]$mpg[1])
+
+     # concatenate the time series of the different stocks in the MPG together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <-  is.finite(merged_data$rec4_n) & is.finite(merged_data$eff_n) & is.finite(merged_data$hatch.spring.5)
+    block <- merged_data[valid,]  
+    
+    # list the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+            #only keep libraries with sufficient length
+            validlib <- lib[,2]-lib[,1]
+            predlib <- lib[validlib>3,]
+    
+    #Only keep data contained within the libraries with sufficient length
+    keepvec <- matrix(FALSE,nrow=length(block), ncol=1)
+    for(j in 1: NROW(predlib)){
+    keepvec[predlib[j,1]:predlib[j,2]] <- TRUE
+      }
+    block <- block[keepvec,]
+    rownames(block) <- NULL #remove rownames
+     
+     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+            
+    # determine the best univariate embedding dimension and theta for the target variable (total recruitment)        
+          data_target <- as.matrix(cbind(block$year, block[target_var], block$eff_n))
+          rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+          simplex_output <- simplex(data_target, lib=lib, pred=lib,  E = 1:8, silent = TRUE)
+          best_E<- min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho)
+          smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E) 
+          best_T <- smap_output$theta[which.max(smap_output$rho)] 
+  
+           #for each of the hatchery variables  
+ testvar <- testvar
+ smapcoeffs = list()
+ for(i in 1:length(testvar)){          
+#Perform multivariate forecasts
+   # for each embedding, use smaps to calculate the coefficients over time
+         
+            MultiEDM_data <- as.matrix(cbind(block["year"], block[target_var], block["eff_n"], block[testvar[i]]))
+            rownames( MultiEDM_data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            smap <- block_lnlp(MultiEDM_data, lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = TRUE, save_smap_coefficients = TRUE)
+            #smap <- block_lnlp(MultiEDM_data[,2:4], lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = FALSE, save_smap_coefficients = TRUE)
+           
+                  a <- data.frame(smap[[1]]$smap_coefficients)
+                  colnames(a) <- paste(i, c(colnames(MultiEDM_data[,2:4]),"constant"))
+                  smapcoeffs[[i]] <- a
+                   
+ }
+ 
+ 
+            #convert large smap coefficients list into plottable data frame
+            d = do.call(cbind, smapcoeffs)  
+            d <- cbind(block$year, d)
+            colnames(d)[1] <- c("yr")
+            d <- gather(d, key, coeff, -yr)  #create long data for plotting
+            d <- separate(d, key, into=c("model","var"), sep = " ")  #add columns for model number, variable
+            d <- d %>% filter(!grepl('constant', var))  #remove coefficients for constants
+            # rename some of the variables
+            d$var <- gsub('rec4_n', 'rec4', d$var) 
+            d$var <- gsub("eff_n", 'eff', d$var)
+ 
+#how do variables affect recruitment of wild salmon 
+            df <- d %>% filter(!var %in% c("eff", "rec4"))
+            
+            p <- ggplot(df, aes(x=yr, y=coeff, group = var)) +
+                #geom_point() +
+                geom_line()+
+                theme_bw() + 
+                labs( subtitle = paste("Effect of hatchery releases on", target_var, "in", mpgname,"MPG",sep = " "), x="year", y="interaction coefficient") 
+         
+            p1 <- p + 
+               facet_wrap(~var)
+
+    
+            p3 <- ggplot(df, aes(x=var, y=coeff)) + 
+  geom_boxplot() + scale_fill_manual(values = pal)      
+            
+            p4 <- ggplot(df, aes(x=var, y=coeff)) + 
+  geom_hline(yintercept = 0, color = 1) +
+  geom_jitter(position=position_jitter(width=0.3, height=0.2))
+            
+            
+           ggsave(filename =  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/ALL_Var_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+   
+           ggsave(filename =         
+ paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/FACET_Var_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
+            ggsave(filename =         
+ paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/BOX_Var_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p3, width = 7, height = 9.5, units = "in") 
+            
+                        ggsave(filename =         
+ paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/DATA_Var_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p4, width = 7, height = 9.5, units = "in") 
+                  
+}
+ 
+
+## Next: harvets offset
+## Add var for category of driver and color/facet by category
+                  
+
+```
+
