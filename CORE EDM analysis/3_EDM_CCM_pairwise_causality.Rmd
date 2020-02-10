@@ -29,8 +29,6 @@ library(stringr)
 #Convergent Cross Mapping (CCM) with time delays
 To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
 
-We tested all monthly values of PDO, Upwelling index (for both 45 and 48 degrees latitude) and NPGO, even though with have apriori knowledge of which months are likely the most important for salmon. 
-
 block_lnlp uses multiple time series given as input to generate an attractor reconstruction, and then applies the simplex projection or s-map algorithm to make forecasts. This method generalizes the simplex and s_map routines, and allows for "mixed" embeddings, where multiple time series can be used as different dimensions of an attractor reconstruction.
 
 #Multivariate CCM for the major population groups using block_lnlp
@@ -40,7 +38,7 @@ block_lnlp uses multiple time series given as input to generate an attractor rec
  load("Data/Rdata/block_data.Rdata")  
       aa <- t(data.frame(as.list(names(block_data[[1]]))))
       rownames(aa) <- NULL #remove rownames
-      bb <- data.frame(aa[-c(1:30),]) 
+      bb <- data.frame(aa[-c(1:33),]) 
       colnames(bb) <- c("variable")
       cc <- str_split_fixed(bb$variable, "[.]",n=3)
       var_names <- cbind(bb,cc)
@@ -121,9 +119,9 @@ colnames(d)[9] <- "xmap"
 phys_d <- d[d$cat=="flow" | d$cat=="npgo" | d$cat=="pdo" | d$cat=="up48", ]
 biol_d <- d[d$cat=="hatch" | d$cat=="pinn" | d$cat=="smelt" | d$cat=="SRKW", ]
   
-values <-  rbind("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6', "win"='#a9a9a9', "yr"='#a9a9a9', "mean"='#469990', "peak"='#42d4f4', "gageht"='#4363d8', "peakday"='#000075')
-breaks  <- rbind("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "win", "yr", "mean", "peak", "gageht", "peakday")
-labels <-  rbind("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "PDO window", "NPGO year", "River mean discharge", "River peak flow", "River gage hight", "River peak flow day")
+values <-  rbind("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6',  "STI"='#cccccc', "LUSI"='#999999', "TUMI"='#666666',  "win"='#a9a9a9', "yr"='#a9a9a9', "mean"='#469990', "peak"='#42d4f4', "gageht"='#4363d8', "peakday"='#000075')
+breaks  <- rbind("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "STI", "LUSI", "TUMI", "win", "yr", "mean", "peak", "gageht", "peakday")
+labels <-  rbind("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "STI", "LUSI", "TUMI", "PDO window", "NPGO year", "River mean discharge", "River peak flow", "River gage hight", "River peak flow day")
 phys_scm <- cbind(values,breaks,labels)
 colnames(phys_scm) <- c("values","breaks","labels")
 
@@ -169,7 +167,7 @@ ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_biological_covariates_",mpgn
 #Multivariate CCM for the individual stocks
 currently set up for 2019 data file... need to modify if we want this...
 
-```{r}
+
 ###--- nonlinear test for different major population groups
 load("Data/Rdata/block_data.Rdata")  
   
@@ -257,4 +255,4 @@ ggsave(filename = paste("Output/Figures/3_CCM_multivar_stock_",stockname,".pdf",
 
   }
  
-```
+
