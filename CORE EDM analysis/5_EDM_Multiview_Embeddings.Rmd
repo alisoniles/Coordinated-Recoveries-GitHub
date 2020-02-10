@@ -149,7 +149,8 @@ count(x$value)
 ```
 
 
-#Multiview Embedding test code
+#Multiview Embedding
+
 ```{R}
 data("block_3sp")
 testblock <- block_3sp[, c(2, 5, 8)] # use only the unlagged time series
