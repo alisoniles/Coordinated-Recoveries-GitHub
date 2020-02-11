@@ -87,7 +87,7 @@ if (!all(lib[, 2] >= lib[, 1]))
 return(lib)
 }
 
-
+# To troubleshoot, comment this section
 MVE_function <- function(block, lib = c(1, floor(NROW(block) / 2)), 
                       pred = c(floor(NROW(block) / 2) + 1, NROW(block)), 
                       norm = 2, E = 3, tau = 1, tp = 1, max_lag = 3, 
@@ -97,6 +97,8 @@ MVE_function <- function(block, lib = c(1, floor(NROW(block) / 2)),
                       first_column_time = FALSE, 
                       exclusion_radius = NULL, silent = FALSE)
 {
+
+
      # setup params
      lib <- coerce_lib(lib, silent = silent)
      pred <- coerce_lib(pred, silent = silent)
@@ -123,11 +125,19 @@ MVE_function <- function(block, lib = c(1, floor(NROW(block) / 2)),
      }
      
      embeddings_list <- t(combn(num_vars * max_lag, E, simplify = TRUE))
-     valid_embeddings_idx <- apply(embeddings_list %% max_lag, 1, 
+     
+     #Exclude embeddings without at least one coordinate with 0 time lag. When max-lag is set to 1, all variables have zero time lag.
+     if (max_lag>1)
+     {   
+       valid_embeddings_idx <- apply(embeddings_list %% max_lag, 1, 
                                    function(x) {1 %in% x})
      embeddings_list <- embeddings_list[valid_embeddings_idx, ]
      my_embeddings <- lapply(seq_len(NROW(embeddings_list)),
                              function(i) {embeddings_list[i, ]})
+     } else {
+       my_embeddings <- embeddings_list
+     }
+     
      
      ## make sure that if target_column is given as a column index, it
      ## is aligned with the lagged data frame.
