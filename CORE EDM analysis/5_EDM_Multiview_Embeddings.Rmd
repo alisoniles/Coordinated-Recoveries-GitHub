@@ -27,9 +27,11 @@ lag up to max_lag (and excluding embeddings that don’t have at least one coord
 time lag). These embeddings are ranked by forecast skill (rho) over the lib portion of the
 data. The individual forecasts for the top k embeddings are then averaged together.
 
-```{R}
-# determine the best univariate embedding dimension and theta for each target variable in each MPG
+The multiview() function in rEDM package excludes embeddings without at least one coordinate with 0 time lag. This isn't working properly because when max-lag is set one and all variables are 0 lag, it returns that none of the embeddings are valid but they all should be. I'm going to write my own multiview function below because the number of effective spawners with zero lag will be included in all embeddings. 
 
+
+```{R}
+rm(list=ls()) 
 load("Data/Rdata/block_data.Rdata")  
 
 mpg <- c() 
@@ -37,21 +39,26 @@ mpg <- c()
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
 
- best_E <- matrix(NA, nrow = 4, ncol = 2) # Save the optimal embedding dimension for each target variable
-    colnames(best_E) <- c("rec4_E", "rec5_E") 
- best_theta <- matrix(NA, nrow = 4, ncol = 2) # Save the optimal theta for each target variable
-   colnames(best_theta) <- c("rec4_theta", "rec5_theta")
-     
     i <- 1
-for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
+    u <- 1
+    tv <- 1
+
+for(u in c(1,3,4,5)){ # for each MPG except Lower Snake, 2
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
     
+target_var <- c("rec_n","rec3_n", "rec4_n", "rec5_n") 
+    best_E_T <- matrix(NA, nrow = length(target_var), ncol = 3) # Save the optimal embedding dimension for each target variable
+          colnames(best_E_T) <- c("target","E", "theta")
+          best_E_T[,1] <- t(target_var)    
+ 
+for(tv in 1:length(target_var)){ # for each target variable in each MPG            
+
     # concatenate the time series of the different stocks in the MPG together
     keys <-c(names(data[[1]]))
     merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
     merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$rec4_n)
+    valid <- is.finite(eval(parse(text=paste('merged_data$',target_var[tv],sep="")))) 
     block <- merged_data[valid,]  
     
     # list the begin and end points of each stock and the break points within stocks
@@ -59,98 +66,89 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
             lib[,1] <- c(1, which(diff(block$year)!=1)+1)
             lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
             
-            
- 
-    #  for each target variable 
-    target_var <- c("rec4_n", "rec5_n")
-        for(tv in 1:2){
-          
-          # determine the best univariate embedding dimension and theta
-          data_target <- as.matrix(cbind(block$year, block[target_var[tv]]))
+    # determine the best univariate embedding dimension and theta for each target variable
+    data_target <- as.matrix(cbind(block$year, block[target_var[tv]]))
           rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
           simplex_output <- simplex(data_target, E = 1:8, silent = TRUE)
-          best_E[i,tv] <- min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho)
-          smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E[i,tv]) 
-          theta <- smap_output$theta[which.max(smap_output$rho)] 
-          best_theta[i,tv] <- smap_output$theta[which.max(smap_output$rho)] 
+          # choose the smallest E whose rho is within 1 stdv of the maximum rho)
+          best_E_T[tv,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) 
+          smap_output <- s_map(data_target, lib=lib, pred=lib, E=as.numeric(best_E_T[tv,2])) 
+          best_E_T[tv,3]  <- smap_output$theta[which.max(smap_output$rho)] 
   
-   
-          # determine which library variables to include from the CCM analysis    
-          ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
+    # determine which library variables to include from the CCM analysis    
+    #ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
+    ccm <- readRDS(paste("Output/Rdata/3_CCM/CCM_univariate_tp_ ",mpgname,".RDS", sep = ""))
           ccm <- ccm %>% filter(library==target_var[tv])
-          ccm <- ccm[ccm$rho>(ccm$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
-          
-          #remove either fourth year (if rec_5), or fifth year (if rec4) river variables
-          a <- c(4,5) 
-          ccm<-ccm[!(ccm$cat=='flow' & ccm$offset==(subset(a,a!=tv+3))),] 
-
+          ccm <- ccm[ccm$rho>(1*ccm$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
+          ccm <- ccm %>% filter(MannKendall==TRUE)
+          #remove either river variables that don't match the return year of the target recruit age
+          a <- c(3,4,5) 
+          ccm<-ccm[!(ccm$cat=='flow' & (ccm$tp==(subset(a,a!=tv+2)[1]) | ccm$tp==(subset(a,a!=tv+2)[2]))), ] 
           #remove offsets greater than return year 
-          ccm <- ccm[ccm$offset<=(tv+3),]
+          ccm <- ccm[ccm$tp<=(tv+2),]
+          #remove offsets less than brood year 
+          ccm <- ccm[ccm$tp>=(0),]
           
-# Multiview embedding - make multivariate embeddings of all possible combinations of the chosen variables from the CCM analysis. Always include the target variable and the number of effective spawners in each embedding. 
+# Multiview embedding - make multivariate embeddings of all possible combinations of the chosen variables from the CCM analysis. Include the target variable and the number of effective spawners in each embedding. 
           
-          chosen_vars <- ccm$target
-          num_vars <- length(chosen_vars) #number of predictor variables
-          MVE_block <- as.matrix(cbind(block["year"], block[target_var[tv]], block["eff_n"], block[chosen_vars]))  
+          MVE_block <- as.matrix(cbind(block["year"], block[target_var[tv]], block["eff_n"], block[ccm$target]))  #The chosen predictor variables are the sames as the target variables from the CCM; Here they are the library vars
           rownames(MVE_block) <- NULL #remove rownames to supress error 
           
+          num_vars <- length(ccm$target) #number of predictor variables
           max_lag <-1 #number of lags of each of the chosen_vars (set to 1 as we chose our own lags for each var)
-          E <- 3
-          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = max_lag)#, max_lag = max_lag,t = MVE_block[, 1], lib = lib, tau = tau,restrict_to_lib = FALSE)
+          E <- as.numeric(max(3, best_E_T[tv,2])) #embedding dimension needs to be at least 3, since we are including the variable of interest and the number of effective spawners in each embedding. 
+          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = max_lag)
           
-          embeddings_list <- t(combn(num_vars * max_lag, E, simplify = TRUE))
+          embeddings_list <- t(combn(num_vars * max_lag, E-2, simplify = TRUE))
           embeddings_list <- embeddings_list + 2 #to include eff-n and the target variable in all embeddings
           embeddings_list <- cbind(matrix(data=1,nrow=nrow(embeddings_list), ncol=1), matrix(data=2,nrow=nrow(embeddings_list), ncol=1), embeddings_list)
         
-          #The original code that excludes embeddings without at least one coordinate with 0 time lag isn't working properly because when max-lag is set one and all variables are 0 lag, it returns that none of the embeddings are valid but they all should be. I'm going to ignore this because the number of effective spawners with zero lag will be included in all embeddings. 
-
 # make in-sample forecasts
-     in_results <- block_lnlp(lagged_block, lib = lib, pred = lib, method = "simplex", 
-                              columns = embeddings_list, 
-                              target_column = target_var[tv],
+     in_results <- block_lnlp(MVE_block, lib = lib, pred = lib, 
+                              method = "simplex", 
+                              columns = embeddings_list, tp=1,
+                              target_column = 1, #target_var[tv],
                               stats_only = TRUE, first_column_time = TRUE)
      
      # rank embeddings
      num_embeddings <- NROW(in_results)
-     k <- floor(sqrt(num_embeddings))
-     k <- as.numeric(k)
      in_sample_ranking <- order(in_results$rho, decreasing = TRUE)
-     ranked_embeddings <- embeddings_list[in_sample_ranking,]
-     best_embeddings <- ranked_embeddings[1:k,]
+     best_embeddings <- embeddings_list[in_sample_ranking,][1:floor(sqrt(num_embeddings)),]
                
 # Save smap coefficients
      out_results <- block_lnlp(lagged_block, lib = lib, pred = lib, 
                                method = "s-map", 
-                               columns = embeddings_list,
-                               target_column = target_var[tv], 
-                               theta = c(0,0.5,1,2),
+                               columns = embeddings_list, tp=1, # could use only 'best_embeddings' here
+                               target_column = 1,
+                               theta = best_E_T[tv,3],
                                stats_only = FALSE, first_column_time = TRUE,
                                save_smap_coefficients = TRUE)
-     out_time <- out_results$model_output[[1]]$time
-     out_obs <- out_results$model_output[[1]]$obs
-     out_pred <- do.call(cbind, lapply(out_results$model_output, 
-                                       function(df) {df$pred}))
-     out_pred_var <- do.call(cbind, lapply(out_results$model_output, 
-                                           function(df) {df$pred_var}))         
      
+     smap_coeffs <- as.data.frame(MVE_block[,1])
+     colnames(smap_coeffs) <- "year"
+     for (k in 1:length(out_results)){ #for each embedding  
+     smapcoeffs <- data.frame(out_results$smap_coefficients[[k]]) #extract the interaction coefficients for each variable over time
+     embed_names <- colnames(lagged_block[embeddings_list[k,]+1])
+     coeff_names <- sapply(embed_names,function(x) paste(k,"_", target_var[tv], "/", x, sep = ""))
+     colnames(smapcoeffs) <- paste(c(coeff_names, "constant"))
+     smap_coeffs <- cbind(smap_coeffs, smapcoeffs[,1:ncol(embeddings_list)])
      
+     #coeff_mean <- sapply(smapcoeffs, mean, na.rm=TRUE) # calculate the mean of each coeff
+     #coeff_var <-  diag(var(smapcoeffs, na.rm=TRUE)) # calculate the variance of each coeff.
+     #tt <- t.test(smapcoeffs)
+     #coeff_ttest <- sapply(smapcoeffs, t.test)
      
-     MVE_mine <- MVE_function(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)        
-          
-           MVE_orig <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)# `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
-              # 'lagged_block' gives the block that includes lags constructed for multiview embedding
-              # 'embeddings' gives the list of the embeddings whose predictions were averaged together for each model.
-        
-          #save(MVE, theta, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
-        }
+     }
+     
+#     save(MVE, theta, file = paste("Output/Rdata/5_MVE/5_MVE_",mpgname,"_",target_var[tv],".RData", sep = ""))
+
+}
     
     i <- i+1 
 }
 
 lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = 1, t = MVE_block[, 1], lib = lib, tau = 1, restrict_to_lib = FALSE)
     
-    
-      
 MVE_lagged_block <- MVE$lagged_block[[1]]
 MVE_var_list <- colnames(MVE_lagged_block)
 MVE_k_embeddings <- MVE$embeddings[[1]]
@@ -210,7 +208,7 @@ print(p3)
 #S-map Coefficients
 Calculate interaction strengths from the top k multiview embeddings.
 
-As described in (Deyle et al. 2016), the S-map coefficients from the appropriate multivariate embedding can be interpreted as dynamic, time-varying interaction strengths. The smap_coefficients column of the block_lnlp output is a list-column with the data.frames for the S-map coefficients in the first element of that list. The result is a data.frame with a row for each prediction and a columns for each of the predictor variables plus a constant.
+As described in (Deyle et al. 2016), the S-map coefficients from the appropriate multivariate embedding can be interpreted as dynamic, time-varying interaction strengths. The smap_coefficients column of the block_lnlp output is a list-column with the data.frames for the S-map coefficients in the first element of that list. The result is a data.frame with a row for each prediction and columns for each of the predictor variables plus a constant.
 
 ```{R}
 load("Data/Rdata/block_data.Rdata")  

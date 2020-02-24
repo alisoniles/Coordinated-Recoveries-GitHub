@@ -112,7 +112,7 @@ Determining causal variables by convergent cross mapping (CCM)
 
 EDM can be used to reveal causation between variables. Two variables are causally linked if they interact in the same dynamical system. Following Takens’ theorem, the system manifold reconstructed from univariate embedding (State Space Reconstruction using a single variable) gives a 1-1 map to the original system, i.e., topologically invariance. Because all manifolds reconstructed from univariates give 1-1 maps to the original manifold, it is not surprising that all the reconstructed manifolds result in 1-1 mappings if they are causally linked. Based on this idea, Sugihara et al. (2012) developed a cross-mapping algorithm to test the causation between a pair of variables in dynamical systems. This algorithm predicts the current quantity of one variable M1 using the time lags of another variable M2 and vice versa. If M1 and M2 belong to the same dynamical system (i.e., they are causally linked), the cross-mapping between them shall be ‘‘convergent.’’ Convergence means that the cross-mapping skill (q) improves with increasing library size. This is because more data in the library makes the reconstructed manifold denser, and the highly resolved attractor improves the accuracy of prediction based on neighboring points (i.e., simplex projection). Sugihara et al. (2012) stated that convergence is a practical criterion to test causation, and called this phenomenon convergent cross-mapping (CCM).
 
-To evaluate convergence in cross-mapping, the state space is reconstructed using different library lengths (L) subsampled randomly from time series. Here, Li starts from the minimal library length, L0, which is equal to the embedding dimension, to the maximal library length, Lmax, which equal to the whole length of the time series. To test the convergence of CCM, two approaches are widely used. First, the con- vergence can be tested by investigating how the cross- mapping skill changes with respect to the library size (e.g., trend or increment). For example, one can consider the following two statistical criteria: (1) testing the existence of a significant monotonic increasing trend in q(L) using Kendall’s s test, and (2) testing the signifi- cance of the improvement in q(L) by Fisher’s Dq Z test, which checks whether the cross-mapping skill obtained under the maximal library length (q(Lmax)) is signifi- cantly higher than that obtained using the minimal li- brary length (q(L0)). The convergence of CCM is deemed significant when both Kendall’s s test and Fisher’s Dq Z test are significant. 
+To evaluate convergence in cross-mapping, the state space is reconstructed using different library lengths (L) subsampled randomly from time series. Here, Li starts from the minimal library length, L0, which is equal to the embedding dimension, to the maximal library length, Lmax, which equal to the whole length of the time series. To test the convergence of CCM, two approaches are widely used. First, the convergence can be tested by investigating how the cross- mapping skill changes with respect to the library size (e.g., trend or increment). For example, one can consider the following two statistical criteria: (1) testing the existence of a significant monotonic increasing trend in q(L) using Kendall’s s test, and (2) testing the signifi- cance of the improvement in q(L) by Fisher’s Dq Z test, which checks whether the cross-mapping skill obtained under the maximal library length (q(Lmax)) is significantly higher than that obtained using the minimal library length (q(L0)). The convergence of CCM is deemed significant when both Kendall’s s test and Fisher’s Dq Z test are significant. 
 
 Note that, the direction of cross-mapping is opposite to the direction of cause-effect. That is, a convergent cross-mapping from M2(t) to M1(t) indicates that M1 causes M2. This is because M1, as a causal variable driving M2, has left its footprints on M2(t). The footprints of M1 are transcribed on the past history of M2, and thus M2 is able to predict the current value of M1.
 
@@ -143,7 +143,7 @@ In CCM analysis, we use the time lags of N1 to predict the current value of N2 (
 libs <- c(seq(20,80,20),seq(100,1000,100))
 
 # Moran effect model: N1 cross-mapping N2 (i.e. testing N2 as a cause of N1)
-# Determine the embedding dimension
+# Determine the embedding dimension with the largest library size
 E.test.n1=NULL
 for(E.t in 2:8){
   cmxy.t <- ccm(dam.n, E = E.t, lib_column = "N1", target_column = "N2",
@@ -156,6 +156,8 @@ n1_xmap_n2 <- ccm(dam.n, E=E_n1,lib_column="N1", target_column="N2",
                 lib_sizes=libs, num_samples=200, replace=T, RNGseed=2301)
 	
 # Calculate the median, maximum, and 1st & 3rd quantile of rho for each L
+#Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
+            #Here the median, maximum, and 1st & 3rd quantiles of rho are tested, all need to be <0.05.
 n12q=as.matrix(aggregate(n1_xmap_n2[,c('rho')],by = list(as.factor(n1_xmap_n2$lib_size)), quantile)[,'x'])
 apply(n12q[,2:5],2,MannKendall)
 
