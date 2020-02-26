@@ -142,7 +142,7 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             lib[,1] <- c(1, which(diff(block$year)!=1)+1)
             lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
             
-    # determine the best univariate embedding dimension and theta for the target variable (total recruitment)        
+    # determine the best univariate embedding dimension and theta for the target variable 
           data_target <- as.matrix(cbind(block$year, block[target_var], block$eff_n))
           rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
           simplex_output <- simplex(data_target, lib=lib, pred=lib,  E = 1:8, silent = TRUE)
@@ -171,30 +171,31 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
  
             #convert large smap coefficients list into plottable data frame
             d = do.call(cbind, smapcoeffs)  
-            d <- cbind(block$year, d)
-            colnames(d)[1] <- c("yr")
+            d <- cbind(block$year, d) #add year column
+                  colnames(d)[1] <- c("yr")
             d <- gather(d, key, coeff, -yr)  #create long data for plotting
             d <- separate(d, key, into=c("model","var"), sep = " ")  #add columns for model number, variable
             d <- d %>% filter(!grepl('constant', var))  #remove coefficients for constants
-            # rename some of the variables
-            d$var <- gsub('rec4_n', 'rec4', d$var) 
+            d$var <- gsub('rec4_n', 'rec4', d$var) # rename some of the variables
             d$var <- gsub("eff_n", 'eff', d$var)
-            d <- separate(d, var, into=c("var","subcat","offset"), extra = "merge", sep = "\\.")  
+            d <- separate(d, var, into=c("var","subcat","offset"), extra = "merge", sep = "\\.")  # separate out the variable subcategories and their offsets that are stored in the variable names
             d$offset <- d$offset %>% replace_na(0) #replace NAs for the target variable and offset values
             
-         #how does hatchery data affect recruitment of wild salmon 
+         #Plot: how does hatchery data affect recruitment data of wild salmon 
             df <- filter(d,var=="hatch")
             p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(subcat, offset), colour = offset)) +
-                #geom_point() +
+                geom_point(fill = "white", size = 0.1) +
                 geom_line()+
                 theme_bw() + 
                 labs( subtitle = paste("Effect of hatchery releases on", target_var, "in", mpgname,"MPG",sep = " "), x="year", y="interaction coefficient") 
             p1 <- p + facet_grid(offset~subcat)  # rows are offset, columns are Spring, summer, total hatchery
             print(p1)
-            ggsave(filename = paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
-   
+
+            ggsave(filename = paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")  # saves the last plot
+
             ggsave(filename =         
 paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG_Facet.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
+
 
                   
 }

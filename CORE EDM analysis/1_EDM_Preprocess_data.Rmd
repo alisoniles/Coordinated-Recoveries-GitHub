@@ -95,7 +95,7 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
         stock_df$ret_sigma <- temp$sigma
         
         temp <- normalize_by_cycle_line(stock_df$harvest)
-        stock_df$harv_n <- temp$ts #normalized returns
+        stock_df$harv_n <- temp$ts #normalized harvest
         stock_df$harv_mu <- temp$mu
         stock_df$harv_sigma <- temp$sigma
         
@@ -143,7 +143,7 @@ normalize <- function(block)
 
 make_block <- function(stock_df, env_data, esu_data)
     {
-        env_names <- c("up48.jan",	"up48.feb",	"up48.mar",	"up48.apr",	"up48.may",	"up48.jun",	"up48.jul",	"up48.aug",	"up48.sep",	"up48.oct",	"up48.nov",	"up48.dec", "pdo.jan",  "pdo.feb", "pdo.mar",  "pdo.apr",  "pdo.may",  "pdo.jun",  "pdo.jul",  "pdo.aug",  "pdo.sep", "pdo.oct",    "pdo.nov", "pdo.dec", "pdo.win", "npgo.yr")  
+        env_names <- names(env_data)[2:length(names(env_data))]  
         env_data[, 2:NCOL(env_data)] <- normalize(env_data[2:NCOL(env_data)]) 
         
         hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total")
@@ -164,8 +164,8 @@ make_block <- function(stock_df, env_data, esu_data)
         
         
         # line up environmental data at ESU level
-        # offset environmental data from 2 to 5 years after brood year. 
-        for(i in 2:5) { 
+        # offset environmental data from 1 to 5 years after brood year. 
+        for(i in 1:5) { 
               desired_years <- stock_df$year + i
               index_in_env_data <- match(desired_years, env_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -180,8 +180,8 @@ make_block <- function(stock_df, env_data, esu_data)
         
         # line up species data at ESU level
       
-        # offset hatchery data from 1 to 5 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
-        for(i in 1:5) { 
+        # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
+        for(i in 1:3) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)

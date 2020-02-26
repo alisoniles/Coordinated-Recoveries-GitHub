@@ -74,51 +74,68 @@ for(u in c(1,3,4,5)){#)){ #,3,4,5)){# #For each MPG except Lower Snake
           theta <- smap_output$theta[which.max(smap_output$rho)] 
           best_theta[i,tv] <- smap_output$theta[which.max(smap_output$rho)] 
   
-# MVE    
+   
           # determine which library variables to include from the CCM analysis    
           ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
-          ccm <- ccm %>% filter(library==target_var[tv]) 
-          
-          ccm <- ddply(ccm, .(cat, offset), subset, rho==max(rho)) #Keep the variable with the maximum rho in each category*offset.
+          ccm <- ccm %>% filter(library==target_var[tv])
           ccm <- ccm[ccm$rho>(ccm$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
-          #remove specific category*offset combinations
-          #Third year river and hatchery variables
-          ccm<-ccm[!(ccm$cat=='flow' & ccm$offset==3),] 
           
-          ccm<-ccm[!(ccm$cat=='hatch' & ccm$offset==3),] 
-          #remove either fourth year (if rec_5), or fifth year (if rec4) river and hatchery variables
+          #remove either fourth year (if rec_5), or fifth year (if rec4) river variables
           a <- c(4,5) 
           ccm<-ccm[!(ccm$cat=='flow' & ccm$offset==(subset(a,a!=tv+3))),] 
-          ccm<-ccm[!(ccm$cat=='hatch' & ccm$offset==(subset(a,a!=tv+3))),] 
+
           #remove offsets greater than return year 
           ccm <- ccm[ccm$offset<=(tv+3),]
           
+# Multiview embedding - make multivariate embeddings of all possible combinations of the chosen variables from the CCM analysis. Always include the target variable and the number of effective spawners in each embedding. 
+          
           chosen_vars <- ccm$target
-
-# run the multiview embedding
-          MVE_block <- as.matrix(cbind(block["year"],block[target_var[tv]], block["eff_n"], block[chosen_vars]))  
+          num_vars <- length(chosen_vars) #number of predictor variables
+          MVE_block <- as.matrix(cbind(block["year"], block[target_var[tv]], block["eff_n"], block[chosen_vars]))  
           rownames(MVE_block) <- NULL #remove rownames to supress error 
           
-          
-          
-#trouble shooting the MVE code:          
-          
-          num_vars <- NCOL(MVE_block)
-          num_vars <- num_vars - 1 #because first col is time
-          max_lag <-3
+          max_lag <-1 #number of lags of each of the chosen_vars (set to 1 as we chose our own lags for each var)
           E <- 3
-          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)])#, max_lag = max_lag,t = MVE_block[, 1], lib = lib, tau = tau,restrict_to_lib = FALSE)
+          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = max_lag)#, max_lag = max_lag,t = MVE_block[, 1], lib = lib, tau = tau,restrict_to_lib = FALSE)
           
           embeddings_list <- t(combn(num_vars * max_lag, E, simplify = TRUE))
-          valid_embeddings_idx <- apply(embeddings_list %% max_lag, 1, 
-                                  function(x) {1 %in% x}) #Attempts to exclude embeddings without at least one coordinate with 0 time lag! I don't think this is working properly because when max-lag is set to zero or one it doesn't work. 
-          embeddings_list <- embeddings_list[valid_embeddings_idx, ]
-          my_embeddings <- lapply(seq_len(NROW(embeddings_list)),
-                            function(i) {embeddings_list[i, ]})
-          
-          
-          
-          MVE_mine <- MVE_function(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)        
+          embeddings_list <- embeddings_list + 2 #to include eff-n and the target variable in all embeddings
+          embeddings_list <- cbind(matrix(data=1,nrow=nrow(embeddings_list), ncol=1), matrix(data=2,nrow=nrow(embeddings_list), ncol=1), embeddings_list)
+        
+          #The original code that excludes embeddings without at least one coordinate with 0 time lag isn't working properly because when max-lag is set one and all variables are 0 lag, it returns that none of the embeddings are valid but they all should be. I'm going to ignore this because the number of effective spawners with zero lag will be included in all embeddings. 
+
+# make in-sample forecasts
+     in_results <- block_lnlp(lagged_block, lib = lib, pred = lib, method = "simplex", 
+                              columns = embeddings_list, 
+                              target_column = target_var[tv],
+                              stats_only = TRUE, first_column_time = TRUE)
+     
+     # rank embeddings
+     num_embeddings <- NROW(in_results)
+     k <- floor(sqrt(num_embeddings))
+     k <- as.numeric(k)
+     in_sample_ranking <- order(in_results$rho, decreasing = TRUE)
+     ranked_embeddings <- embeddings_list[in_sample_ranking,]
+     best_embeddings <- ranked_embeddings[1:k,]
+               
+# Save smap coefficients
+     out_results <- block_lnlp(lagged_block, lib = lib, pred = lib, 
+                               method = "s-map", 
+                               columns = embeddings_list,
+                               target_column = target_var[tv], 
+                               theta = c(0,0.5,1,2),
+                               stats_only = FALSE, first_column_time = TRUE,
+                               save_smap_coefficients = TRUE)
+     out_time <- out_results$model_output[[1]]$time
+     out_obs <- out_results$model_output[[1]]$obs
+     out_pred <- do.call(cbind, lapply(out_results$model_output, 
+                                       function(df) {df$pred}))
+     out_pred_var <- do.call(cbind, lapply(out_results$model_output, 
+                                           function(df) {df$pred_var}))         
+     
+     
+     
+     MVE_mine <- MVE_function(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)        
           
            MVE_orig <- multiview(MVE_block, lib = lib, pred = lib, E = best_E[i,tv], max_lag = 1, k = "sqrt", target_column = target_var[tv], stats_only = FALSE, save_lagged_block = TRUE, first_column_time = TRUE, silent = FALSE)# `k`  = 'sqrt' uses floor(sqrt(m)), where m is the number of embeddings
               # 'lagged_block' gives the block that includes lags constructed for multiview embedding
@@ -149,7 +166,8 @@ count(x$value)
 ```
 
 
-#Multiview Embedding test code
+#Multiview Embedding
+
 ```{R}
 data("block_3sp")
 testblock <- block_3sp[, c(2, 5, 8)] # use only the unlagged time series
