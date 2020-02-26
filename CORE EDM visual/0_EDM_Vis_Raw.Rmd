@@ -1,0 +1,472 @@
+---
+title: "0_EDM_Vis_Raw"
+author: "Kurt Ingeman"
+date: "2/11/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Examine raw and normalized series time data for samon recruitment and drivers
+
+
+```{r include=FALSE, echo=FALSE, warning=FALSE}
+
+rm(list = ls(all.names = TRUE)) 
+
+library(rEDM)
+library(tidyr)
+library(ggplot2)
+library(PNWColors)
+library(gridExtra)
+library(dplyr)
+library(reshape2)
+
+```
+
+
+```{R include=FALSE, warning=FALSE}
+
+load("Data/block_data.Rdata")
+
+dat <- do.call("rbind", block_data) # omg I can't believe how long it took me to find the right  
+
+```
+
+
+```{r include=FALSE, warning=FALSE}
+
+dat <-  dat %>% filter(year > 1956)
+
+annual <- dat %>% 
+  group_by(year) %>% 
+  mutate(rec.ann = sum(rec, na.rm = T)) %>% 
+  mutate(rec3.ann = sum(rec3, na.rm = T)) %>% 
+  mutate(rec4.ann = sum(rec4, na.rm = T)) %>% 
+  mutate(rec5.ann = sum(rec5, na.rm = T))
+
+norm_ann <- dat %>% 
+  group_by(year) %>% 
+  mutate(rec.ann.n = mean(rec_n, na.rm = T)) %>% 
+  mutate(rec3.ann.n = mean(rec3_n, na.rm = T)) %>% 
+  mutate(rec4.ann.n = mean(rec4_n, na.rm = T)) %>% 
+  mutate(rec5.ann.n = mean(rec5_n, na.rm = T))
+
+```
+
+### Total recruitment (summed across all MPGs)
+```{r echo=FALSE, warning=FALSE}
+
+# start with raw salmon numbers in a given brood year
+r <- ggplot(annual, aes(x = year, y = rec.ann)) +
+  geom_line(color = "black", size = .2) +
+  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
+  theme_bw() +
+  labs(x = "Year", y = "Total recruitment from brood year")
+
+print(r)
+
+# next with normalized salmon numbers in a given brood year
+r1 <- ggplot(norm_ann, aes(x = year, y = rec.ann.n)) +
+  geom_line(color = "black", size = .2) +
+  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
+  theme_bw() +
+  labs(x = "Year", y = " Mean of normalized recruitment")
+
+# the high values in later years (when total rec is not high) tells one that the normalized values of some stocks is skewing late
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+### Takeaways
+#### - Total recruitment (summed across all MPGs) follows well known env regimes 
+#### - Exhibits rough downward trend 
+</div>
+
+### Salmon Recruitment by MPG
+```{r echo=FALSE, warning=FALSE}
+df <- dat %>% 
+  select(mpg,stk,year,rec,rec3,rec4,rec5) %>% 
+  gather(cohort, number, rec:rec5)
+
+df_n <- dat %>% 
+  select(mpg,stk,year,rec_n, rec3_n, rec4_n, rec5_n) %>% 
+  gather(cohort, number, rec_n:rec5_n)
+
+df_ann <- df %>% 
+  group_by(year, cohort) %>% 
+  mutate(ann.total = sum(number, na.rm = T))
+
+df_ann_n <- df_n %>% 
+  group_by(year, cohort) %>% 
+  mutate(ann.mean = mean(number, na.rm = T))
+
+df_mpg <- df %>% 
+  group_by(year, mpg) %>% 
+  summarise(ann.total = sum(number, na.rm = T))
+
+df_c_m <- df %>% 
+  group_by(year, cohort, mpg) %>% 
+  summarise(ann.total = sum(number, na.rm = T))
+
+# df_cohort <- df %>% 
+#  group_by(year, Cohort, mpg) %>% 
+#  summarise(ann.total = sum(Number, na.rm = T))
+
+pal1 <- pnw_palette(name="Sunset2",type="discrete")
+pal2 <- pnw_palette(name="Shuksan2",type="discrete")
+pal3 <- pnw_palette(name="Starfish",type="discrete")
+pal4 <- pnw_palette(name="Bay",type="discrete")
+
+r2 <- ggplot(df_mpg, aes(x = year, y = ann.total)) +
+  geom_line(color = "black", size = .2) +
+#  geom_point(shape = 21, size = 1, fill = "white", colour = "black") +
+  theme_bw() +
+  labs(x = "Year", y = "Total recruitment from brood year") +
+  facet_wrap(~mpg, scales = "free", nrow = 2)
+print (r2)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - MPGs share common high/low years (eg 1998-1999) but of different magnitudes
+#### - But longer term trends vary among MPGS (eg Imnaha vs All Salmon 1960-1970)
+</div>
+
+### Salmon recruitment colored by MPG
+```{r echo=FALSE, warning=FALSE}
+r3 <- ggplot(df_mpg, aes(x = year, y = ann.total, color = mpg)) +
+  geom_line(size = .5) +
+  theme_bw() +
+  labs(x = "Year", y = "Total recruitment from brood year") +
+  scale_color_manual(values = pal4)
+print (r3)
+```
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - All MPGs declining overall
+#### - Imnaha and Upper Salmon historical strongholds
+#### - Increased synchrony/decreased portfolio of variability in given year (!)
+</div>
+
+### Total Recruitment and individual age cohorts
+```{r echo=FALSE, warning=FALSE}
+
+r4 <- ggplot(df_ann) +
+  geom_line(aes(x = year, y = ann.total, color = cohort),  size = .5) +
+  theme_bw() +
+  scale_color_manual(values = pal4) +
+  labs(x = "Year", y = "Total + cohort returns from same broood year")
+print (r4)
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - 5 year old returners a declining proportion even, esp in the good year of the mid-aughts
+</div>
+
+
+### Total Recruitment and individual age cohorts by MPG
+```{r echo=FALSE, warning=FALSE}
+r4a <- ggplot(df_c_m) +
+  geom_line(aes(x = year, y = ann.total, color = cohort),  size = .5) +
+  theme_bw() +
+  scale_color_manual(values = pal4) +
+  labs(x = "Year", y = "Total + cohort returns from same broood year") +
+  facet_wrap(~mpg, scales = "free")
+print (r4a)
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - Pattern of fewe age 5 not driven by any one MPG but fairly robust pattern
+</div>
+
+### Normalized recruitment for every stock in each MPG
+```{r echo=FALSE, warning=FALSE}
+norm_rec <- df_ann_n %>% filter(cohort == "rec_n")
+
+r5 <- ggplot(norm_rec, aes(x = year, y = number, group = interaction(mpg,stk), color = interaction(mpg,stk))) +
+  geom_line() +
+  facet_wrap(~mpg) +
+  theme_bw() +
+  theme(legend.position = "none") +
+    labs(x = "Year", y = "Total returns by individual stock")
+print (r5)
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - Stocks within MPG's largely covary (with exception of North Fork(!) in Upper Salmon)
+</div>
+
+
+### Plot total returns against aligned predictors; facet by predictor
+```{r echo=FALSE, warning=FALSE}
+
+predictors <- dat %>% 
+  select(mpg, stk, year, harvest, up48.apr.2, up48.nov.2, pdo.win.2, npgo.yr.2, hatch.spring.2, SRKW.JKLpods.4, pinn.CSLmales.4, pinn.SSLaerial.2, rec, rec3, rec4, rec5, rec_n) %>% 
+  gather(cohort, number, rec:rec5)
+
+predict_norm <- dat %>% 
+  select(mpg, stk, year, harvest, up48.apr.2, up48.nov.2, pdo.win.2, npgo.yr.2, hatch.spring.2, SRKW.JKLpods.4, pinn.CSLmales.4, pinn.SSLaerial.2, rec_n, rec3_n, rec4_n, rec5_n) %>% 
+  gather(cohort, number, rec_n:rec5_n)
+
+raws <- predictors %>% 
+  filter(cohort == "rec") %>% 
+  group_by(year) %>% 
+  summarise(mean.harvest = mean(harvest, na.rm = T), 
+            ann.total = sum(number, na.rm = T))
+
+r6 <- ggplot(raws) +
+  geom_line(color = "black", size = .2, 
+            aes(x = year, y = ann.total)) +
+    geom_point(aes(x = year, y = ann.total), 
+            shape = 21, size = 2.5, fill = "white", colour = "black")
+
+r6a <- r6 +
+    geom_line(aes(x = year, y = mean.harvest*50000), size = .5, color = "#a8554e") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~./50000, name = "Prop Harvested")) +
+  labs(y = "Total Recruitment", x = "Year") +
+  ggtitle("HARVEST") + 
+   theme(plot.title = element_text(vjust = -1, hjust = .5)) 
+
+
+
+norms <- predict_norm %>% 
+  filter(cohort == "rec_n") %>% 
+  group_by(year) %>% 
+  summarise(ann.mean = mean(number, na.rm = T), 
+            rec_norm = mean(number, na.rm = T),
+            CSL = mean(pinn.CSLmales.4, na.rm = T), 
+            SSL = mean(pinn.SSLaerial.2, na.rm = T), 
+            up.apr = mean(up48.apr.2, na.rm = T), 
+            up.nov = mean(up48.nov.2, na.rm = T), 
+            pdo = mean(pdo.win.2, na.rm = T), 
+            npgo = mean(npgo.yr.2, na.rm = T), 
+            hatch = mean(hatch.spring.2))
+
+r6n <- ggplot(norms) +
+  geom_line(color = "black", size = .2, 
+            aes(x = year, y = ann.mean)) +
+    geom_point(aes(x = year, y = ann.mean), 
+            shape = 21, size = 2.5, fill = "white", colour = "black")
+
+r6b <- r6n +
+    geom_line(aes(x = year, y = -pdo), size = .5, color = "#b0cbe7") +
+#    geom_line(aes(x = year, y = up.nov), size = .3, color = "brown") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~., name = "PDO (neg)")) +
+  labs(y = "Mean Norm Rec", x = "Year") +
+  ggtitle("ENV (PDO)") + 
+   theme(plot.title = element_text(vjust = -1, hjust = .5)) 
+
+r6c <- r6n +
+    geom_line(aes(x = year, y = hatch), size = .5, color = "#eba07e") +
+#    geom_line(aes(x = year, y = up.nov), size = .3, color = "brown") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~., name = "Hatchery releases")) +
+  labs(y = "Mean Norm Rec", x = "Year")  +
+  ggtitle("HATCHERY") + 
+   theme(plot.title = element_text(vjust = -1, hjust = .5)) 
+
+ 
+r6d <- r6n +
+    geom_line(aes(x = year, y = CSL), size = .5, color = "#5d74a5") +
+#    geom_line(aes(x = year, y = up.nov), size = .3, color = "brown") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~., name = "CSL")) +
+  labs(y = "Mean Norm Rec", x = "Year")  +
+  ggtitle("CSL") + 
+   theme(plot.title = element_text(vjust = -1, hjust = .5)) 
+
+
+grid.arrange(r6d, r6b, r6c, r6a)
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+##### Lots to unpack here, first note that salmon numbers are mean of normalized stocks (except for in the harvest panel, where it is Total Recruitment 
+#### - CSL at total population scale does not seem to be driving declines
+#### - Closely correlated with PDO but total population bufffered against early events?
+#### - Hatchery releases coincide with major declines consistent with replacement hypothesis
+#### - Proportion harvested has tracked population incredibly well ... until recently(!)
+</div>
+
+
+### Zoom into CSL to see any stronger individual MPG correlations
+```{r echo=FALSE, warning=FALSE}
+
+norms_mpg <- predict_norm %>% 
+  filter(cohort == "rec_n") %>% 
+  group_by(year, mpg) %>% 
+  summarise(ann.mean = mean(number, na.rm = T), 
+            rec_norm = mean(number, na.rm = T),
+            CSL = mean(pinn.CSLmales.4, na.rm = T), 
+            SSL = mean(pinn.SSLaerial.2, na.rm = T), 
+            up.apr = mean(up48.apr.2, na.rm = T), 
+            up.nov = mean(up48.nov.2, na.rm = T), 
+            pdo = mean(pdo.win.2, na.rm = T), 
+            npgo = mean(npgo.yr.2, na.rm = T), 
+            hatch = mean(hatch.spring.2, na.rm = T))
+
+r7 <- ggplot(norms_mpg) +
+  geom_line(color = "black", size = .2, 
+            aes(x = year, y = ann.mean)) +
+    geom_point(aes(x = year, y = ann.mean), 
+            shape = 21, size = 2.5, fill = "white", colour = "black") +
+  facet_wrap(~mpg, scales ="free")
+
+r7a <- r7 +
+    geom_line(aes(x = year, y = CSL), size = .3, color = "red") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~., name = "CSL")) +
+  labs(y = "Total Recruitment", x = "Year")
+print(r7a)
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - Nope
+</div>
+
+
+### Zoom into harvest to look at individual MPG correlations
+```{r echo=FALSE, warning=FALSE}
+
+harv_mpg <- predictors %>% 
+  filter(cohort == "rec") %>% 
+  filter(!mpg == "Lower Snake") %>% 
+  group_by(year, mpg) %>% 
+  summarise(mean.harvest = mean(harvest, na.rm = T), ann.total = sum(number, na.rm = T))
+
+
+r8 <- ggplot(harv_mpg) +
+  geom_line(color = "black", size = .2, 
+            aes(x = year, y = ann.total)) +
+    geom_point(aes(x = year, y = ann.total), 
+            shape = 21, size = 2.5, fill = "white", colour = "black") +
+    geom_line(aes(x = year, y = mean.harvest*10000), size = .3, color = "red") +
+  theme_bw() +
+  scale_y_continuous(sec.axis = sec_axis(~./10000, name = "Prop Harvested")) +
+  labs(y = "Total Recruitment", x = "Year") +
+  facet_wrap(~mpg, nrow = 2, scales = "free")
+
+print(r8)
+
+```
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - Seems that managers are unreasonably good at matching F to abundance, even at the MPG-level ... fishy
+#### - Need to dig up meta data on harvest proportion 
+</div>
+
+
+## Now, look at covariance among predictors
+```{r, echo=FALSE, warning=FALSE}
+cov <- predictors %>% 
+  filter(cohort == "rec") %>% 
+  select(-c(cohort, up48.apr.2, npgo.yr.2, pinn.SSLaerial.2))
+
+cov$year <- as.numeric(cov$year)
+
+c1 <- pairs(predictors[,3:10], lower.panel = NULL, pch = 21, size = .2)
+print(c1)
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - A little hard to see, maybe use corrplot for colors
+</div>
+
+### Correlation heatmap of selected variables 
+```{r echo=FALSE}
+
+cormat <- round(cor(cov[,3:10], use = "na.or.complete"),2)
+reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+dd <- as.dist((1-cormat)/2)
+hc <- hclust(dd)
+cormat <-cormat[hc$order, hc$order]
+}
+
+cormat <- reorder_cormat(cormat)
+
+mel_cor <- melt(cormat)
+
+
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+  
+upper_tri <- get_upper_tri(cormat)
+
+melted_cormat <- reshape2::melt(upper_tri, na.rm = TRUE)
+
+c2 <- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1), 
+    axis.text.y = element_text(size= 12))+
+ coord_fixed()
+
+c2 + 
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_x_discrete(labels = c("PDO","Harvest", "Recruits", "Upwelling", "SRKW", "Hatcheries", "Year", "CSL")) +
+  scale_y_discrete(labels = c("PDO","Harvest", "Recruits", "Upwelling", "SRKW", "Hatcheries", "Year", "CSL"))
+
+```
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+#### - Strong positive correlations: Year X CSL, Hatcheries X CSL, Hatcheries X SRKW (!) 
+#### - Strong negative correlation: PDO X CSL, PDO X Recruits
+#### - Weak but notable: Recruits are positively linked to CSL but negative to SRKW
+</div>
+
+### Time to follow up simple correlations with some CCM results ...
+<br><br><br><br>
