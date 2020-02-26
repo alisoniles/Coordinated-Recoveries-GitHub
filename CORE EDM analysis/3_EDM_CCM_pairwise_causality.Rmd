@@ -50,7 +50,7 @@ mpg <- c()
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
   
-  for(u in c(1,3,4,5)){
+  for(u in 1){ #c(1,3,4,5)){
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
   
@@ -142,7 +142,12 @@ ccm <-  ccm(data, lib = lib, E = as.numeric(as.character(CCM_outputlist$E[i])), 
 saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""), compress = FALSE)
 
 
+```
+
+```{R}
 #Figures
+
+#load(paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""))
 
 # sort output table by offset then category
 d <-  CCM_outputlist[order(CCM_outputlist$offset),]
@@ -158,7 +163,7 @@ labels <-  rbind("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", 
 phys_scm <- cbind(values,breaks,labels)
 colnames(phys_scm) <- c("values","breaks","labels")
 
-values <-  rbind("eff_n"='#ffe119',  "rec3_n"='#bfef45', "rec4_n"='#bfef45', "harv_n"='#3cb44b', "spring"='#800000', "summer"='#e6194b', "total"='#f58231', "CSLbonn"='#ffe119', "CSLhaulout"='#bfef45', "CSLmales"='#3cb44b', "CSLpup"='#e6194b',  "HSaerial"='#469990', "HSbonn"='#42d4f4', "SSLaerial"='#000075', "SSLbonn"='#911eb4', "SSLrookORraw"='#f032e6', "TOTbonn"='#800000',  "CPUE"='#f58231', "ssb"='#ffe119', "Jpod"='#bfef45',"Kpod"='#3cb44b', "Lpod"='#469990', "KLpods"='#42d4f4', "JKLpods"='#4363d8', "JKLdeaths"='#000075', "JKLbirths"='#911eb4')
+values <-  rbind("eff_n"='#ffe119',  "rec3_n"='#bfef45', "rec4_n"='#3cb44b', "harv_n"='#469990', "spring"='#800000', "summer"='#e6194b', "total"='#f58231', "CSLbonn"='#ffe119', "CSLhaulout"='#bfef45', "CSLmales"='#3cb44b', "CSLpup"='#e6194b',  "HSaerial"='#469990', "HSbonn"='#42d4f4', "SSLaerial"='#000075', "SSLbonn"='#911eb4', "SSLrookORraw"='#f032e6', "TOTbonn"='#800000',  "CPUE"='#f58231', "ssb"='#ffe119', "Jpod"='#bfef45',"Kpod"='#3cb44b', "Lpod"='#469990', "KLpods"='#42d4f4', "JKLpods"='#4363d8', "JKLdeaths"='#000075', "JKLbirths"='#911eb4')
 breaks  <- rbind("eff_n",  "rec3_n", "rec4_n", "harv_n", "spring", "summer", "total", "CSLbonn", "CSLhaulout", "CSLmales", "CSLpup", "HSaerial", "HSbonn", "SSLaerial", "SSLbonn", "SSLrookORraw", "TOTbonn", "CPUE", "ssb", "Jpod", "Kpod", "Lpod", "KLpods", "JKLpods", "JKLdeaths",     "JKLbirths")
 labels <-  rbind("Spawners",  "3 yr old recruits", "4 year old recruits", "Harvest", "Hatchery spring", "Hatchery summer", "Hatchery total", "CSL Bonneville Dam", "CSL haulout", "CSL males", "CSL pups","HS aerial survey", "HS Bonneville Dam", "SSL aerial survey", "SSL Bonneville Dam", "SSL rookery OR raw", "TOT Bonneville Dam", "Smelt CPUE", "Smelt ssb", "SRKW J pod", "SRKW K pod", "SRKW L pod", "SRKW KL pods", "SRKW JKL pods", "SRKW deaths", "SRKW births")
 biol_scm <- cbind(values,breaks,labels)
@@ -168,16 +173,19 @@ colnames(biol_scm) <- c("values","breaks","labels")
 p1 <- ggplot(phys_d, aes(x=offset, y=rho)) +
     geom_line(aes(col=subcat)) +
     geom_point(aes(col=subcat, shape=(phys_d$rho>phys_d$'95p_crit'))) +
+    geom_hline(aes(yintercept=min(phys_d$'95p_crit')), colour="#990000", linetype="dashed") + #horizontal like for rho sig diff from zero
     theme_bw() + 
     guides(col = guide_legend(ncol=1)) +
     labs(title=paste(mpgname, "MPG", sep=" "), subtitle = "Multivariate CCM with spawners included in the attractor reconstruction", x="Environmental variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
     scale_color_manual(values = phys_scm[,1], name="Time series", breaks = phys_scm[,2], labels = phys_scm[,3]) +
   scale_shape_manual(name=expression(paste("95% ", {rho})),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
 p2 <- p1 + facet_grid(cat ~ library)  
+print(p2)
 ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_physical_covariates_",mpgname,".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 
 #Plot of CCM of biological covariates
 p1 <- ggplot(biol_d, aes(x=offset, y=rho)) +
+    geom_vline(aes(xintercept=0)) +
     geom_line(aes(col=subcat)) +
     geom_point(aes(col=subcat, shape=(biol_d$rho>biol_d$'95p_crit'))) +
     theme_bw() + 
