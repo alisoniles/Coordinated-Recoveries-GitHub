@@ -37,9 +37,19 @@ dat <-  hatch_models
 
 pal=pnw_palette("Shuksan2",5, type = "discrete")
 
+p.viol <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
+  geom_violin() + scale_fill_manual(values = pal) + 
+  facet_wrap(~subcat)
+
+ggsave(filename =         
+ paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Presentation/Viol_Hatchery_coeffs_IM.pdf", sep = ""), plot = p.viol, width = 7, height = 9.5, units = "in") 
+
 p <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
   geom_boxplot() + scale_fill_manual(values = pal) + 
   facet_wrap(~subcat)
+
+ggsave(filename =         
+ paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Presentation/BOX_Hatchery_coeffs_IM.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in") 
 
 p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
   geom_hline(yintercept = 0, color = 1) +
@@ -50,7 +60,6 @@ p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) +
 
 ```
 
-##
 
 
 #multivariate model to look at interaction coeffs of hatchery output on wild chinook salmon
@@ -58,6 +67,7 @@ p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) +
 ```{R}
 
 load("Data/block_data.Rdata")  
+
 mpg <- c() 
   for(stk in 1:length(block_data)) { 
       mpg[stk] <- block_data[[stk]]$mpg[1]

@@ -1,9 +1,11 @@
 ---
-title: "F1_EDM_Interaction_Coeffs"
+title: "3_EDM_Vis_MPG"
 author: "Kurt Ingeman"
-date: "2/4/2020"
+date: "2/10/2020"
 output: html_document
 ---
+
+
 
 ```{r}
 rm(list = ls(all.names = TRUE)) 
@@ -11,59 +13,17 @@ rm(list = ls(all.names = TRUE))
 library(rEDM)
 library(tidyr)
 library(ggplot2)
-```
-
-```{r}
-# devtools::install_github("jakelawlor/PNWColors")
 library(PNWColors)
-```
-
-
-## Load data object from Alison's 5_EDM_Multivariate... that contains interaction coefficients for all top models including hatchery vars right now just for the Upper Salmon MPG?
-```{r}
-hatch_models <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/hatch_models.rds")
-```
-
-
-## Filter for the right offset
-```{r}
-dat <-  hatch_models 
-```
-
-
-## Boxplot 
-
-```{r}
 
 pal=pnw_palette("Shuksan2", 5, type = "discrete")
-
-p <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
-  geom_boxplot() + scale_fill_manual(values = pal) + 
-  facet_wrap(~subcat)
-
-p1 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
-  geom_hline(yintercept = 0, color = 1) +
-  geom_jitter(position=position_jitter(width=0.3, height=0.2), 
-                aes(colour = offset), alpha=0.8) + scale_color_manual(values = pal) +
-  facet_wrap(~subcat)
-
-p2 <- ggplot(dat, aes(x=offset, y=coeff, fill=offset)) + 
-  geom_violin(trim = FALSE) + scale_fill_manual(values = pal) + 
-  facet_wrap(~subcat)
-
-
-# ggsave(p2, "~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Hatch_UpperSalmon.pdf") 
-
 ```
 
 
-
-
-#multivariate model to look at interaction coeffs of hatchery output on wild chinook salmon
+#multivariate model to look at interaction strengths including MPGs
 
 ```{R}
 
-load("Data/block_data.Rdata") 
+load("Data/block_data.Rdata")  
 
 mpg <- c() 
   for(stk in 1:length(block_data)) { 
@@ -86,7 +46,7 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
     keys <-c(names(data[[1]]))
     merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
     merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$rec4_n) & is.finite(merged_data$eff_n) & is.finite(merged_data$hatch.spring.5)
+    valid <-  is.finite(merged_data$rec4_n) & is.finite(merged_data$eff_n) 
     block <- merged_data[valid,]  
     
     # list the begin and end points of each stock and the break points within stocks
@@ -155,71 +115,68 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             
              d <- separate(d, var, into=c("var","spp","scale", "offset"), extra = "merge", sep = "\\.")  
             d$offset <- d$offset %>% replace_na(0) #replace NAs for the target variable and offset values
+            str(d)
  
 #how do variables affect recruitment of wild salmon 
-            df <- d %>% filter(!var %in% c("eff", "rec4"))
+#            df <- d %>% filter(!var %in% c("eff", "rec4"))
             
-             p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(spp, scale), colour = spp)) +
-                #geom_point() +
-                geom_line()+
-                theme_bw() + 
-                scale_color_manual(values = pal) +
-                labs( subtitle = paste("Effect of pinnipeds on", target_var, "in", mpgname,"MPG",sep = " "), x="year", y="interaction coefficient") 
-            p1 <- p + facet_grid(spp~scale)
-
-    
-           p3 <- ggplot(df, aes(x=offset, y=coeff)) + 
-  geom_boxplot(aes(fill = spp)) + 
-              scale_fill_manual(values = pal) +
-              geom_hline(yintercept = 0, color = 1) +
-              facet_grid(spp~scale)
-            
-            p4 <- ggplot(df, aes(x=offset, y=coeff)) + 
-  geom_hline(yintercept = 0, color = 1) +
-  geom_violin(aes(fill = spp), scale = "width", trim = FALSE) +
-                scale_fill_manual(values = pal) +
-               facet_grid(spp~scale)
+write.csv(d, paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/IS_pinn_in_", mpgname, "MPG.csv", sep = ""))
             
             
-              haul <- df %>% 
-                filter(var == "pinn") %>% 
-                filter(spp == "CSL") %>% 
-                filter(scale == "aerial") %>% 
-                group_by(yr) %>% 
-                summarise(mean.coeff = mean(coeff))
-                
-              
-               p5 <- ggplot(haul, aes(x=yr, y=mean.coeff)) +
-                #geom_point() +
-                geom_line()+
-                theme_bw() + 
-                xlim(c(1990, 2010)) +
-                scale_color_manual(values = pal) +
-                labs( subtitle = paste("CSL_Haul_on", mpgname,"MPG",sep = " "), x="year", y="interaction coefficient")
-                 
-
-           
-            
-          
-           ggsave(filename =  paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Pinnipeds/IS_Pinn_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
-   
-           ggsave(filename =         
- paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Pinnipeds/FACET_IS_Pinn_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
-
-                       ggsave(filename =         
- paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Pinnipeds/BOX_IS_Pinn_coeff_on_"  ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p3, width = 7, height = 9.5, units = "in") 
-            
-                        ggsave(filename =         
- paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Pinnipeds/VIOL_IS_Pinn_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p4, width = 7, height = 9.5, units = "in") 
-                  
- 
-                        ggsave(filename =         
- paste("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Figs/IS_Pinnipeds/Haul_IS_Pinn_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p5, width = 2.5, height = 2, units = "in") 
-                  
 }
+ 
 
-## Next: harvets offset
-## Add var for category of driver and color/facet by category
+
+
+```
+
+
+```{r}
+
+# Call in separate MPG CCM output 
+
+IM <- read.csv("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/IS_pinn_inImnahaMPG.csv")
+
+MF <- read.csv("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/IS_pinn_inMiddle Fork SalmonMPG.csv")
+
+SF <- read.csv("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/IS_pinn_inSouth Fork SalmonMPG.csv")
+
+UP <- read.csv("~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/IS_pinn_inUpper SalmonMPG.csv")
+
+# Give a variable for subbasin
+
+IM$mpg <- "IM"
+MF$mpg <- "MF"
+SF$mpg <- "SF"
+UP$mpg <- "UP"
+
+# bind rows
+pinn <- rbind.data.frame(IM, MF, SF, UP)
+
+```
+
+
+```{r}
+
+# plot with facets by MPG
+
+pal.3 = pnw_palette("Shuksan2", 3, type = "discrete")
+pal.5 = pnw_palette("Shuksan2", 5, type = "discrete")
+
+pinn <- pinn %>% filter(!is.na(spp)) 
+
+p5 <- ggplot(pinn, aes(x=spp, y=coeff, fill=spp)) + 
+  geom_violin(trim = FALSE) +
+  scale_fill_manual(values = pal.3) +
+  geom_hline(yintercept = 0,  linetype="dashed") +
+    facet_wrap(~mpg, nrow = 1)
+  
+  
+
+
+p6 <- ggplot(pinn, aes(x=spp, y=coeff, fill=spp)) + 
+  geom_violin(trim = FALSE) +
+  facet_wrap(~mpg, nrow = 1) 
 
 
 ```
