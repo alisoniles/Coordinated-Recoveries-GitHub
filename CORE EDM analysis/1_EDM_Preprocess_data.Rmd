@@ -185,7 +185,7 @@ make_block <- function(stock_df, env_data, esu_data)
         hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total")
         hatch_data <- normalize(esu_data[, hatch_names]) 
         
-        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
+        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.CSLmales6", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
         pinn_data <- normalize(esu_data[, pinn_names]) 
         
         CSL_pups_data <- normalize(esu_data[, "pinn.CSLpup"])
@@ -228,7 +228,7 @@ make_block <- function(stock_df, env_data, esu_data)
         }
         
         # offset pinniped data from 2, 4 and 5 years after brood year - assuming sea lions eat smolts and returns
-        for(i in c(2,4,5)) { 
+        for(i in c(2:5)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -238,14 +238,14 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
   
-        # offset CA sealion pup data from 2, 4 and 5 years after brood year. Add 3 years to each as only 3+ year old sea lion males swim up to Oregon
-        for(i in c(5,7,8)) { 
+        # offset CA sealion pup data from 2 to 5 years after brood year. Add 6 years to each as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
+        for(i in c(8:11)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(CSL_pups_data)))
               df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data ]
-              df.colnames <- paste("pinn.CSLpup", (i-3), sep = ".")
+              df.colnames <- paste("pinn.CSLpup", (i-6), sep = ".")
               stock_df[, df.colnames] <- df
         }
         
