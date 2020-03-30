@@ -1,0 +1,255 @@
+---
+title: "5_Vis_Spatial"
+author: "Kurt Ingeman"
+date: "3/11/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+rm(list = ls(all.names = TRUE)) 
+
+library(sf)
+library(spData)
+library(ggplot2)
+library(mapview)
+library(tidyr)
+library(dplyr)
+library(leaflet)
+library(measurements)
+library(readr)
+library(maps)
+library(PNWColors)
+library(maptools)
+library(forcats)
+library(viridis)
+library(cowplot)
+library(rcartocolor)
+library(USAboundaries)
+
+```
+
+
+```{r}
+# load shapefiles
+shpSTK <- 
+  read_sf("Data/Spatial/Chinook_Evolutionarily_Significant_Units.shp") %>% 
+  st_transform(crs = 26768)
+
+# ensure it is an sf object so dplyr functions 
+class(shpSTK)
+
+# get basic data about the coordinate system
+st_crs(shpSTK)
+
+# view with interactive mapping function
+mapview(shpSTK)
+
+```
+
+```{r}
+# I want to filter out stocks not in SRSS and label be MPG = add new variables
+
+# call in the list of stock names in each MPG
+mpgSTK <- read.csv("Data/mpgSTK.csv") 
+
+# make list for filtering 
+listIM <- 
+  c("Catherine", "Grande", "Imnaha", "Lostine", "Minam", "Wallowa", "Wenaha")
+
+listLS <- 
+  c("Tucannon")
+
+listMF <- 
+  c("Bear", "Big Creek", "Camas", "Chamberlain", "Loon", "Marsh", "Middle", "Sulphur")
+
+listSF <- 
+  c("East Fork South Fork", "Secesh", "South Fork Salmon River mainstem")
+
+listUP <- 
+  c("East Fork Salmon River", "Lemhi","Panther","North Fork Salmon", "Pahsimeroi", "Salmon River lower mainstem", "Salmon River upper mainstem", "Valley", "Yankee")
+
+shpSTK <- 
+  shpSTK %>% 
+  mutate(mpg = case_when(grepl(paste(listIM,collapse = "|"), POP_NAME) ~ "Imnaha", 
+                         grepl(paste(listLS,collapse = "|"), POP_NAME) ~ "Lower Salmon", 
+                         grepl(paste(listMF,collapse = "|"), POP_NAME) ~ "Middle Fork", 
+                         grepl(paste(listSF,collapse = "|"), POP_NAME) ~ "South Fork", 
+                         grepl(paste(listUP,collapse = "|"), POP_NAME) ~ "Upper Salmon"))
+  
+srssSTK <- 
+  shpSTK %>% 
+  filter(!is.na(mpg))
+
+
+ggplot() + 
+  geom_polygon(data = PNW, 
+               aes(x=long, y = lat, group = group), 
+               fill="grey", alpha=0.3) +
+  geom_sf(data = srssSTK, fill = "black") +
+#  coord_sf(xlim=c(-125, -110), ylim = c(40, 50)) +
+  theme_void() +
+  theme(
+    panel.grid.major = element_line(colour = 'transparent'))
+ 
+# mapview(srssSTK)
+
+```
+```{r}
+library('ggplot2')
+library('maps')
+
+map <- map_data('state')
+PNW <- subset(map, region %in% c("oregon", "washington", "idaho"))
+
+ggplot() + 
+  theme_void() +
+  geom_polygon(data = PNW, 
+               aes(x=long, y = lat, group = group), 
+               fill="grey", alpha=0.3)
+```
+
+
+
+```{r}
+# my favorote pal
+pal=pnw_palette("Shuksan2",5, type = "discrete")
+
+# reorder levels for color
+srssSTK$mpg <- factor(srssSTK$mpg, levels = c("Lower Salmon", "Imnaha", "South Fork", "Middle Fork", "Upper Salmon"))
+
+# create subset for labels of some stocks only
+srssSUB <- srssSTK %>% 
+  filter(OBJECTID %in% c(64,9,60,10,22))
+
+sp1 <- ggplot() + 
+  borders("state") +
+  geom_sf(data = srssSTK, aes(fill = mpg)) +
+# geom_sf(data = hyd250, color = "lightblue") +
+  coord_sf(xlim=c(-118.8, -113), ylim = c(43.8, 46.5)) +
+  geom_sf_label(data = srssSUB, aes(label = mpg)) +
+  scale_fill_manual(values = rev(pal)) +
+  theme_bw()
+
+sp_inset = ggdraw() +
+  draw_plot(sp1) +
+  draw_plot(sp0, x = 0.65, y = 0.65, width = 0.3, height = 0.3)
+
+sp_inset
+  
+ggsave(filename =         
+ "Figs/Manuscript/FigA.pdf", plot = sp1, width = 9, height = 6, units = "in") 
+
+## Make an inset map of PNW states with grey all
+  
+```
+
+### Merge summary stats at stock level and produce chloropleths
+
+```{r}
+
+load("Data/statsSTK.Rdata")
+
+srssSTK$POP_NAME %in% statsSTK$stk
+statsSTK$stk %in% srssSTK$POP_NAME
+# missing Imnaha, Salmon River Upper Mainstem above Redfish Lake, Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers 
+
+srssSTK <- srssSTK %>% 
+  mutate(POP_NAME = fct_recode(POP_NAME,
+   "Imnaha River" = "Imnaha River mainstem", 
+    "Grande Ronde Upper Mainstem" = "Grande Ronde River upper mainstem", 
+    "East Fork South Fork" = "East Fork South Fork Salmon River",
+    "Salmon River Lower Mainstem below Redfish Lake" = "Salmon River lower mainstem below Redfish Lake", 
+   "Salmon River Upper Mainstem above Redfish Lake" = "Salmon River upper mainstem above Redfish Lake",
+    "South Fork Salmon River Mainstem" = "South Fork Salmon River mainstem"
+    ))
+
+srssSTK <- 
+  full_join(srssSTK, statsSTK, by = c("POP_NAME" = "stk")) %>% 
+  drop_na()
+  
+head(srssSTK)
+
+ggplot() +
+  borders("state") +
+  geom_sf(data = srssSTK, aes(fill = totSpawn)) +
+  coord_sf(xlim=c(-118.8, -113), ylim = c(43.8, 46.5)) +
+  scale_fill_viridis() +
+  theme(legend.position="none") +
+  theme_bw()
+
+```
+
+
+### Add river lines
+```{r}
+# use function to download flowlines
+
+library(httr)
+
+get_flowlines <- function(streamorder, mapRange){
+  postURL <- "https://cida.usgs.gov/nwc/geoserver/nhdplus/ows"
+  
+  filterXML <- paste0('<?xml version="1.0"?>',
+                '<wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:gml="http://www.opengis.net/gml" service="WFS" version="1.1.0" outputFormat="shape-zip" xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd">',
+                  '<wfs:Query xmlns:feature="https://gov.usgs.cida/nhdplus" typeName="feature:nhdflowline_network" srsName="EPSG:4326">',
+                    '<ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">',
+                      '<ogc:And>',
+                        '<ogc:PropertyIsGreaterThan>',
+                          '<ogc:PropertyName>streamorde</ogc:PropertyName>',
+                          '<ogc:Literal>',streamorder-1,'</ogc:Literal>',
+                        '</ogc:PropertyIsGreaterThan>',
+                        '<ogc:BBOX>',
+                          '<ogc:PropertyName>the_geom</ogc:PropertyName>',
+                          '<gml:Envelope>',
+                            '<gml:lowerCorner>',mapRange[3]," ",mapRange[1],'</gml:lowerCorner>',
+                            '<gml:upperCorner>',mapRange[4]," ",mapRange[2],'</gml:upperCorner>',
+                          '</gml:Envelope>',
+                        '</ogc:BBOX>',
+                      '</ogc:And>',
+                    '</ogc:Filter>',
+                  '</wfs:Query>',
+                '</wfs:GetFeature>')
+
+  destination = file.path(tempdir(),"nhdflowline_network.zip")
+  file <- POST(postURL, body = filterXML, write_disk(destination, overwrite=T))
+
+  filePath <- tempdir()
+  print("unzipping...")
+  unzip(destination, exdir = filePath)
+  
+  flowLines <- st_read(filePath, layer = 'nhdflowline_network')
+
+  return(flowLines)
+}
+
+
+library(USAboundaries) # STATES/counties data
+library(ggrepel) # for labeling
+
+# set the state and county names of interest
+state_names <- c("california")
+co_names <- c("Butte", "Placer", "El Dorado", "Nevada", "Yuba", "Sierra", "Plumas")
+
+# get STATE data
+CA<-us_states(resolution = "high", states = state_names) %>%
+  st_transform(crs = 4326)
+
+# get COUNTY data for a given state
+counties_spec <- us_counties(resolution = "low", states=state_names) %>% # use list of state(s) here
+  filter(name %in% co_names) %>% # filter to just the counties we want
+  mutate(lon=map_dbl(geometry, ~st_centroid(.x)[[1]]), # add centroid values for labels
+         lat=map_dbl(geometry, ~st_centroid(.x)[[2]])) # add centroid values for labels
+
+# get range of lat/longs from counties for mapping and river function
+mapRange1 <- c(range(st_coordinates(counties_spec)[,1]),range(st_coordinates(counties_spec)[,2]))
+
+```
+
+
+```{r}
+
+
+```
+
