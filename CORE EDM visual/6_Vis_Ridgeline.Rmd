@@ -1,0 +1,42 @@
+---
+title: "6_Vis_Ridgeline"
+author: "Kurt Ingeman"
+date: "3/30/2020"
+output: html_document
+---
+
+```{r}
+
+library(ggridges)
+library(ggplot2)
+library(viridis)
+library(hrbrthemes)
+library(dplyr)
+
+```
+
+```{r}
+str(lincoln_weather)
+```
+
+
+# Plot
+```{r}
+
+ggplot(lincoln_weather, aes(x = `Max Temperature [F]`, y = `Month`, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Temperatures in Lincoln NE in 2016') +
+  theme_ipsum() +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      strip.text.x = element_text(size = 8)
+    )
+
+
+
+```
+
+
+

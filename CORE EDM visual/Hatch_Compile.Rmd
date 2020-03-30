@@ -1,0 +1,51 @@
+---
+title: "0_EDM_VIS_Hatch_Compile"
+author: "Kurt Ingeman"
+date: "2/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+## 
+rm(list = ls(all.names = TRUE)) 
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+hat <- read.csv("Data/coastwide_hatchery.csv")
+str(hat)
+
+hat.year <- hat %>% 
+  group_by(last_release_date_year) %>% 
+  summarise(ta = sum(tagged_adclipped), 
+            tu = sum(tagged_unclipped),
+            ua = sum(untagged_adclipped),
+            uu = sum (untagged_unclipped), 
+            total = ta + tu + ua + uu)
+
+
+write.csv(hat.year, "Data/Coastwide_hatchery_totals.csv")
+```
+
+```{r}
+snak <- read.csv("Data/snake_hatchery.csv")
+str(snak)
+
+snak.year <- snak %>% 
+  group_by(year) %>% 
+  summarise(sta = sum(ta), 
+            stu = sum(tu),
+            sua = sum(ua),
+            suu = sum (uu), 
+            total = sta + stu + sua + suu)
+
+
+write.csv(snak.year, "Data/Snake_hatchery_totals.csv")
+```

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?><metadata>
+    <idinfo>
+        <descript>
+            <abstract>These data represent the final delineated population boundaries associated with chinook salmon Evolutionarily Significant Units (ESU) for the four recovery domains in the Pacific Northwest. These boundaries were designated by federally-mandated Technical Recovery Teams (TRTs) each covering a recovery domain; Puget Sound, Willamette-Lower Columbia, Interior Columbia, and the Oregon/Northern California Coast.
+These data represent the geographic extent of individual listed ESU salmonid populations in the Pacific Northwest, typically delineated by the extent of their spawning areas. Determination of spawning extent is dependent on the quality and scale of historic and current surveys and studies; quality and availability of this may vary by TRT region and may be more fully described in the domain-specific metadata narrative citations. Identifying independent populations is a key component of identifying current and future extinction risk, as well as patterns of diversity within and between ESUs. Understanding the extent of historically independent populations, along with abundance and life history information can provide a framework to compare historic and present status and to study limiting factor impacts. These data may be helpful in identifying and prioritizing specific recovery actions within ESUs (e.g., barrier removal). These data may differ substantially from other depictions/data of salmonid populations produced by other entities (e.g., other Federal, tribal, state, and local agencies). These data are intended to be used by federal, tribal, state, and local recovery planners, other co-managers, NGOs and the general public for any activities related to anadromous salmonid recovery and conservation. These data are intended to assist users, but do not constitute the legal description of salmon and steelhead populations listed under the ESA. Users in need of a legal description should instead consult the agency. Every effort has been made to ensure that these data are as accurate as possible.
+
+For details regarding the Interior Columbia TRT's methods for delineating independent salmonid populations, and additional products, please see: http://www.nwfsc.noaa.gov/trt/index.cfm FULL FGDC METADATA</abstract>
+            <purpose>Delineated chinook salmon population boundaries associates with ESUs</purpose>
+        </descript>
+        <keywords>
+            <theme>
+                <themekt>None</themekt>
+                <themekey>IDFG</themekey>
+                <themekey>Idaho Fish and Game</themekey>
+                <themekey>Chinook salmon</themekey>
+                <themekey>fish management</themekey>
+                <themekey>ESUs</themekey>
+                <themekey>angling</themekey>
+            </theme>
+        </keywords>
+        <accconst>None</accconst>
+        <useconst>These data are intended to support salmonid recovery efforts in the Pacific Northwest, any decisions made from these data should be validated with the NMFS Northwest Regional Office.The data represented in this file is true and accurate to the best of our knowledge but is considered a best representation only.  Users must assume responsibility in determining the usability of this data for their purposes. Idaho Fish and Game does not assume liability.  No warranty expressed or implied is made by Idaho Fish and Game regarding the utility of the data on any other system, nor shall the act of distribution constitute such warranty.</useconst>
+        <datacred>NMFS Northwest Regional Office - Salmonid Technical Recovery Team</datacred>
+    </idinfo>
+    <metainfo>
+        <metstdn>FGDC Content Standard for Digital Geospatial Metadata</metstdn>
+        <metstdv>FGDC-STD-001-1998</metstdv>
+        <mettc>local time</mettc>
+    </metainfo>
+</metadata>

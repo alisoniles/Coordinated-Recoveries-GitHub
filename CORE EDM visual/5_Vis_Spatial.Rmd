@@ -1,0 +1,260 @@
+---
+title: "5_Vis_Spatial"
+author: "Kurt Ingeman"
+date: "3/11/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+rm(list = ls(all.names = TRUE)) 
+
+library(sf)
+library(spData)
+library(ggplot2)
+library(mapview)
+library(tidyr)
+library(dplyr)
+library(leaflet)
+library(measurements)
+library(readr)
+library(maps)
+library(PNWColors)
+library(maptools)
+library(forcats)
+library(viridis)
+library(cowplot)
+library(rcartocolor)
+library(USAboundaries)
+
+```
+
+
+```{r}
+# load shapefiles
+shpSTK <- 
+  read_sf("Data/Spatial/Chinook_Evolutionarily_Significant_Units.shp") %>% 
+  st_transform(crs = 26768)
+
+# ensure it is an sf object so dplyr functions 
+class(shpSTK)
+
+# get basic data about the coordinate system
+st_crs(shpSTK)
+
+# view with interactive mapping function
+mapview(shpSTK)
+
+```
+
+```{r}
+# I want to filter out stocks not in SRSS and label be MPG = add new variables
+
+# call in the list of stock names in each MPG
+mpgSTK <- read.csv("Data/mpgSTK.csv") 
+
+# make list for filtering 
+listIM <- 
+  c("Catherine", "Grande", "Imnaha", "Lostine", "Minam", "Wallowa", "Wenaha")
+
+listLS <- 
+  c("Tucannon")
+
+listMF <- 
+  c("Bear", "Big Creek", "Camas", "Chamberlain", "Loon", "Marsh", "Middle", "Sulphur")
+
+listSF <- 
+  c("East Fork South Fork", "Secesh", "South Fork Salmon River mainstem")
+
+listUP <- 
+  c("East Fork Salmon River", "Lemhi","Panther","North Fork Salmon", "Pahsimeroi", "Salmon River lower mainstem", "Salmon River upper mainstem", "Valley", "Yankee")
+
+shpSTK <- 
+  shpSTK %>% 
+  mutate(mpg = case_when(grepl(paste(listIM,collapse = "|"), POP_NAME) ~ "Imnaha", 
+                         grepl(paste(listLS,collapse = "|"), POP_NAME) ~ "Lower Salmon", 
+                         grepl(paste(listMF,collapse = "|"), POP_NAME) ~ "Middle Fork", 
+                         grepl(paste(listSF,collapse = "|"), POP_NAME) ~ "South Fork", 
+                         grepl(paste(listUP,collapse = "|"), POP_NAME) ~ "Upper Salmon"))
+  
+srssSTK <- 
+  shpSTK %>% 
+  filter(!is.na(mpg))
+```
+
+
+
+
+```{r}
+library('ggplot2')
+library('maps')
+
+map <- map_data('state')
+PNW <- subset(map, region %in% c("oregon", "washington", "idaho"))
+
+# Make inset location (states) map using polygon
+ggplot() + 
+  theme_void() +
+  geom_polygon(data = PNW, 
+               aes(x=long, y = lat, group = group), 
+               fill="grey", alpha=0.3)
+
+# Make SRSS location map for inset
+ggplot() + 
+  geom_sf(data = srssSTK, fill = "black") +
+  theme_void() +
+  theme(
+    panel.grid.major = element_line(colour = 'transparent'))
+
+# Alas, not compatible with geom_sf ... switch to state border using geom_sf
+```
+
+## Map a location inset map with state borders using sf
+```{r}
+
+states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+head(states)
+
+pnw <- cbind(states, st_coordinates(st_centroid(states))) %>%
+  filter(ID == "oregon" | ID == "washington" |ID == "idaho")
+
+
+sp0 <- ggplot() +
+  geom_sf(data = pnw, fill = "lightgray") + 
+  geom_sf(data = srssSTK, fill = "black") +
+  coord_sf(xlim=c(-125, -111), ylim = c(42, 49)) +
+  theme_void() +
+  theme(
+    panel.grid.major = element_line(colour = 'transparent'), 
+    panel.border = element_rect(colour = "black", fill = NA, size=1),
+    plot.background = element_rect(fill = "white"))
+
+
+```
+
+
+```{r}
+# my favorote pal
+pal=pnw_palette("Shuksan2",5, type = "discrete")
+
+# reorder levels for color
+srssSTK$mpg <- factor(srssSTK$mpg, levels = c("Lower Salmon", "Imnaha", "South Fork", "Middle Fork", "Upper Salmon"))
+
+# create subset for labels of some stocks only
+srssSUB <- srssSTK %>% 
+  filter(OBJECTID %in% c(64,9,60,10,22))
+
+
+sp1 = ggplot() + 
+  geom_sf(data = srssSTK, aes(fill = mpg)) +
+#  coord_sf(xlim=c(-118.8, -113), ylim = c(43.8, 46.5)) +
+  geom_sf_label(data = srssSUB, aes(label = mpg)) +
+  scale_fill_manual(values = rev(pal)) +
+  theme_bw() +
+  labs(
+    x = "Latitude",
+    y = "Longitude"
+   ) +
+  theme(legend.position = 'none')
+
+sp_inset = ggdraw() +
+  draw_plot(sp1) +
+  draw_plot(sp0, x = 0.154, y = 0.125, width = 0.3, height = 0.3)
+
+sp_inset
+  
+ggsave(filename =         
+ "Figs/Manuscript/FigA.pdf", plot = sp_inset, width = 9, height = 6, units = "in") 
+
+## Make an inset map of PNW states with grey all
+  
+```
+
+### Merge summary stats at stock level and produce chloropleths
+
+```{r}
+
+load("Data/statsSTK.Rdata")
+
+srssSTK$POP_NAME %in% statsSTK$stk
+statsSTK$stk %in% srssSTK$POP_NAME
+# missing Imnaha, Salmon River Upper Mainstem above Redfish Lake, Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers 
+
+srssSTK <- srssSTK %>% 
+  mutate(POP_NAME = fct_recode(POP_NAME,
+   "Imnaha River" = "Imnaha River mainstem", 
+    "Grande Ronde Upper Mainstem" = "Grande Ronde River upper mainstem", 
+    "East Fork South Fork" = "East Fork South Fork Salmon River",
+    "Salmon River Lower Mainstem below Redfish Lake" = "Salmon River lower mainstem below Redfish Lake", 
+   "Salmon River Upper Mainstem above Redfish Lake" = "Salmon River upper mainstem above Redfish Lake",
+    "South Fork Salmon River Mainstem" = "South Fork Salmon River mainstem"
+    ))
+
+srssSTK <- 
+  full_join(srssSTK, statsSTK, by = c("POP_NAME" = "stk")) %>% 
+  drop_na()
+  
+class(srssSTK)
+
+srssSTK <- st_as_sf(srssSTK, crs = 26768)
+# Find limits tom compare first and last with common scale
+col.range=c(0,max(srssSTK$firstSpawn))
+
+sp2 <- ggplot() +
+  geom_sf(data = srssSTK, aes(fill = firstSpawn)) +
+  scale_fill_viridis(limits=col.range) +
+  theme(legend.position="none") +
+  theme_bw() +
+  labs(x = "Latitude",y = "Longitude")
+
+ggdraw() +
+  draw_plot(sp2) +
+  draw_plot(sp0, x = 0.154, y = 0.125, width = 0.3, height = 0.3)
+
+sp3 <- ggplot() +
+  geom_sf(data = srssSTK, aes(fill = lastSpawn)) +
+  scale_fill_viridis(limits=col.range) +
+  theme(legend.position="none") +
+  theme_bw() +
+  labs(x = "Latitude",y = "Longitude")
+
+sp2 + sp3 / 
+
+```
+
+### Visualize decadal averages in total spawners at the stock level using common scale
+```{r}
+load("Data/decSTK.Rdata")
+
+decSTK <- 
+  full_join(srssSTK, decades, by = c("POP_NAME" = "stk")) %>% 
+  drop_na()
+
+head(decSTK)
+
+sp4 <-  ggplot() +
+  geom_sf(data = decSTK, aes(fill = propDec, geometry = geometry)) +
+  scale_fill_viridis() +
+  theme_bw() +
+  theme(legend.position="none", 
+        axis.title = element_blank(),
+        axis.text = element_blank()) +
+  facet_wrap(~ decade, nrow = 2)
+
+FigB <- ggdraw() +
+  draw_plot(sp4) +
+  draw_plot(sp0, x = 0.75, y = 0.19, width = 0.24, height = 0.24)
+
+ggsave(filename =         
+ "Figs/Manuscript/FigB.pdf", plot = FigB, width = 9, height = 5, units = "in") 
+
+```
+
+
+
+
+
+
+
+
