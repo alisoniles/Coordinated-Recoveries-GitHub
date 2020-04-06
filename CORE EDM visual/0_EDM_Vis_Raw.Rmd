@@ -69,6 +69,7 @@ statsSTK <-
             totSpawn = sum(spawn_nat, na.rm = TRUE),
             aveSpawn = mean(spawn_nat, na.rm = TRUE),
             firstSpawn = first(na.omit(spawn_nat)), 
+<<<<<<< HEAD
             lastSpawn = last(na.omit(spawn_nat)),
             diffSpawn = firstSpawn - lastSpawn, 
             firstScale = firstSpawn/aveSpawn,
@@ -94,6 +95,13 @@ decades <-
 
 save(statsSTK, file = "Data/statsSTK.RData")
 save(decades, file = "Data/decSTK.RData")
+=======
+            lastSpawn = last(spawn_nat),
+            diffSpawn = firstSpawn - lastSpawn, 
+            diffScale = diffSpawn/firstSpawn)
+
+save(statsSTK, file = "Data/statsSTK.RData")
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 ```
 
 

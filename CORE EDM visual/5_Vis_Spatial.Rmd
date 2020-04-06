@@ -81,11 +81,29 @@ shpSTK <-
 srssSTK <- 
   shpSTK %>% 
   filter(!is.na(mpg))
+<<<<<<< HEAD
 ```
 
 
 
 
+=======
+
+
+ggplot() + 
+  geom_polygon(data = PNW, 
+               aes(x=long, y = lat, group = group), 
+               fill="grey", alpha=0.3) +
+  geom_sf(data = srssSTK, fill = "black") +
+#  coord_sf(xlim=c(-125, -110), ylim = c(40, 50)) +
+  theme_void() +
+  theme(
+    panel.grid.major = element_line(colour = 'transparent'))
+ 
+# mapview(srssSTK)
+
+```
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 ```{r}
 library('ggplot2')
 library('maps')
@@ -93,12 +111,16 @@ library('maps')
 map <- map_data('state')
 PNW <- subset(map, region %in% c("oregon", "washington", "idaho"))
 
+<<<<<<< HEAD
 # Make inset location (states) map using polygon
+=======
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 ggplot() + 
   theme_void() +
   geom_polygon(data = PNW, 
                aes(x=long, y = lat, group = group), 
                fill="grey", alpha=0.3)
+<<<<<<< HEAD
 
 # Make SRSS location map for inset
 ggplot() + 
@@ -132,6 +154,10 @@ sp0 <- ggplot() +
 
 
 ```
+=======
+```
+
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 
 
 ```{r}
@@ -145,6 +171,7 @@ srssSTK$mpg <- factor(srssSTK$mpg, levels = c("Lower Salmon", "Imnaha", "South F
 srssSUB <- srssSTK %>% 
   filter(OBJECTID %in% c(64,9,60,10,22))
 
+<<<<<<< HEAD
 
 sp1 = ggplot() + 
   geom_sf(data = srssSTK, aes(fill = mpg)) +
@@ -161,11 +188,29 @@ sp1 = ggplot() +
 sp_inset = ggdraw() +
   draw_plot(sp1) +
   draw_plot(sp0, x = 0.154, y = 0.125, width = 0.3, height = 0.3)
+=======
+sp1 <- ggplot() + 
+  borders("state") +
+  geom_sf(data = srssSTK, aes(fill = mpg)) +
+# geom_sf(data = hyd250, color = "lightblue") +
+  coord_sf(xlim=c(-118.8, -113), ylim = c(43.8, 46.5)) +
+  geom_sf_label(data = srssSUB, aes(label = mpg)) +
+  scale_fill_manual(values = rev(pal)) +
+  theme_bw()
+
+sp_inset = ggdraw() +
+  draw_plot(sp1) +
+  draw_plot(sp0, x = 0.65, y = 0.65, width = 0.3, height = 0.3)
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 
 sp_inset
   
 ggsave(filename =         
+<<<<<<< HEAD
  "Figs/Manuscript/FigA.pdf", plot = sp_inset, width = 9, height = 6, units = "in") 
+=======
+ "Figs/Manuscript/FigA.pdf", plot = sp1, width = 9, height = 6, units = "in") 
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 
 ## Make an inset map of PNW states with grey all
   
@@ -195,6 +240,7 @@ srssSTK <-
   full_join(srssSTK, statsSTK, by = c("POP_NAME" = "stk")) %>% 
   drop_na()
   
+<<<<<<< HEAD
 class(srssSTK)
 
 srssSTK <- st_as_sf(srssSTK, crs = 26768)
@@ -258,3 +304,89 @@ ggsave(filename =
 
 
 
+=======
+head(srssSTK)
+
+ggplot() +
+  borders("state") +
+  geom_sf(data = srssSTK, aes(fill = totSpawn)) +
+  coord_sf(xlim=c(-118.8, -113), ylim = c(43.8, 46.5)) +
+  scale_fill_viridis() +
+  theme(legend.position="none") +
+  theme_bw()
+
+```
+
+
+### Add river lines
+```{r}
+# use function to download flowlines
+
+library(httr)
+
+get_flowlines <- function(streamorder, mapRange){
+  postURL <- "https://cida.usgs.gov/nwc/geoserver/nhdplus/ows"
+  
+  filterXML <- paste0('<?xml version="1.0"?>',
+                '<wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:gml="http://www.opengis.net/gml" service="WFS" version="1.1.0" outputFormat="shape-zip" xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd">',
+                  '<wfs:Query xmlns:feature="https://gov.usgs.cida/nhdplus" typeName="feature:nhdflowline_network" srsName="EPSG:4326">',
+                    '<ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">',
+                      '<ogc:And>',
+                        '<ogc:PropertyIsGreaterThan>',
+                          '<ogc:PropertyName>streamorde</ogc:PropertyName>',
+                          '<ogc:Literal>',streamorder-1,'</ogc:Literal>',
+                        '</ogc:PropertyIsGreaterThan>',
+                        '<ogc:BBOX>',
+                          '<ogc:PropertyName>the_geom</ogc:PropertyName>',
+                          '<gml:Envelope>',
+                            '<gml:lowerCorner>',mapRange[3]," ",mapRange[1],'</gml:lowerCorner>',
+                            '<gml:upperCorner>',mapRange[4]," ",mapRange[2],'</gml:upperCorner>',
+                          '</gml:Envelope>',
+                        '</ogc:BBOX>',
+                      '</ogc:And>',
+                    '</ogc:Filter>',
+                  '</wfs:Query>',
+                '</wfs:GetFeature>')
+
+  destination = file.path(tempdir(),"nhdflowline_network.zip")
+  file <- POST(postURL, body = filterXML, write_disk(destination, overwrite=T))
+
+  filePath <- tempdir()
+  print("unzipping...")
+  unzip(destination, exdir = filePath)
+  
+  flowLines <- st_read(filePath, layer = 'nhdflowline_network')
+
+  return(flowLines)
+}
+
+
+library(USAboundaries) # STATES/counties data
+library(ggrepel) # for labeling
+
+# set the state and county names of interest
+state_names <- c("california")
+co_names <- c("Butte", "Placer", "El Dorado", "Nevada", "Yuba", "Sierra", "Plumas")
+
+# get STATE data
+CA<-us_states(resolution = "high", states = state_names) %>%
+  st_transform(crs = 4326)
+
+# get COUNTY data for a given state
+counties_spec <- us_counties(resolution = "low", states=state_names) %>% # use list of state(s) here
+  filter(name %in% co_names) %>% # filter to just the counties we want
+  mutate(lon=map_dbl(geometry, ~st_centroid(.x)[[1]]), # add centroid values for labels
+         lat=map_dbl(geometry, ~st_centroid(.x)[[2]])) # add centroid values for labels
+
+# get range of lat/longs from counties for mapping and river function
+mapRange1 <- c(range(st_coordinates(counties_spec)[,1]),range(st_coordinates(counties_spec)[,2]))
+
+```
+
+
+```{r}
+
+
+```
+
+>>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
