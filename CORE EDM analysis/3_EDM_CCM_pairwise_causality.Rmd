@@ -273,7 +273,7 @@ for(u in c(1,3,4,5)){
           }
     
     env_vars <- as.character(var_names[,1])
-          CCM_outputlist <- expand.grid(env_vars, library_vars, tp=-5:5, stringsAsFactors = FALSE) 
+          CCM_outputlist <- expand.grid(env_vars, library_vars, tp=-8:8, stringsAsFactors = FALSE) 
           CCM_outputlist$temp <- CCM_outputlist$Var1
           CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "[.]")
           CCM_outputlist$offset <- NULL #don't need this here
@@ -329,7 +329,25 @@ ccm <-  ccm(data, lib = lib, E = as.numeric(as.character(CCM_outputlist$E[i])), 
             CCM_outputlist$FisherZ[i] <- FZ$p
     }
       
- saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM/CCM_univariate_tp_ ",mpgname,".RDS", sep = ""), compress = FALSE)
+ saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM/CCM_tp_",mpgname,".RDS", sep = ""), compress = FALSE)
+}
+```
+
+```{R}
+#Figures
+rm(list=ls())  
+load("Data/Rdata/block_data_no_lags.Rdata")  
+  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+u <- 1
+
+for(u in c(1,3,4,5)){
+  data <- block_data[c(mpg==u)]
+  mpgname <- as.character(data[[1]]$mpg[1])
+  CCM_outputlist<- readRDS(paste("Output/Rdata/3_CCM/CCM_tp_",mpgname,".RDS", sep = ""))
 
 #Figure
 d <- CCM_outputlist

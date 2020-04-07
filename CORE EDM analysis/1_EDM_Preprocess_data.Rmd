@@ -321,7 +321,7 @@ mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
 mpg_data$flow.peakdate <- NULL
 
 # use this to focus on one stock to trouble-shoot the function code:
-stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 
 normalize <- function(block)
@@ -347,7 +347,7 @@ make_block <- function(stock_df, env_data, esu_data)
         hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total")
         hatch_data <- normalize(esu_data[, hatch_names]) 
         
-        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
+        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.CSLmales6", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
         pinn_data <- normalize(esu_data[, pinn_names]) 
         
         CSL_pups_data <- normalize(esu_data[, "pinn.CSLpup"])

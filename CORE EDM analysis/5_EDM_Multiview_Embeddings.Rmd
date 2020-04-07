@@ -76,11 +76,10 @@ for(tv in 1:length(target_var)){ # for each target variable in each MPG
           best_E_T[tv,3]  <- smap_output$theta[which.max(smap_output$rho)] 
   
     # determine which library variables to include from the CCM analysis    
-    #ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
-    ccm <- readRDS(paste("Output/Rdata/3_CCM/CCM_univariate_tp_ ",mpgname,".RDS", sep = ""))
+    ccm <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""))
           ccm <- ccm %>% filter(library==target_var[tv])
           ccm <- ccm[ccm$rho>(1*ccm$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
-          ccm <- ccm %>% filter(MannKendall==TRUE)
+          ccm <- ccm %>% filter(MannKendall==TRUE) #only keep variables whose CCM demonstrates converg
           #remove either river variables that don't match the return year of the target recruit age
           a <- c(3,4,5) 
           ccm<-ccm[!(ccm$cat=='flow' & (ccm$tp==(subset(a,a!=tv+2)[1]) | ccm$tp==(subset(a,a!=tv+2)[2]))), ] 
