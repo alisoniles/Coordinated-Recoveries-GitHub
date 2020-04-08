@@ -10,30 +10,60 @@ output: html_document
 library(ggridges)
 library(ggplot2)
 library(viridis)
+library(PNWColors)
 library(hrbrthemes)
 library(dplyr)
+library(forcats)
 
 ```
 
 ```{r}
-str(lincoln_weather)
+
+load("Data/block_data.Rdata")
+
+dat <- do.call("rbind", block_data) %>% 
+  mutate(spawn_log = log(spawn_nat  + 1)) %>% 
+  group_by(stk) %>% 
+  mutate(mean_log = mean(na.omit(spawn_log))) %>% 
+  ungroup()
+
+
+
 ```
 
 
 # Plot
 ```{r}
 
-ggplot(lincoln_weather, aes(x = `Max Temperature [F]`, y = `Month`, fill = ..x..)) +
-  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
-  scale_fill_viridis(name = "Temp. [F]", option = "C") +
-  labs(title = 'Temperatures in Lincoln NE in 2016') +
-  theme_ipsum() +
-    theme(
-      legend.position="none",
-      panel.spacing = unit(0.1, "lines"),
-      strip.text.x = element_text(size = 8)
-    )
+pal=pnw_palette("Shuksan2",5, type = "discrete")
 
+dat$mpg <- factor(dat$mpg, levels = c("Lower Snake", "Imnaha", "South Fork Salmon", "Middle Fork Salmon", "Upper Salmon"))
+
+ggplot(dat, aes(x = spawn_log, y = fct_reorder(stk, mean_log, mean, .desc = TRUE), fill = mpg)) +
+  geom_density_ridges(scale = 7, alpha = .8) +
+  labs(title = 'Natural Spawning (time-averaged)') +
+  scale_fill_manual(values = rev(pal)) +
+  theme_ridges() +
+    theme(
+      axis.text.y = element_blank(),
+      legend.position="none",
+      panel.spacing = unit(1, "inches"),
+      strip.text.x = element_text(size = 2)
+    ) + 
+  facet_grid(cols = vars(mpg))
+
+ggplot(dat, aes(x = spawn_nat, y = factor(year), fill = mpg)) +
+  geom_density_ridges(scale = 7, alpha = 1) +
+  labs(title = 'Natural Spawning (time-averaged)') +
+  scale_fill_manual(values = rev(pal)) +
+  theme_ridges() +
+    theme(
+      axis.text.y = element_blank(),
+      legend.position="none",
+      panel.spacing = unit(.1, "lines"),
+      strip.text.x = element_text(size = 2)
+    ) + 
+  facet_grid(cols = vars(mpg))
 
 
 ```

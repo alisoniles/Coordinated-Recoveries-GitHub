@@ -22,6 +22,7 @@ library(gridExtra)
 library(dplyr)
 library(reshape2)
 library(patchwork)
+library(pracma)
 
 ```
 
@@ -38,7 +39,21 @@ dat <- do.call("rbind", block_data) # omg I can't believe how long it took me to
 ### Compile annual totals for the entire SRSS
 ```{r include=FALSE, warning=FALSE}
 
-dat <-  dat %>% filter(year > 1956)
+dat <-  dat %>% filter(year > 1956) 
+
+## toy data for moving average
+time <- 1:200
+a <- runif(200, 100, 110)
+b <- movavg(a, 10, type = "s")
+c <- movavg(a, 25, type = "s")
+
+x <- data.frame(time,a,b,c)
+
+ggplot() +
+  geom_point(color = "black", aes(x = time, y = a)) +
+  geom_line(color = "red", aes(x = time, y = b)) +
+  geom_line(color = "blue", aes(x = time, y = c))
+## end toy
 
 annual <- dat %>% 
   group_by(year) %>% 
@@ -46,10 +61,35 @@ annual <- dat %>%
   mutate(rec3.ann = sum(rec3, na.rm = T)) %>% 
   mutate(rec4.ann = sum(rec4, na.rm = T)) %>% 
   mutate(rec5.ann = sum(rec5, na.rm = T)) %>% 
-  mutate(year2 = year + 2)
+  mutate(year2 = year + 2) %>%
+  mutate(spawn_ann = sum(na.omit(spawn_nat))) %>% 
+  ungroup()
 
+yearly <- annual %>% 
+  group_by(year) %>% 
+  summarise(total_rec = sum(rec.ann)) %>% 
+  mutate(year2 = year + 2) %>%
+  mutate(movAveRec5 = movavg(total_rec, 5, type = "s"))
 
- norm_ann <- dat %>%   
+ggplot() +
+  geom_point(data = yearly, color = "black", aes(x = year2, y = total_rec)) +
+  geom_line(data = yearly, color = "red", aes(x = year2, y = movAveRec5))
+
+ggplot(yearly) +
+    theme_minimal() +
+  geom_rect(aes(xmin=1976, xmax=1998, ymin=0, ymax=Inf), 
+            fill = "lightgray", alpha = 0.1) +
+  geom_rect(aes(xmin=2002, xmax=2007, ymin=0, ymax=Inf), 
+              fill = "lightgray", alpha = 0.9) +
+  geom_rect(aes(xmin=2013, xmax=2020, ymin=0, ymax=Inf), 
+           fill = "lightgray", alpha = 0.9) +  
+  geom_line(aes(x = year2, y = total_rec), color = "black", size = .2) +
+  geom_point(aes(x = year2, y = total_rec), shape = 21, size = 2.5, fill = "white", colour = "black") +
+   geom_line(aes(x = year2, y = movAveRec5), color = "red", size = .2) +
+  labs(title = "Total SRSS recruitment and 10-year average across PDO regimes", x =  "First Ocean Year", y = "Total Recruitment") +
+  xlim(1957, 2020)
+
+norm_ann <- dat %>%   
   group_by(year) %>% 
   mutate(rec.ann.n = mean(rec_n, na.rm = T)) %>% 
   mutate(rec3.ann.n = mean(rec3_n, na.rm = T)) %>% 
@@ -65,43 +105,41 @@ annual <- dat %>%
 statsSTK <- 
   dat %>% 
   group_by(stk) %>% 
-  summarise(maxSpawn = max(spawn_nat, na.rm = TRUE), 
-            totSpawn = sum(spawn_nat, na.rm = TRUE),
-            aveSpawn = mean(spawn_nat, na.rm = TRUE),
-            firstSpawn = first(na.omit(spawn_nat)), 
-<<<<<<< HEAD
-            lastSpawn = last(na.omit(spawn_nat)),
-            diffSpawn = firstSpawn - lastSpawn, 
-            firstScale = firstSpawn/aveSpawn,
-            lastScale = lastSpawn/aveSpawn,
-            diffScale = diffSpawn/firstSpawn)
+  summarise(maxSpawn = max(spawn_nat, na.rm = TRUE), # highest single year spawning
+            totSpawn = sum(spawn_nat, na.rm = TRUE), # total spawning all years
+            aveSpawn = mean(spawn_nat, na.rm = TRUE), # average spawning all years
+            firstSpawn = first(na.omit(spawn_nat)), # first recorded year
+            lastSpawn = last(na.omit(spawn_nat)), # last recorded year
+            diffSpawn = firstSpawn - lastSpawn, # first - last
+            firstScale = firstSpawn/aveSpawn, # first, scaled by stock-specific mean
+            lastScale = lastSpawn/aveSpawn, # last, scaled by mean
+            diffScale = diffSpawn/firstSpawn) # difference scaled by mean
 
 decades <- 
   dat %>% 
   group_by(stk) %>% 
-  mutate(decade = floor(year/10)*10) 
+  mutate(decade = floor(year/10)*10) %>% # create deacade indicator var
+  ungroup()
+
+decades$decade
 
 decades <- 
   decades %>% 
   group_by(stk,decade) %>% 
-  summarize(decSpawn = mean(na.omit(spawn_nat)))
+  summarize(decSpawn = mean(na.omit(spawn_nat))) # decadal average in spawning
 
 decades <- 
   decades %>% 
   group_by(stk) %>% 
-  mutate(maxDec = max(na.omit(decSpawn)), 
-         minDec = min(na.omit(decSpawn)), 
-         propDec = na.omit(decSpawn)/maxDec)
+  mutate(maxDec = max(na.omit(decSpawn)), # highest decade
+         minDec = min(na.omit(decSpawn)), # lowest decade
+         propDec = na.omit(decSpawn)/maxDec) %>%  # proportion (0,1) of highest decade
+  ungroup()
+
+length(decades$propDec)
 
 save(statsSTK, file = "Data/statsSTK.RData")
 save(decades, file = "Data/decSTK.RData")
-=======
-            lastSpawn = last(spawn_nat),
-            diffSpawn = firstSpawn - lastSpawn, 
-            diffScale = diffSpawn/firstSpawn)
-
-save(statsSTK, file = "Data/statsSTK.RData")
->>>>>>> c67bae3f7d8b076d2c894b736d7ca4e6bb65b435
 ```
 
 
@@ -111,9 +149,9 @@ save(statsSTK, file = "Data/statsSTK.RData")
 ```{r echo=FALSE, warning=FALSE}
 
 # start with raw salmon numbers in a given brood year
-r <- ggplot(annual, aes(x = year2, y = rec.ann)) +
-  geom_line(color = "black", size = .2) +
-  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
+r <- ggplot(annual) +
+  geom_line(aes(x = year2, y = rec.ann), color = "black", size = .2) +
+  geom_point(aes(x = year2, y = rec.ann), shape = 21, size = 2.5, fill = "white", colour = "black") +
   theme_bw() +
   labs(x = "First Ocean Year", y = "Recruitment") +
   xlim(1957, 2020)
@@ -128,6 +166,13 @@ r1 <- ggplot(norm_ann, aes(x = year, y = rec.ann.n)) +
   labs(x = "Year", y = " Mean of normalized recruitment")
 
 # the high values in later years (when total rec is not high) tells one that the normalized values of some stocks is skewing late
+
+
+ggplot(dat, aes(x = year, y = rec.ann.n)) +
+  geom_line(color = "black", size = .2) +
+  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
+  theme_bw() +
+  labs(x = "Year", y = " Mean of normalized recruitment")
 
 ```
 
