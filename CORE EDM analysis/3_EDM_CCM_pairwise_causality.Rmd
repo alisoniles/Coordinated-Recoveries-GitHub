@@ -227,7 +227,6 @@ This presumes that the time series are sampled frequently enough relative to the
 This method doesn't take advange of the whole data set as the ends of the data are cut off with the lags, but it helps to ID which lags are important for each variable.
 ```{R}
 rm(list=ls()) 
-u <- 1
 
 for(u in c(1,3,4,5)){
 load("Data/Rdata/block_data_no_lags.Rdata")  
@@ -288,9 +287,8 @@ load("Data/Rdata/block_data_no_lags.Rdata")
           CCM_outputlist <- merge(CCM_outputlist, best_E)
           rm(library_vars, best_E)
 
-          i <- 63    
     #Perform cross mappings:      
-    for(i in c(63:100)){ #c(1:NROW(CCM_outputlist)) ){  
+    for(i in c(1:NROW(CCM_outputlist)) ){  
 print(i)
       library_var <- CCM_outputlist$library[i]
       target_var <- CCM_outputlist$target[i]
