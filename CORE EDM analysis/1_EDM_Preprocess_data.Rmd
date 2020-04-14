@@ -122,18 +122,9 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
         stock_df$ret_sigma <- temp$sigma
         
         temp <- normalize_by_cycle_line(stock_df$harvest)
-        stock_df$harv_n <- temp$ts #normalized harvest
+        stock_df$harv.SPSS <- temp$ts #normalized harvest with name in the same format as ESU level harvest data
         stock_df$harv_mu <- temp$mu
         stock_df$harv_sigma <- temp$sigma
-              for(i in 0:5) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, stock_df$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
-              df[1] <- stock_df$harv_n[index_in_spp_data]
-              df.colnames <- paste("salm.harv_n", i, sep = ".")
-              stock_df[, df.colnames] <- df
-              }
         
         return(stock_df)
     }   
@@ -182,23 +173,6 @@ make_block <- function(stock_df, env_data, esu_data)
         env_names <- names(env_data)[2:length(names(env_data))]  
         env_data[, 2:NCOL(env_data)] <- normalize(env_data[2:NCOL(env_data)]) 
         
-        hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total")
-        hatch_data <- normalize(esu_data[, hatch_names]) 
-        
-        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.CSLmales6", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
-        pinn_data <- normalize(esu_data[, pinn_names]) 
-        
-        CSL_pups_data <- normalize(esu_data[, "pinn.CSLpup"])
-        
-        smelt_names <- c("smelt.CPUE", "smelt.ssb")
-        smelt_data <- normalize(esu_data[, smelt_names]) 
-        
-        SRKW_names <- c( "SRKW.Jpod", "SRKW.Kpod", "SRKW.Lpod", "SRKW.KLpods", "SRKW.JKLpods", "SRKW.JKLdeaths", "SRKW.JKLbirths")
-        SRKW_data <- normalize(esu_data[, SRKW_names]) 
-        
-        
-        
-        
         # line up environmental data at ESU level
         # offset environmental data from 1 to 5 years after brood year. 
         for(i in 1:5) { 
@@ -212,8 +186,34 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-           
+
+        csl_names <- c("csl.haulout", "csl.males", "csl.males6", "csl.bonn", "csl.COL", "csl.WA", "csl.SalishSea") 
+        csl_data <- normalize(esu_data[, csl_names])
         
+        CSL_pups_data <- normalize(esu_data[, "csl.pups"])
+        
+        ssl_names <- c("ssl.WA", "ssl.SalishSea", "ssl.WCVIBC", "ssl.SEAK", "ssl.WAK", "ssl.rookORraw", "ssl.aerial", "ssl.bonn")          
+        ssl_data <- normalize(esu_data[, ssl_names])
+        
+        hseal_names <- c("hseal.bonn", "hseal.aerial", "hseal.COL", "hseal.WA", "hseal.SalishSea", "hseal.WCVIBC")
+        hseal_data <- normalize(esu_data[, hseal_names])
+        
+        pinn_names <- c("pinn.bonn") 
+        pinn_data <- normalize(esu_data[, pinn_names])
+
+        smelt_names <- c("smelt.CPUE", "smelt.ssb")
+        smelt_data <- normalize(esu_data[, smelt_names]) 
+        
+        orca_names <- c( "orca.SRKWpodJ", "orca.SRKWpodK", "orca.SRKWpodL", "orca.SRKWpodKL", "orca.SRKWpodJKL", "orca.SRKWdeathsJKL", "orca.SRKWbirthsJKL", "orca.NRKW", "orca.SEAK", "orca.WAK")
+        orca_data <- normalize(esu_data[, orca_names]) 
+        
+        harv_names <- c("harv.PACtot", "harv.CRsport", "harv.COL", "harv.ORWAsport", "harv.ORWA", "harv.SEAK", "harv.NBC", "harv.WCVI")
+        harv_data <- normalize(esu_data[, harv_names]) 
+        
+        hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total", "hatch.SNAK", "hatch.COL", "hatch.CAOR", "hatch.WA", "hatch.SAL", "hatch.BC", "hatch.SEAK", "hatch.WAK", "hatch.sum", "hatch.all")
+        hatch_data <- normalize(esu_data[, hatch_names]) 
+      
+ 
         # line up species data at ESU level
       
         # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
@@ -227,25 +227,52 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-        # offset pinniped data from 2, 4 and 5 years after brood year - assuming sea lions eat smolts and returns
+        # offset pinniped data from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns
         for(i in c(2:5)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pinn_data)))
-              df[index_in_stock_df,] <- pinn_data[index_in_spp_data, ]
-              df.colnames <- paste(pinn_names, i, sep = ".")
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(csl_data)))
+              df[index_in_stock_df,] <- csl_data[index_in_spp_data, ]
+              df.colnames <- paste(csl_names, i, sep = ".")
               stock_df[, df.colnames] <- df
         }
+            for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(ssl_data)))
+              df[index_in_stock_df,] <- ssl_data[index_in_spp_data, ]
+              df.colnames <- paste(ssl_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+            }
+            for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(hseal_data)))
+              df[index_in_stock_df,] <- hseal_data[index_in_spp_data, ]
+              df.colnames <- paste(hseal_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+            }
+            for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pinn_data)))
+              df[index_in_stock_df,] <- pinn_data[index_in_spp_data]
+              df.colnames <- paste(pinn_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+            }
   
-        # offset CA sealion pup data from 2 to 5 years after brood year. Add 6 years to each as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
+        # offset CSL pup data from 2 to 5 years after brood year. Add 6 years to each as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
         for(i in c(8:11)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(CSL_pups_data)))
               df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data ]
-              df.colnames <- paste("pinn.CSLpup", (i-6), sep = ".")
+              df.colnames <- paste("csl.pups", (i-6), sep = ".")
               stock_df[, df.colnames] <- df
         }
         
@@ -265,14 +292,12 @@ make_block <- function(stock_df, env_data, esu_data)
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
                      
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(SRKW_data)))
-              df[index_in_stock_df,] <- SRKW_data[index_in_spp_data, ]
-              df.colnames <- paste(SRKW_names, i, sep = ".")
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(orca_data)))
+              df[index_in_stock_df,] <- orca_data[index_in_spp_data, ]
+              df.colnames <- paste(orca_names, i, sep = ".")
               stock_df[, df.colnames] <- df
         }
-        
-        
-        
+
         
         # line up river flow data at MPG level
         desired_mpg <- as.character(stock_df$mpg[[1]])
@@ -321,7 +346,7 @@ mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
 mpg_data$flow.peakdate <- NULL
 
 # use this to focus on one stock to trouble-shoot the function code:
-#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+ stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 
 normalize <- function(block)
@@ -339,102 +364,33 @@ normalize <- function(block)
 }
 
 
-make_block <- function(stock_df, env_data, esu_data)
+make_block <- function(stock_df, env_data, esu)
     {
+        # line up environmental data at ESU level        
         env_names <- names(env_data)[2:length(names(env_data))]  
         env_data[, 2:NCOL(env_data)] <- normalize(env_data[2:NCOL(env_data)]) 
-        
-        hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total")
-        hatch_data <- normalize(esu_data[, hatch_names]) 
-        
-        pinn_names <- c("pinn.CSLbonn", "pinn.CSLhaulout", "pinn.CSLmales", "pinn.CSLmales6", "pinn.HSaerial", "pinn.HSbonn", "pinn.SSLaerial", "pinn.SSLbonn", "pinn.SSLrookORraw", "pinn.TOTbonn")
-        pinn_data <- normalize(esu_data[, pinn_names]) 
-        
-        CSL_pups_data <- normalize(esu_data[, "pinn.CSLpup"])
-        
-        smelt_names <- c("smelt.CPUE", "smelt.ssb")
-        smelt_data <- normalize(esu_data[, smelt_names]) 
-        
-        SRKW_names <- c( "SRKW.Jpod", "SRKW.Kpod", "SRKW.Lpod", "SRKW.KLpods", "SRKW.JKLpods", "SRKW.JKLdeaths", "SRKW.JKLbirths")
-        SRKW_data <- normalize(esu_data[, SRKW_names]) 
-        
-        
-        
-        
-        # line up environmental data at ESU level
-        # offset environmental data from 1 to 5 years after brood year. 
-        for(i in 0:0) { 
-              desired_years <- stock_df$year + i
-              index_in_env_data <- match(desired_years, env_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-        
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
-              df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
-              df.colnames <- paste(env_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        
-           
-        
-        # line up species data at ESU level
-      
-        # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
-        for(i in 0:0) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(hatch_data)))
-              df[index_in_stock_df,] <- hatch_data[index_in_spp_data, ]
-              df.colnames <- paste(hatch_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        
-        # offset pinniped data from 2, 4 and 5 years after brood year - assuming sea lions eat smolts and returns
-        for(i in 0:0) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pinn_data)))
-              df[index_in_stock_df,] <- pinn_data[index_in_spp_data, ]
-              df.colnames <- paste(pinn_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
+    
+        desired_years <- stock_df$year
+        index_in_env_data <- match(desired_years, env_data$year)
+        index_in_stock_df <- 1:length(desired_years)
   
-        # offset CA sealion pup data from 2, 4 and 5 years after brood year. Add 3 years to each as only 3+ year old sea lion males swim up to Oregon
-        for(i in 0:0) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(CSL_pups_data)))
-              df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data ]
-              df.colnames <- paste("pinn.CSLpup", (i), sep = ".")
-              stock_df[, df.colnames] <- df
-        }
+        df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
+        df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
+        df.colnames <- env_names
+        stock_df[, df.colnames] <- df
         
-        # offset smelt data by return year (4,5)
-        for(i in 0:0) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(smelt_data)))
-              df[index_in_stock_df,] <- smelt_data[index_in_spp_data, ]
-              df.colnames <- paste(smelt_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        # line up orca data
-        for(i in 0:0) { # offset orca data from 4 to 5 years after brood year - assuming orcas just eat the returning fish
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-                     
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(SRKW_data)))
-              df[index_in_stock_df,] <- SRKW_data[index_in_spp_data, ]
-              df.colnames <- paste(SRKW_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        
-        
-        
+        # line up species data at ESU level     
+        esu_names <- names(esu_data)[2:length(names(esu_data))]  
+        esu_data[, 2:NCOL(esu_data)] <- normalize(esu_data[2:NCOL(esu_data)])
+
+        desired_years <- stock_df$year
+        index_in_esu_data <- match(desired_years, esu_data$year)
+        index_in_stock_df <- 1:length(desired_years)
+  
+        df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(esu_data)-1))
+        df[index_in_stock_df,] <- esu_data[index_in_esu_data, 2:NCOL(esu_data)]
+        df.colnames <- esu_names
+        stock_df[, df.colnames] <- df
         
         # line up river flow data at MPG level
         desired_mpg <- as.character(stock_df$mpg[[1]])
@@ -442,18 +398,15 @@ make_block <- function(stock_df, env_data, esu_data)
         mpg_tempdata$mpg <- NULL
         mpgdata_names <- c("flow.mean", "flow.peak", "flow.gageht", "flow.peakday")
         mpg_tempdata[, 2:NCOL(mpg_tempdata)] <- normalize(mpg_tempdata[, mpgdata_names]) 
+
+        desired_years <- stock_df$year
+        index_in_mpg_data <- match(desired_years, mpg_tempdata$year)
+        index_in_stock_df <- 1:length(desired_years)
         
-        for (i in 0:0) {
-              desired_years <- stock_df$year + i
-              index_in_mpg_data <- match(desired_years, mpg_tempdata$year)
-              index_in_stock_df <- 1:length(desired_years)
-              
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(mpg_tempdata)-1))
-              df[index_in_stock_df,] <- mpg_tempdata[index_in_mpg_data, 2:NCOL(mpg_tempdata)]
-              df.colnames <- paste(mpgdata_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        
+        df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(mpg_tempdata)-1))
+        df[index_in_stock_df,] <- mpg_tempdata[index_in_mpg_data, 2:NCOL(mpg_tempdata)]
+        df.colnames <- mpgdata_names
+        stock_df[, df.colnames] <- df
         
         return(stock_df)
     }
