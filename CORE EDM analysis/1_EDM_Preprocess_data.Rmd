@@ -192,18 +192,12 @@ make_block <- function(stock_df, env_data, esu_data)
         
         CSL_pups_data <- normalize(esu_data[, "csl.pups"])
         
-        ssl_names <- c("ssl.WA", "ssl.SalishSea", "ssl.WCVIBC", "ssl.SEAK", "ssl.WAK", "ssl.rookORraw", "ssl.aerial", "ssl.bonn")          
+        ssl_names <- c("ssl.WA", "ssl.SalishSea", "ssl.WCVIBC", "ssl.SEAK", "ssl.WAK", "ssl.rookORraw", "ssl.bonn")          
         ssl_data <- normalize(esu_data[, ssl_names])
         
-        hseal_names <- c("hseal.bonn", "hseal.aerial", "hseal.COL", "hseal.WA", "hseal.SalishSea", "hseal.WCVIBC")
+        hseal_names <- c("hseal.COL", "hseal.WA", "hseal.SalishSea", "hseal.WCVIBC")
         hseal_data <- normalize(esu_data[, hseal_names])
-        
-        pinn_names <- c("pinn.bonn") 
-        pinn_data <- normalize(esu_data[, pinn_names])
-
-        smelt_names <- c("smelt.CPUE", "smelt.ssb")
-        smelt_data <- normalize(esu_data[, smelt_names]) 
-        
+    
         orca_names <- c( "orca.SRKWpodJ", "orca.SRKWpodK", "orca.SRKWpodL", "orca.SRKWpodKL", "orca.SRKWpodJKL", "orca.SRKWdeathsJKL", "orca.SRKWbirthsJKL", "orca.NRKW", "orca.SEAK", "orca.WAK")
         orca_data <- normalize(esu_data[, orca_names]) 
         
@@ -255,15 +249,7 @@ make_block <- function(stock_df, env_data, esu_data)
               df.colnames <- paste(hseal_names, i, sep = ".")
               stock_df[, df.colnames] <- df
             }
-            for(i in c(2:5)) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(pinn_data)))
-              df[index_in_stock_df,] <- pinn_data[index_in_spp_data]
-              df.colnames <- paste(pinn_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-            }
+
   
         # offset CSL pup data from 2 to 5 years after brood year. Add 6 years to each as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
         for(i in c(8:11)) { 
@@ -276,16 +262,6 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-        # offset smelt data by return year (4,5)
-        for(i in 4:5) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, esu_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(smelt_data)))
-              df[index_in_stock_df,] <- smelt_data[index_in_spp_data, ]
-              df.colnames <- paste(smelt_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
         # line up orca data
         for(i in 4:5) { # offset orca data from 4 to 5 years after brood year - assuming orcas just eat the returning fish
               desired_years <- stock_df$year + i
