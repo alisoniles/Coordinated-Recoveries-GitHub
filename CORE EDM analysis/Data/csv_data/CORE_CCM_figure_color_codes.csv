@@ -1,0 +1,70 @@
+values,breaks,labels
+jan,#800000,Jan
+feb,#e6194b,Feb
+mar,#f58231,Mar
+apr,#ffe119,Apr
+may,#bfef45,May
+jun,#3cb44b,Jun
+jul,#469990,Jul
+aug,#42d4f4,Aug
+sep,#4363d8,Sep
+oct,#000075,Oct
+nov,#911eb4,Nov
+dec,#f032e6,Dec
+sti,#99CC33,STI
+fti,#CC6600,FTI
+lusi,#00FFCC,LUSI
+tumi,#006633,TUMI
+tdmi,#CC6699,TDMI
+win,#CC6699,Winter
+spr,#99CC33,Spring
+sum,#00FFCC,Summer
+fal,#CC6600,Fall
+yr,#999999,Year
+yravg,#999999,Year Avg
+yrsum,#333333,Year sum
+mean,#469990,River mean flow
+peak,#42d4f4,River peak flow
+gageht,#4363d8,River gage height
+peakday,#000075,River peak day
+all,#999999,All
+BC,#ffe119,BC
+bonn,#42d4f4,Bonneville Dam
+CAOR,#f032e6,CA/OR
+COL,#4363d8,Columbia R. 
+CRsport,#4363d8,Columbia R. sport
+eff_n,#e6194b,Spawners
+haulout,#ffe119,Haulout
+males,#bfef45,Pup count male estimates
+males6,#800000,Pup count 6+ yr male estimates
+NBC,#ffe119,Northern BC
+NRKW,#ffe119,NRKW
+ORWA,#000075,OR/WA
+ORWAsport,#911eb4,OR/WA sport
+PACtot,#999999,PAC Total
+pups,#f032e6,Pup count pups
+rec_n,#f58231,Total recruits
+rec3_n,#ffe119,3 yr old recruits
+rec4_n,#bfef45,4 yr old recruits
+rec5_n,#3cb44b,5 yr old recruits
+rookORraw,#f032e6,Rookery or raw
+SAL,#3cb44b,Salish Sea
+SalishSea,#3cb44b,Salish Sea
+SEAK,#f58231,SE AK
+SNAK,#e6194b,SNAK
+spring,#4363d8,Hatchery spring
+SPSS,#e6194b,SPSS harvest
+SRKWbirthsJKL,#000075,Total births
+SRKWdeathsJKL,#911eb4,Total deaths
+SRKWpodJ,#bfef45,J pod
+SRKWpodJKL,#4363d8,JKL pod
+SRKWpodK,#3cb44b,K pod
+SRKWpodKL,#42d4f4,KL pod
+SRKWpodL,#469990,L pod
+sum,#333333,Hatchery sum
+summer,#911eb4,Hatchery summer
+total,#999999,Hatchery total
+WA,#469990,WA
+WAK,#e6194b,W AK
+WCVI,#bfef45,West coast Vancouver Is.
+WCVIBC,#bfef45,WCVI/BC

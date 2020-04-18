@@ -66,65 +66,65 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
        
         # Normalize on a 1 year cycle line (i.e. NO cycle line!)
         temp <- normalize_by_cycle_line(stock_df$spawn_tot)
-        stock_df$eff_n <- temp$ts #normalized number of effective spawners
-        stock_df$eff_mu <- temp$mu
-        stock_df$eff_sigma <- temp$sigma
-              for(i in 0) { 
+        stock_df$salm.eff_n.0 <- temp$ts #normalized number of effective spawners
+        #stock_df$eff_mu <- temp$mu
+        #stock_df$eff_sigma <- temp$sigma
+        
+        temp <- normalize_by_cycle_line(stock_df$rec3)
+        stock_df$salm.rec3_n.0 <- temp$ts #normalized 3 year old recruits
+        #stock_df$rec3_mu <- temp$mu
+        #stock_df$rec3_sigma <- temp$sigma
+              for(i in c(-2:-1)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, stock_df$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
-              df[1] <- stock_df$eff_n[index_in_spp_data]
-              df.colnames <- paste("salm.eff_n", i, sep = ".")
+              df[1] <- stock_df$salm.rec3_n.0[index_in_spp_data]
+              df.colnames <- paste("salm.rec3_n", i, sep = ".")
               stock_df[, df.colnames] <- df
               }
-        
-        temp <- normalize_by_cycle_line(stock_df$rec3)
-        stock_df$rec3_n <- temp$ts #normalized 3 year old recruits
-        stock_df$rec3_mu <- temp$mu
-        stock_df$rec3_sigma <- temp$sigma
+        temp <- normalize_by_cycle_line(stock_df$rec4)
+        stock_df$salm.rec4_n.0 <- temp$ts #normalized 4 year old recruits
+        #stock_df$rec4_mu <- temp$mu
+        #stock_df$rec4_sigma <- temp$sigma
               for(i in -2:-1) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, stock_df$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
-              df[1] <- stock_df$rec3_n[index_in_spp_data]
-              df.colnames <- paste("salm.rec3_n", i, sep = ".")
-              stock_df[, df.colnames] <- df
-              }
-        temp <- normalize_by_cycle_line(stock_df$rec4)
-        stock_df$rec4_n <- temp$ts #normalized 4 year old recruits
-        stock_df$rec4_mu <- temp$mu
-        stock_df$rec4_sigma <- temp$sigma
-              for(i in -1) { 
-              desired_years <- stock_df$year + i
-              index_in_spp_data <- match(desired_years, stock_df$year)
-              index_in_stock_df <- 1:length(desired_years)
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
-              df[1] <- stock_df$rec4_n[index_in_spp_data]
+              df[1] <- stock_df$salm.rec4_n.0[index_in_spp_data]
               df.colnames <- paste("salm.rec4_n", i, sep = ".")
               stock_df[, df.colnames] <- df
               }
 
         temp <- normalize_by_cycle_line(stock_df$rec5)
-        stock_df$rec5_n <- temp$ts #normalized 5 year old recruits
-        stock_df$rec5_mu <- temp$mu
-        stock_df$rec5_sigma <- temp$sigma
+        stock_df$salm.rec5_n.0 <- temp$ts #normalized 5 year old recruits
+        #stock_df$rec5_mu <- temp$mu
+        #stock_df$rec5_sigma <- temp$sigma
+              for(i in -2:-1) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, stock_df$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = 1))
+              df[1] <- stock_df$salm.rec5_n.0[index_in_spp_data]
+              df.colnames <- paste("salm.rec5_n", i, sep = ".")
+              stock_df[, df.colnames] <- df
+              }
         
         temp <- normalize_by_cycle_line(stock_df$rec)
-        stock_df$rec_n <- temp$ts #normalized total recruits
-        stock_df$rec_mu <- temp$mu
-        stock_df$rec_sigma <- temp$sigma
+        stock_df$salm.rec_n.0 <- temp$ts #normalized total recruits
+        #stock_df$rec_mu <- temp$mu
+        #stock_df$rec_sigma <- temp$sigma
         
-        temp <- normalize_by_cycle_line(stock_df$ret)
-        stock_df$ret_n <- temp$ts #normalized returns
-        stock_df$ret_mu <- temp$mu
-        stock_df$ret_sigma <- temp$sigma
+        #temp <- normalize_by_cycle_line(stock_df$ret)
+        #stock_df$salm.ret_n <- temp$ts #normalized returns
+        #stock_df$ret_mu <- temp$mu
+        #stock_df$ret_sigma <- temp$sigma
         
         temp <- normalize_by_cycle_line(stock_df$harvest)
-        stock_df$harv.SPSS <- temp$ts #normalized harvest with name in the same format as ESU level harvest data
-        stock_df$harv_mu <- temp$mu
-        stock_df$harv_sigma <- temp$sigma
+        stock_df$harv.SPSS.0 <- temp$ts #normalized harvest with name in the same format as ESU level harvest data
+        #stock_df$harv_mu <- temp$mu
+        #stock_df$harv_sigma <- temp$sigma
         
         return(stock_df)
     }   
@@ -150,7 +150,7 @@ mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
 mpg_data$flow.peakdate <- NULL
 
 # use this to focus on one stock to trouble-shoot the function code:
-stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 
 normalize <- function(block)
@@ -173,20 +173,6 @@ make_block <- function(stock_df, env_data, esu_data)
         env_names <- names(env_data)[2:length(names(env_data))]  
         env_data[, 2:NCOL(env_data)] <- normalize(env_data[2:NCOL(env_data)]) 
         
-        # line up environmental data at ESU level
-        # offset environmental data from 1 to 5 years after brood year. 
-        for(i in 1:5) { 
-              desired_years <- stock_df$year + i
-              index_in_env_data <- match(desired_years, env_data$year)
-              index_in_stock_df <- 1:length(desired_years)
-        
-              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
-              df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
-              df.colnames <- paste(env_names, i, sep = ".")
-              stock_df[, df.colnames] <- df
-        }
-        
-
         csl_names <- c("csl.haulout", "csl.males", "csl.males6", "csl.bonn", "csl.COL", "csl.WA", "csl.SalishSea") 
         csl_data <- normalize(esu_data[, csl_names])
         
@@ -206,12 +192,13 @@ make_block <- function(stock_df, env_data, esu_data)
         
         hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total", "hatch.SNAK", "hatch.COL", "hatch.CAOR", "hatch.WA", "hatch.SAL", "hatch.BC", "hatch.SEAK", "hatch.WAK", "hatch.sum", "hatch.all")
         hatch_data <- normalize(esu_data[, hatch_names]) 
+        
       
  
         # line up species data at ESU level
       
         # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
-        for(i in 1:3) { 
+        for(i in c(1:3)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
@@ -219,6 +206,19 @@ make_block <- function(stock_df, env_data, esu_data)
               df[index_in_stock_df,] <- hatch_data[index_in_spp_data, ]
               df.colnames <- paste(hatch_names, i, sep = ".")
               stock_df[, df.colnames] <- df
+              
+        }
+        
+        # offset harvest data from 3 to 5 years after brood year - assuming the harvest is only affecting returns 3+
+        for(i in c(3:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(harv_data)))
+              df[index_in_stock_df,] <- harv_data[index_in_spp_data, ]
+              df.colnames <- paste(harv_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+              
         }
         
         # offset pinniped data from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns
@@ -274,6 +274,21 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
 
+         
+        # line up environmental data at ESU level
+        # offset environmental data from 1 to 5 years after brood year. 
+        for(i in 1:5) { 
+              desired_years <- stock_df$year + i
+              index_in_env_data <- match(desired_years, env_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+        
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
+              df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
+              df.colnames <- paste(env_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+        
+
         
         # line up river flow data at MPG level
         desired_mpg <- as.character(stock_df$mpg[[1]])
@@ -322,7 +337,7 @@ mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
 mpg_data$flow.peakdate <- NULL
 
 # use this to focus on one stock to trouble-shoot the function code:
- stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+ # stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 
 normalize <- function(block)
