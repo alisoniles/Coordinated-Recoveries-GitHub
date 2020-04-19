@@ -89,8 +89,7 @@ mpg <- c()
     colnames( CCM_outputlist) <- c("target","library","cat","subcat","offset","rho", "rho_eff","N", "95p_crit", "ccm_rho", "MannKendall", "FisherZ")
     CCM_outputlist <- merge(CCM_outputlist, best_E)
     
-    
- i <- 2
+
     for(i in c(1:NROW(CCM_outputlist)) ){  
     
       library_var <- CCM_outputlist$library[i]
@@ -199,40 +198,30 @@ for(u in c(1,3,4,5)){
     if(u>1){D <- rbind(D,d)}
 }
 
-
-values <-  rbind("jan"='#800000', "feb"='#e6194b', "mar"='#f58231', "apr"='#ffe119', "may"='#bfef45', "jun"='#3cb44b', "jul"='#469990', "aug"='#42d4f4', "sep"='#4363d8', "oct"='#000075', "nov"='#911eb4', "dec"='#f032e6',  "sti"='#99CC33', "fti"='#CC6600', "lusi"='#00FFCC', "tumi"='#006633', "tdmi"='#CC6699',  "win"='#CC6699', "spr"='#99CC33', "sum"='#00FFCC', "fal"='#CC6600', "yr"='#999999', "yravg"='#999999', "yrsum"='#333333', "mean"='#469990', "peak"='#42d4f4', "gageht"='#4363d8', "peakday"='#000075')
-breaks  <- rbind("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "sti", "fti", "lusi", "tumi", "tdmi", "win", "spr", "sum", "fal", "yr", "yravg", "yrsum", "mean", "peak", "gageht", "peakday")
-labels <-  rbind("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "STI", "FTI", "LUSI", "TUMI", "TDMI", "Winter", "Spring", "Summer", "Fall", "Year", "Year Avg", "Year sum", "River mean flow", "River peak flow", "River gage height", "River peak day")
-scm <- cbind(values,breaks,labels)
-colnames(scm) <- c("values","breaks","labels")
-
-
-values <-  rbind("eff_n"='#ffe119',  "rec3_n"='#bfef45', "rec4_n"='#3cb44b', "harv_n"='#469990', "spring"='#800000', "summer"='#e6194b', "total"='#f58231', "CSLbonn"='#ffe119', "CSLhaulout"='#bfef45', "CSLmales"='#3cb44b', "CSLmales6"='#469990', "CSLpup"='#42d4f4',  "HSaerial"='#800000', "HSbonn"='#e6194b', "SSLaerial"='#000075', "SSLbonn"='#911eb4', "SSLrookORraw"='#f032e6', "TOTbonn"='#800000',  "CPUE"='#f58231', "ssb"='#ffe119', "Jpod"='#bfef45',"Kpod"='#3cb44b', "Lpod"='#469990', "KLpods"='#42d4f4', "JKLpods"='#4363d8', "JKLdeaths"='#000075', "JKLbirths"='#911eb4')
-breaks  <- rbind("eff_n",  "rec3_n", "rec4_n", "harv_n", "spring", "summer", "total", "CSLbonn", "CSLhaulout", "CSLmales", "CSLmales6", "CSLpup", "HSaerial", "HSbonn", "SSLaerial", "SSLbonn", "SSLrookORraw", "TOTbonn", "CPUE", "ssb", "Jpod", "Kpod", "Lpod", "KLpods", "JKLpods", "JKLdeaths",     "JKLbirths")
-labels <-  rbind("Spawners",  "3 yr old recruits", "4 year old recruits", "Harvest", "Hatchery spring", "Hatchery summer", "Hatchery total", "CSL Bonneville Dam", "CSL haulout", "CSL males", "CSL males 6+ yrs", "CSL pups","HS aerial survey", "HS Bonneville Dam", "SSL aerial survey", "SSL Bonneville Dam", "SSL rookery OR raw", "TOT Bonneville Dam", "Smelt CPUE", "Smelt ssb", "SRKW J pod", "SRKW K pod", "SRKW L pod", "SRKW KL pods", "SRKW JKL pods", "SRKW deaths", "SRKW births")
-biol_scm <- cbind(values,breaks,labels)
-colnames(biol_scm) <- c("values","breaks","labels")
-
-
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 
 varcat <- unique(D$cat)
 for(c in c(1:length(varcat))) {
   D_plot <- D[D$cat==varcat[c],]
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
   
-  print(unique(D_plot$subcat))
-  p1 <- ggplot(D_plot, aes(x=offset, y=rho_eff)) +
+  p1 <- ggplot(D_plot, aes(x=offset, y=rho)) +
     geom_line(aes(col=subcat)) +
-    geom_point(aes(col=subcat, shape=(MannKendall==TRUE))) +
+    geom_point(aes(col=subcat, shape=(MannKendall==TRUE)), show.legend = TRUE) +
     geom_vline(aes(xintercept=0), colour='#999999') +
     geom_hline(aes(yintercept=0), colour='#999999') +
     geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
     theme_bw() + 
     guides(col = guide_legend(ncol=1)) +
-    labs(title="Convergent cross-mapping", subtitle = paste("Variable category '",varcat[c],"'", sep = ""), x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) +  
-    scale_color_manual(values = scm[,1], name="Time series", breaks = scm[,2], labels = scm[,3]) +
-  scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"),labels = c("True", "False"))
-p2 <- p1 + facet_grid(mpg ~ library)  
-#ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
+    labs(title= varcat[c], subtitle = "convergent cross-mapping", x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) + 
+    scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
+    scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+
+p2 <- p1 + facet_grid(mpg ~ library) 
+
+ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 
 }
 

@@ -1,70 +1,122 @@
-values,breaks,labels
-jan,#800000,Jan
-feb,#e6194b,Feb
-mar,#f58231,Mar
-apr,#ffe119,Apr
-may,#bfef45,May
-jun,#3cb44b,Jun
-jul,#469990,Jul
-aug,#42d4f4,Aug
-sep,#4363d8,Sep
-oct,#000075,Oct
-nov,#911eb4,Nov
-dec,#f032e6,Dec
-sti,#99CC33,STI
-fti,#CC6600,FTI
-lusi,#00FFCC,LUSI
-tumi,#006633,TUMI
-tdmi,#CC6699,TDMI
-win,#CC6699,Winter
-spr,#99CC33,Spring
-sum,#00FFCC,Summer
-fal,#CC6600,Fall
-yr,#999999,Year
-yravg,#999999,Year Avg
-yrsum,#333333,Year sum
-mean,#469990,River mean flow
-peak,#42d4f4,River peak flow
-gageht,#4363d8,River gage height
-peakday,#000075,River peak day
-all,#999999,All
-BC,#ffe119,BC
-bonn,#42d4f4,Bonneville Dam
-CAOR,#f032e6,CA/OR
-COL,#4363d8,Columbia R. 
-CRsport,#4363d8,Columbia R. sport
-eff_n,#e6194b,Spawners
-haulout,#ffe119,Haulout
-males,#bfef45,Pup count male estimates
-males6,#800000,Pup count 6+ yr male estimates
-NBC,#ffe119,Northern BC
-NRKW,#ffe119,NRKW
-ORWA,#000075,OR/WA
-ORWAsport,#911eb4,OR/WA sport
-PACtot,#999999,PAC Total
-pups,#f032e6,Pup count pups
-rec_n,#f58231,Total recruits
-rec3_n,#ffe119,3 yr old recruits
-rec4_n,#bfef45,4 yr old recruits
-rec5_n,#3cb44b,5 yr old recruits
-rookORraw,#f032e6,Rookery or raw
-SAL,#3cb44b,Salish Sea
-SalishSea,#3cb44b,Salish Sea
-SEAK,#f58231,SE AK
-SNAK,#e6194b,SNAK
-spring,#4363d8,Hatchery spring
-SPSS,#e6194b,SPSS harvest
-SRKWbirthsJKL,#000075,Total births
-SRKWdeathsJKL,#911eb4,Total deaths
-SRKWpodJ,#bfef45,J pod
-SRKWpodJKL,#4363d8,JKL pod
-SRKWpodK,#3cb44b,K pod
-SRKWpodKL,#42d4f4,KL pod
-SRKWpodL,#469990,L pod
-sum,#333333,Hatchery sum
-summer,#911eb4,Hatchery summer
-total,#999999,Hatchery total
-WA,#469990,WA
-WAK,#e6194b,W AK
-WCVI,#bfef45,West coast Vancouver Is.
-WCVIBC,#bfef45,WCVI/BC
+cat,values,breaks,labels
+arc,#99CC33,spr,Spring
+arc,#00FFCC,sum,Summer
+arc,#CC6600,fal,Fall
+arc,#CC6699,win,Winter
+csl,#3cb44b,SalishSea,Salish Sea
+csl,#469990,WA,WA
+csl,#4363d8,COL,Columbia R. 
+csl,#42d4f4,bonn,Bonneville Dam
+csl,#ffe119,haulout,Haul out
+csl,#f032e6,pups,Pup count pups
+csl,#bfef45,males,Pup count male estimates
+csl,#800000,males6,Pup count 6+ yr male estimates
+flow,#469990,mean,River mean flow
+flow,#42d4f4,peak,River peak flow
+flow,#4363d8,peakday,River peak day
+flow,#000075,gageht,River gage height
+harv,#e6194b,SEAK,SE AK
+harv,#f58231,NBC,Northern BC
+harv,#ffe119,WCVI,West coast Vancouver Is.
+harv,#bfef45,ORWA,OR/WA
+harv,#3cb44b,ORWAsport,OR/WA sport
+harv,#469990,COL,Columbia R. 
+harv,#42d4f4,CRsport,Columbia R. sport
+harv,#4363d8,SPSS,SPSS harvest
+harv,#000075,PACtot,PAC Total
+hatch,#800000,WAK,W AK
+hatch,#e6194b,SNAK,SNAK
+hatch,#f58231,SEAK,SE AK
+hatch,#ffe119,BC,BC
+hatch,#bfef45,SAL,Salish Sea
+hatch,#3cb44b,WA,WA
+hatch,#469990,COL,Columbia R. 
+hatch,#42d4f4,CAOR,CA/OR
+hatch,#4363d8,spring,Hatchery spring
+hatch,#000075,summer,Hatchery summer
+hatch,#911eb4,total,Hatchery total
+hatch,#333333,sum,Hatchery sum
+hatch,#999999,all,All
+hseal,#bfef45,WCVIBC,WCVI/BC
+hseal,#3cb44b,SalishSea,Salish Sea
+hseal,#469990,WA,WA
+hseal,#4363d8,COL,Columbia R. 
+npgo,#800000,jan,Jan
+npgo,#e6194b,feb,Feb
+npgo,#f58231,mar,Mar
+npgo,#ffe119,apr,Apr
+npgo,#bfef45,may,May
+npgo,#3cb44b,jun,Jun
+npgo,#469990,jul,Jul
+npgo,#42d4f4,aug,Aug
+npgo,#4363d8,sep,Sep
+npgo,#000075,oct,Oct
+npgo,#911eb4,nov,Nov
+npgo,#f032e6,dec,Dec
+npgo,#99CC33,spr,Spring
+npgo,#00FFCC,sum,Summer
+npgo,#CC6600,fal,Fall
+npgo,#CC6699,win,Winter
+npgo,#999999,yravg,Year
+npgo,#333333,yrsum,Year sum
+orca,#e6194b,WAK,W AK
+orca,#f58231,SEAK,SE AK
+orca,#ffe119,NRKW,NRKW
+orca,#bfef45,SRKWpodJKL,SRKW
+orca,#3cb44b,SRKWpodJ,SRKW J pod
+orca,#469990,SRKWpodK,SRKW K pod
+orca,#42d4f4,SRKWpodL,SRKW L pod
+orca,#4363d8,SRKWpodKL,SRKW KL pod
+orca,#000075,SRKWbirthsJKL,SRKW births
+orca,#911eb4,SRKWdeathsJKL,SRKW deaths
+pdo,#800000,jan,Jan
+pdo,#e6194b,feb,Feb
+pdo,#f58231,mar,Mar
+pdo,#ffe119,apr,Apr
+pdo,#bfef45,may,May
+pdo,#3cb44b,jun,Jun
+pdo,#469990,jul,Jul
+pdo,#42d4f4,aug,Aug
+pdo,#4363d8,sep,Sep
+pdo,#000075,oct,Oct
+pdo,#911eb4,nov,Nov
+pdo,#f032e6,dec,Dec
+pdo,#99CC33,spr,Spring
+pdo,#00FFCC,sum,Summer
+pdo,#CC6600,fal,Fall
+pdo,#CC6699,win,Winter
+pdo,#999999,yr,Year
+salm,#e6194b,eff_n,Spawners
+salm,#f58231,rec_n,Total recruits
+salm,#ffe119,rec3_n,3 yr old recruits
+salm,#bfef45,rec4_n,4 yr old recruits
+salm,#3cb44b,rec5_n,5 yr old recruits
+ssl,#e6194b,WAK,W AK
+ssl,#f58231,SEAK,SE AK
+ssl,#bfef46,WCVIBC,WCVI/BC
+ssl,#3cb44b,SalishSea,Salish Sea
+ssl,#469990,WA,WA
+ssl,#42d4f4,bonn,Bonneville Dam
+ssl,#f032e6,rookORraw,Rookery or raw
+upw,#800000,jan,Jan
+upw,#e6194b,feb,Feb
+upw,#f58231,mar,Mar
+upw,#ffe119,apr,Apr
+upw,#bfef45,may,May
+upw,#3cb44b,jun,Jun
+upw,#469990,jul,Jul
+upw,#42d4f4,aug,Aug
+upw,#4363d8,sep,Sep
+upw,#000075,oct,Oct
+upw,#911eb4,nov,Nov
+upw,#f032e6,dec,Dec
+upw,#99CC33,spr,Spring
+upw,#00FFCC,sum,Summer
+upw,#CC6600,fal,Fall
+upw,#CC6699,win,Winter
+upw,#999999,yr,Year
+upw,#99CC33,sti,STI
+upw,#00FFCC,lusi,LUSI
+upw,#CC6600,fti,FTI
+upw,#006633,tumi,TUMI
+upw,#CC6699,tdmi,TDMI
