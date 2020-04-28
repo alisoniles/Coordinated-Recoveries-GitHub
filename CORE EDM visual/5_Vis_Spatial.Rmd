@@ -31,6 +31,61 @@ library(pracma)
 
 ```
 
+```{R include=FALSE, warning=FALSE}
+
+load("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Data/Rdata/block_data.Rdata")
+
+dat <- do.call("rbind", block_data) # omg I can't believe how long it took me to unlist this data object ... in 26 characters of code 
+
+names(dat)
+```
+
+### Calculate summary statistics at the stock level for visualizing spatial variation in 5_Vis_Spatial
+
+```{r}
+
+statsSTK <- 
+  dat %>% 
+  group_by(stk) %>% 
+  summarise(maxSpawn = max(spawn_nat, na.rm = TRUE), # highest single year spawning
+            totSpawn = sum(spawn_nat, na.rm = TRUE), # total spawning all years
+            aveSpawn = mean(spawn_nat, na.rm = TRUE), # average spawning all years
+            firstSpawn = first(na.omit(spawn_nat)), # first recorded year
+            lastSpawn = last(na.omit(spawn_nat)), # last recorded year
+            diffSpawn = firstSpawn - lastSpawn, # first - last
+            firstScale = firstSpawn/aveSpawn, # first, scaled by stock-specific mean
+            lastScale = lastSpawn/aveSpawn, # last, scaled by mean
+            diffScale = diffSpawn/firstSpawn) # difference scaled by mean
+
+decades <- 
+  dat %>% 
+  group_by(stk) %>% 
+  mutate(decade = floor(year/10)*10) %>% # create deacade indicator var
+  ungroup()
+
+decades$decade
+
+decades <- 
+  decades %>% 
+  group_by(stk,decade) %>% 
+  summarize(decSpawn = mean(na.omit(spawn_nat))) # decadal average in spawning
+
+decades <- 
+  decades %>% 
+  group_by(stk) %>% 
+  mutate(maxDec = max(na.omit(decSpawn)), # highest decade
+         minDec = min(na.omit(decSpawn)), # lowest decade
+         propDec = na.omit(decSpawn)/maxDec) %>%  # proportion (0,1) of highest decade
+  ungroup()
+
+length(decades$propDec)
+
+save(statsSTK, file = "Data/statsSTK.RData")
+save(decades, file = "Data/decSTK.RData")
+```
+
+
+## Maps
 
 ```{r}
 # load shapefiles
@@ -83,15 +138,6 @@ srssSTK <-
   shpSTK %>% 
   filter(!is.na(mpg))
 
-ggplot() + 
-  geom_polygon(data = PNW, 
-               aes(x=long, y = lat, group = group), 
-               fill="grey", alpha=0.3) +
-  geom_sf(data = srssSTK, fill = "black") +
-#  coord_sf(xlim=c(-125, -110), ylim = c(40, 50)) +
-  theme_void() +
-  theme(
-    panel.grid.major = element_line(colour = 'transparent'))
  
 # mapview(srssSTK)
 
@@ -192,8 +238,8 @@ sp_inset = ggdraw() +
 sp_inset
   
 ggsave(filename =         
- "Figs/Manuscript/FigA.pdf", plot = sp_inset, width = 9, height = 6, units = "in") 
- "Figs/Manuscript/FigA.pdf", plot = sp1, width = 9, height = 6, units = "in") 
+ "Figs/Manuscript/FigX.pdf", plot = sp_inset, width = 9, height = 6, units = "in") 
+
 
 ## Make an inset map of PNW states with grey all
   
@@ -275,7 +321,7 @@ FigB <- ggdraw() +
   draw_plot(sp0, x = 0.75, y = 0.19, width = 0.24, height = 0.24)
 
 ggsave(filename =         
- "Figs/Manuscript/FigB.pdf", plot = FigB, width = 9, height = 5, units = "in") 
+ "Figs/Manuscript/FigY.pdf", plot = FigB, width = 9, height = 5, units = "in") 
 
 ```
 
