@@ -23,16 +23,19 @@ library(dplyr)
 library(reshape2)
 library(patchwork)
 library(pracma)
+library(viridis)
+
 
 ```
 
 
 ```{R include=FALSE, warning=FALSE}
 
-load("Data/block_data.Rdata")
+load("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Data/Rdata/block_data.Rdata")
 
 dat <- do.call("rbind", block_data) # omg I can't believe how long it took me to unlist this data object ... in 26 characters of code 
-
+dat[dat$mpg == "Lower Snake", ]
+# names(dat)
 ```
 
 
@@ -62,32 +65,10 @@ annual <- dat %>%
   mutate(rec4.ann = sum(rec4, na.rm = T)) %>% 
   mutate(rec5.ann = sum(rec5, na.rm = T)) %>% 
   mutate(year2 = year + 2) %>%
-  mutate(spawn_ann = sum(na.omit(spawn_nat))) %>% 
+  mutate(spawn_ann_nat = sum(na.omit(spawn_nat))) %>%
+  mutate(movAveRec5 = movavg(rec.ann, 5, type = "s")) %>%
+  mutate(spawn_ann_tot = sum(na.omit(spawn_tot))) %>% 
   ungroup()
-
-yearly <- annual %>% 
-  group_by(year) %>% 
-  summarise(total_rec = sum(rec.ann)) %>% 
-  mutate(year2 = year + 2) %>%
-  mutate(movAveRec5 = movavg(total_rec, 5, type = "s"))
-
-ggplot() +
-  geom_point(data = yearly, color = "black", aes(x = year2, y = total_rec)) +
-  geom_line(data = yearly, color = "red", aes(x = year2, y = movAveRec5))
-
-ggplot(yearly) +
-    theme_minimal() +
-  geom_rect(aes(xmin=1976, xmax=1998, ymin=0, ymax=Inf), 
-            fill = "lightgray", alpha = 0.1) +
-  geom_rect(aes(xmin=2002, xmax=2007, ymin=0, ymax=Inf), 
-              fill = "lightgray", alpha = 0.9) +
-  geom_rect(aes(xmin=2013, xmax=2020, ymin=0, ymax=Inf), 
-           fill = "lightgray", alpha = 0.9) +  
-  geom_line(aes(x = year2, y = total_rec), color = "black", size = .2) +
-  geom_point(aes(x = year2, y = total_rec), shape = 21, size = 2.5, fill = "white", colour = "black") +
-   geom_line(aes(x = year2, y = movAveRec5), color = "red", size = .2) +
-  labs(title = "Total SRSS recruitment and 10-year average across PDO regimes", x =  "First Ocean Year", y = "Total Recruitment") +
-  xlim(1957, 2020)
 
 norm_ann <- dat %>%   
   group_by(year) %>% 
@@ -98,51 +79,105 @@ norm_ann <- dat %>%
 
 ```
 
-### Calculate summary statistics at the stock level for visualizing spatial variation in 5_Vis_Spatial
+## Spawner-recruit relationship at multiple scales
+### First, entire ESU
 
 ```{r}
+require(scales)
 
-statsSTK <- 
-  dat %>% 
-  group_by(stk) %>% 
-  summarise(maxSpawn = max(spawn_nat, na.rm = TRUE), # highest single year spawning
-            totSpawn = sum(spawn_nat, na.rm = TRUE), # total spawning all years
-            aveSpawn = mean(spawn_nat, na.rm = TRUE), # average spawning all years
-            firstSpawn = first(na.omit(spawn_nat)), # first recorded year
-            lastSpawn = last(na.omit(spawn_nat)), # last recorded year
-            diffSpawn = firstSpawn - lastSpawn, # first - last
-            firstScale = firstSpawn/aveSpawn, # first, scaled by stock-specific mean
-            lastScale = lastSpawn/aveSpawn, # last, scaled by mean
-            diffScale = diffSpawn/firstSpawn) # difference scaled by mean
+# s
+ggplot(data = annual) +
+  geom_point(aes(x = spawn_ann_tot, y = rec.ann), shape = 21, size = 2.5, fill = "white", colour = "black") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+ geom_smooth(aes(x = spawn_ann_tot, y = rec.ann), method = "loess", formula = y ~ x, span = 10)
 
-decades <- 
-  dat %>% 
-  group_by(stk) %>% 
-  mutate(decade = floor(year/10)*10) %>% # create deacade indicator var
-  ungroup()
+fig_spawn_rec <- ggplot(data = annual) +
+  geom_point(aes(x = spawn_ann_tot, y = rec.ann, fill = year), shape = 21, size = 7, alpha = .5) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_viridis(direction = -1) +
+  labs(title = "Spawner-Recruit SRSS", x =  "Total Spawners (incl hatchery)", y = "Total Recruits") 
 
-decades$decade
+ggsave(filename =         
+ "Figs/Manuscript/FigA_spawner_recruit.pdf", plot = fig_spawn_rec, width = 9, height = 5, units = "in") 
+print(fig_spawn_rec)
 
-decades <- 
-  decades %>% 
-  group_by(stk,decade) %>% 
-  summarize(decSpawn = mean(na.omit(spawn_nat))) # decadal average in spawning
+```
 
-decades <- 
-  decades %>% 
-  group_by(stk) %>% 
-  mutate(maxDec = max(na.omit(decSpawn)), # highest decade
-         minDec = min(na.omit(decSpawn)), # lowest decade
-         propDec = na.omit(decSpawn)/maxDec) %>%  # proportion (0,1) of highest decade
-  ungroup()
+### Next, spawner-recruit at MPG scale use facets
+```{r}
+# MPG pallette
+pal=pnw_palette("Shuksan2",5, type = "discrete")
 
-length(decades$propDec)
+annual_mpg <- dat %>% 
+  group_by(year, mpg) %>% 
+  summarise(rec_mpg_ann = sum(rec, na.rm = T), 
+            spawn_mpg_nat = sum(na.omit(spawn_nat)), 
+            spawn_mpg_tot = sum(na.omit(spawn_tot)))
 
-save(statsSTK, file = "Data/statsSTK.RData")
-save(decades, file = "Data/decSTK.RData")
+levels(annual_mpg$mpg)
+
+# reorder levels for color
+annual_mpg$mpg <- factor(annual_mpg$mpg, levels = c("Lower Snake", "Imnaha", "South Fork Salmon", "Middle Fork Salmon", "Upper Salmon"))
+
+ggplot(data = annual_mpg) +
+  geom_point(aes(x = spawn_mpg_tot, y = rec_mpg_ann, fill = mpg), shape = 21, size = 5, alpha = .7) +
+  labs(title = "Spawner-Recruit SRSS", x =  "Total Spawners (incl hatchery)", y = "Total Recruits") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_manual(values = rev(pal)) +
+  theme(legend.position = "blank") +
+  facet_wrap(~mpg)
+
+fig_spawn_rec_mpg <- ggplot(data = annual_mpg) +
+  geom_point(aes(x = spawn_mpg_tot, y = rec_mpg_ann, fill = mpg), shape = 21, size = 5, alpha = .7) +
+  labs(title = "Spawner-Recruit SRSS", x =  "Total Spawners (incl hatchery)", y = "Total Recruits") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_manual(values = rev(pal)) +
+  theme(legend.position = "blank") +
+  facet_wrap(~mpg, scales = "free")
+
+ggsave(filename =         
+ "Figs/Manuscript/FigB_spawner_recruit_MPG.pdf", plot = fig_spawn_rec_mpg , width = 9, height = 5, units = "in") 
+
+print(fig_spawn_rec_mpg)
+
+
 ```
 
 
+
+
+## Time series of whole SRSS recruitment (with PDO)
+
+``` {r include=FALSE, warning=FALSE}
+
+ggplot() +
+  geom_point(data = yearly, color = "black", aes(x = year2, y = total_rec)) +
+  geom_line(data = yearly, color = "red", aes(x = year2, y = movAveRec5))
+
+ts_SRSS_pdo <- ggplot(yearly) +
+    theme_minimal() +
+  geom_rect(aes(xmin=1976, xmax=1998, ymin=0, ymax=Inf), 
+            fill = "lightgray", alpha = 0.1) +
+  geom_rect(aes(xmin=2002, xmax=2007, ymin=0, ymax=Inf), 
+              fill = "lightgray", alpha = 0.9) +
+  geom_rect(aes(xmin=2013, xmax=2020, ymin=0, ymax=Inf), 
+           fill = "lightgray", alpha = 0.9) +  
+  geom_line(aes(x = year2, y = total_rec), color = "black", size = .2) +
+  geom_point(aes(x = year2, y = total_rec), shape = 21, size = 2.5, fill = "white", colour = "black") +
+   geom_line(aes(x = year2, y = movAveRec5), color = "red", size = .2) +
+  labs(title = "SRSS Returns across PDO regimes", x =  "First Ocean Year", y = "Total SRSS Returns") +
+  xlim(1957, 2020)
+
+ggsave(filename =         
+ "Figs/Manuscript/FigA_salmon_time_series.pdf", plot = ts_SRSS_pdo, width = 5, height = 3, units = "in") 
+ 
+print(ts_SRSS_pdo)
+
+```
 
 
 ### Total recruitment (summed across all MPGs)
@@ -166,13 +201,6 @@ r1 <- ggplot(norm_ann, aes(x = year, y = rec.ann.n)) +
   labs(x = "Year", y = " Mean of normalized recruitment")
 
 # the high values in later years (when total rec is not high) tells one that the normalized values of some stocks is skewing late
-
-
-ggplot(dat, aes(x = year, y = rec.ann.n)) +
-  geom_line(color = "black", size = .2) +
-  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
-  theme_bw() +
-  labs(x = "Year", y = " Mean of normalized recruitment")
 
 ```
 
@@ -526,8 +554,6 @@ print(r7a)
 ```
 
 #### - Nope
-
-
 
 ### Zoom into harvest to look at individual MPG correlations
 ```{r echo=FALSE, warning=FALSE}
