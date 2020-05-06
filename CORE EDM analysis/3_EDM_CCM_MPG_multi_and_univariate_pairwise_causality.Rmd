@@ -1,0 +1,428 @@
+---
+title: "3_EDM_CCM_pairwise_causality"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+library(reshape2)
+library(ggplot2)
+library(viridis)
+library(gridExtra)
+library(xtable)
+library(rlist)
+library(Kendall) #for MannKendall test
+library(psych) #for paired.r function
+library(tidyr)
+library(stringr)
+```
+
+
+#Convergent Cross Mapping (CCM) with time delays
+To test whether pairwise causality exists between the environmental variables and the spawner recruit relationship. Also to test all the lags for each environmental variable to figure out which is the best to use in the multivariate embeddings.
+
+block_lnlp uses multiple time series given as input to generate an attractor reconstruction, and then applies the simplex projection or s-map algorithm to make forecasts. This method generalizes the simplex and s_map routines, and allows for "mixed" embeddings, where multiple time series can be used as different dimensions of an attractor reconstruction.
+
+#Multivariate CCM for the major population groups using block_lnlp to be able to include effective spawners in library
+
+```{r}
+###--- nonlinear test for different major population groups
+rm(list=ls())  
+load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(c(aa[13:485] ))
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+var_names <- cbind(bb,cc)
+      colnames(var_names) <- c("name","cat","subcat","offset")
+      
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+
+u <- 1
+  for(u in  c(1,3,4,5)){
+    data <- block_data[c(mpg==u)]
+    mpgname <- as.character(data[[1]]$mpg[1])
+  
+    #concatenate the time series of each variable together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.eff_n.0)
+    block <- merged_data[valid,]  
+    
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+    lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+    minlib <- lib[,2]-lib[,1]
+    lib <- lib[minlib>5,]
+    libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
+
+    #set up output table
+    library_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+    
+    #Determine best embedding dimension: E would be set to the best univariate embedding dimension for each lib_column variable:
+    best_E <- matrix(NA, nrow = length(library_vars), ncol = 2) # Save the optimal embedding dimension for each library variable
+    colnames(best_E) <- c("library","E")
+    best_E[,1] <- t(library_vars)
+    for(j in 1:length(library_vars)){
+      data <- as.matrix(cbind(block$year, block[library_vars[j]]))
+      rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            simplex_output <- simplex(data, E = 1:10, silent = TRUE)
+            best_E[j,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho
+    }
+
+    env_vars <- as.character(var_names[,1])
+    CCM_outputlist <- expand.grid(env_vars, library_vars, stringsAsFactors = FALSE) 
+    CCM_outputlist$temp <- CCM_outputlist$Var1
+    CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "[.]")           
+    CCM_outputlist[,6:12] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 7)
+    colnames( CCM_outputlist) <- c("target","library","cat","subcat","offset","rho", "rho_eff","N", "95p_crit", "ccm_rho", "MannKendall", "FisherZ")
+    CCM_outputlist <- merge(CCM_outputlist, best_E)
+    
+
+    for(i in c(1:NROW(CCM_outputlist)) ){  
+    
+      library_var <- CCM_outputlist$library[i]
+      target_var <- CCM_outputlist$target[i]
+      
+            #make lagged data block that matches the optimal E
+            max_lag <- as.numeric(as.character(CCM_outputlist$E[i]))
+                  if (max_lag==0){max_lag=1}
+            library_block <- make_block(block[library_var], t=block$year, max_lag=max_lag, tau=1, lib=lib)
+            CCMlibrarynames <- names(library_block)
+            CCMlibrarynames <- CCMlibrarynames[-c(1)] #remove "time" from list of library column names with which to do the CCM
+            #CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"block$eff_n") )
+
+#---------------------------------------------------------------------------------------------------------  
+      # CCM from library var to target var   
+      lnlp_block <- as.matrix(cbind(library_block, block[target_var]))
+            rownames(lnlp_block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+      
+xmap <-  block_lnlp(lnlp_block, lib = lib, columns = CCMlibrarynames, target_column = target_var, method = c("simplex"), tp = 0, first_column_time = TRUE, silent = TRUE)
+            CCM_outputlist$rho[i] <- xmap$rho
+            CCM_outputlist$N[i] <- xmap$num_pred
+            CCM_outputlist$`95p_crit`[i] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
+
+            
+#---------------------------------------------------------------------------------------------------------  
+# Multivariate CCM, including the number of effective spawners in the embedding 
+            lnlp_block_eff <- as.matrix(cbind(library_block[,1:dim(library_block)[2]-1], block["salm.eff_n.0"], block[target_var]))
+            rownames(lnlp_block_eff) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"salm.eff_n.0") )
+      
+xmap_eff <-  block_lnlp(lnlp_block_eff, lib = lib, columns = CCMlibrarynames, target_column = target_var, method = c("simplex"), tp = 0, first_column_time = TRUE, silent = TRUE)
+             CCM_outputlist$rho_eff[i] <- xmap_eff$rho
+
+#---------------------------------------------------------------------------------------------------------  
+# Univariate CCM from library var to target var   
+            ccm_block <- as.matrix(cbind(library_block[,1:2],block[target_var]))
+            rownames(ccm_block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+ccm <-  ccm(ccm_block, lib = lib, E = as.numeric(as.character(CCM_outputlist$E[i])), lib_column = library_var, target_column = target_var, first_column_time = TRUE, tp = 0, lib_sizes = libsize, random_libs = TRUE, num_samples=100, replace=TRUE, RNGseed=2301, silent = TRUE)      
+      
+      # Test if rho is significantly different from 0 at p=0.05 level (done for Sockey in Ye et al. 2015)
+      # Calculate the median, maximum, and 1st & 3rd quantile of rho
+            rho_quant=as.matrix(aggregate(ccm[,c('rho')],by = list(as.factor(ccm$lib_size)), quantile, na.rm = TRUE)[,'x'])
+            rho_quant <- rho_quant[complete.cases(rho_quant*0),1:5] #removes rows with inf values
+      CCM_outputlist$ccm_rho[i] <- signif(rho_quant[dim(rho_quant)[1],3],2) #save the cross map skill at max library size (50th percentile)
+            
+      #Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
+            #Here the median, maximum, and 1st & 3rd quantiles of rho are tested, all need to be <0.05.
+            ccmq=as.matrix(aggregate(ccm[,c('rho')],by = list(as.factor(ccm$lib_size)), quantile)[,'x'])
+            ccmMK <- apply(ccmq[,2:5],2,MannKendall)
+      CCM_outputlist$MannKendall[i] <- (ccmMK$`25%`[[2]]<0.05 & ccmMK$`50%`[[2]]<0.05 & ccmMK$`75%`[[2]]<0.05) # & ccmMK$`100%`[[2]]<0.05) not the last quantile as the plot often flattens out       
+      # Tests that the max library z is significantly higher than the begining. 
+      # Transforms the rho at the min library and max library length to a normally distributed Fisher's z value
+            # Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
+      FZ <- paired.r(rho_quant[1,3],rho_quant[dim(rho_quant)[1],3], NULL, libsize[1], libsize[dim(rho_quant)[1]], twotailed=FALSE)
+            CCM_outputlist$FisherZ[i] <- FZ$p            
+#-----------------------------------------------------------------------------------------------------  
+    }
+    
+saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""), compress = FALSE)
+
+}
+```
+#CCM output list meta data:
+    "library": In CCM analysis the 'library' variable is the variable of interest, in our case chinook recruitment
+    "target": In CCM analysis the 'target' variable is the putative causal variable, in our case the various abiotic and biotic variables that are hypothesized to affect chinook recruitment
+    "cat": The broader category that the target variable is in
+    "subcat": The specific variable in the broader target variable categories
+    "offset": The number of years that the target variable is offset. Environmental data are offset from 1 to 5 years after brood year. Pinniped data are offset from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns. For the CSL pup count data, 6 years are added to each offset as only 6+ year old sea lion males swim up to Oregon and eat salmon (ref in Chasco paper). Orca data is offset by 4 to 5 years after brood year - assuming orcas just eat the returning chinook. 
+
+The first analysis uses the block_lnlp function on a delay coordinate embedding of the library variable to predict the target variable. The embedding dimension used is the optimal E for the library variable (our variable of interest). 
+    "rho": The correlation coefficient between observations and predictions from the block_lnlp function. 
+    "rho_eff": The correlation coefficient from a parallel analysis that includes the number of effective spawners in place of one of the delay embeddings.  
+    "N": The number of predictions made in the block_lnlp analysis
+    "95p_crit": Based on the standard normal distribution, this is the boundary value that the rho needs to be greater than for a 95% confidence that rho is greater than zero. 
+
+The second analysis uses the ccm function to test the univariate causal influence of the target variable on the library variable. The analysis tests many different library sizes sampled randomly many times to get distributions of rho values (the correlation coefficient between observations and predictions).
+    "ccm_rho": The cross map skill at the maximum library size. 
+    "MannKendall": A test for convergence, or an increasing monotonic trend in rho as library size increases based on the Kendall rank correlation. Here the first, median and & 3rd quantiles of rho are tested, not the last quantile as the plot often flattens out; all need to be <0.05 for this to be 'TRUE'.  
+    "FisherZ": A test that rho at the max library size is significantly higher than at the minimum. 
+    
+
+```{R}
+#Figures
+rm(list=ls())  
+load("Data/Rdata/block_data.Rdata")  
+  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+u <- 1
+
+for(u in c(1,3,4,5)){
+  data <- block_data[c(mpg==u)]
+  mpgname <- as.character(data[[1]]$mpg[1])
+  CCM_outputlist<- readRDS(paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""))
+
+    # sort output table by offset then category
+    d <-  CCM_outputlist[order(CCM_outputlist$offset),]
+    d <-  d[order(d$cat),]
+    d <-  d[order(d$subcat),]
+    d$offset <- as.numeric(d$offset)
+    d$mpg <- mpgname
+ 
+    if(u==1){D <- d}
+    if(u>1){D <- rbind(D,d)}
+}
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+
+varcat <- unique(D$cat)
+for(c in c(1:length(varcat))) {
+  D_plot <- D[D$cat==varcat[c],]
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
+  
+  p1 <- ggplot(D_plot, aes(x=offset, y=rho_eff)) +
+    geom_line(aes(col=subcat)) +
+    geom_point(aes(col=subcat, shape=(MannKendall==TRUE)), show.legend = TRUE) +
+    geom_vline(aes(xintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
+    theme_bw() + 
+    guides(col = guide_legend(ncol=1)) +
+    labs(title= varcat[c], subtitle = "Multivariate CCM with block_lnlp function, without effective spawners in the embedding ", x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) + 
+    scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
+    scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+
+p2 <- p1 + facet_grid(mpg ~ library) 
+
+ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_multivariate_block_lnlp.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
+
+}
+
+
+ 
+```
+## Multivariate CCM for the major population groups using 'block_lnlp' and 'ccm' on the data block with no built in lags - evaluate lags in the code by varying tp.
+
+By default, convergent cross mapping (via the ccm function) tries to map between a lagged-coordinate vector from a “library” variable, x, and the simultaneous value of a target variable, y, where tp=0.However, note that tp is also an argument to ccm, and will accept both positive and negative values. This allows us to identify the ability to infer F from the data at different values of tp, which is, to a first approximation, the time delay by which information about y is encoded in the time series of x. Note here that negative values of tp (tp<0) indicate that past values of y are best cross mapped from the reconstructed state of x⃗. This suggests a dynamical signal that appears first in y and later in x, and is consistent with y causing x. If there is no causation in the reverse direction (i.e. x does not cause y), then we would expect that CCM in the opposite direction would be best at a positive values of tp (tp>0).
+
+This presumes that the time series are sampled frequently enough relative to the causation that a time delay can be detected. If causation is synchronous or nearly so, then we may find the optimal value of tp to be 0 in both directions.
+
+This method doesn't take advange of the whole data set as the ends of the data are cut off with the lags, but it helps to ID which lags are important for each variable.
+```{R}
+rm(list=ls()) 
+u <- 1
+for(u in c(1,3,4,5)){
+load("Data/Rdata/block_data_no_lags.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data_no_lags[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(aa[-c(1:12, 15:16, 18:19, 21:22),]) 
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+      var_names <- cbind(bb,cc[,1:2])
+      colnames(var_names) <- c("name","cat","subcat")
+      rm(aa, bb, cc)
+      
+      mpg <- c() 
+        for(stk in 1:length(block_data_no_lags)) { 
+            mpg[stk] <- block_data_no_lags[[stk]]$mpg[1]
+        }
+      data <- block_data_no_lags[c(mpg==u)]
+      mpgname <- as.character(data[[1]]$mpg[1])
+      rm(block_data_no_lags, mpg, stk)
+  
+    #concatenate the time series of each variable together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.eff_n.0)
+    block <- merged_data[valid,]  
+    rownames(block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+    #rename target columns (don't need the offset info)
+    rm(data, keys, merged_data, valid)
+    
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+    lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+    minlib <- lib[,2]-lib[,1]
+    lib <- lib[minlib>5,]
+    libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
+
+    #set up output table
+    library_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+     
+    #Determine best embedding dimension for each library variable, set to the best univariate embedding dimension:
+    best_E <- matrix(NA, nrow = length(library_vars), ncol = 2) # Save the optimal embedding dimension for each library variable
+    colnames(best_E) <- c("library","E")
+    best_E[,1] <- t(library_vars)
+          for(j in 1:length(library_vars)){
+            data <- as.matrix(cbind(block$year, block[library_vars[j]]))
+            rownames(data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            simplex_output <- simplex(data, E = 1:10, silent = TRUE)
+            best_E[j,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho
+            best_E[,2] <- as.numeric(as.character(best_E[,2]))
+          }
+    rm(simplex_output, j, data)
+    
+    #make output table of all the pairwise interactions to test with CCM 
+    CCM_outputlist <- expand.grid(as.character(var_names[,1]), library_vars, tp=-5:5, stringsAsFactors = FALSE) 
+    CCM_outputlist$temp <- CCM_outputlist$Var1
+    CCM_outputlist <- separate(CCM_outputlist,temp, into=c("cat","subcat","offset"), sep = "[.]")
+    CCM_outputlist$offset <- NULL #don't need this here
+    CCM_outputlist[,6:12] <- matrix(NA, nrow = NROW(CCM_outputlist), ncol = 7)
+    colnames( CCM_outputlist) <- c("target","library","tp", "cat","subcat", "rho", "rho_eff","N", "95p_crit","ccm_rho","MannKendall","FisherZ")
+    CCM_outputlist <- merge(CCM_outputlist, best_E)
+    rm(library_vars, best_E)
+i <- 1
+    #Perform CCM cross mappings:      
+    for(i in c(1:NROW(CCM_outputlist)) ){  
+      
+      tp <- CCM_outputlist$tp[i]
+      library_var <- CCM_outputlist$library[i]
+      target_var <- CCM_outputlist$target[i]
+      
+            #make lagged data block that matches the optimal E
+            max_lag <- as.numeric(as.character(CCM_outputlist$E[i]))
+                  if (max_lag==0){max_lag=1}
+            library_block <- make_block(block[library_var], t=block$year, max_lag=max_lag, tau=1, lib=lib)
+            CCMlibrarynames <- names(library_block)
+            CCMlibrarynames <- CCMlibrarynames[-c(1)] #remove "time" from list of library column names with which to do the CCM
+
+#---------------------------------------------------------------------------------------------------------  
+      # CCM from library var to target var   
+      lnlp_block <- as.matrix(cbind(library_block, block[target_var]))
+            rownames(lnlp_block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+      
+xmap <-  block_lnlp(lnlp_block, lib = lib, columns = CCMlibrarynames, target_column = target_var, method = c("simplex"), tp = tp, first_column_time = TRUE, silent = TRUE)
+            CCM_outputlist$rho[i] <- xmap$rho
+            CCM_outputlist$N[i] <- xmap$num_pred
+            CCM_outputlist$`95p_crit`[i] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
+
+            
+#---------------------------------------------------------------------------------------------------------  
+# Multivariate CCM, including the number of effective spawners in the embedding 
+            lnlp_block_eff <- as.matrix(cbind(library_block[,1:dim(library_block)[2]-1], block["salm.eff_n.0"], block[target_var]))
+            rownames(lnlp_block_eff) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"salm.eff_n.0") )
+      
+xmap_eff <-  block_lnlp(lnlp_block_eff, lib = lib, columns = CCMlibrarynames, target_column = target_var, method = c("simplex"), tp = tp, first_column_time = TRUE, silent = TRUE)
+             CCM_outputlist$rho_eff[i] <- xmap_eff$rho
+
+#---------------------------------------------------------------------------------------------------------        
+## Univariate CCM from library var to target var   
+      ccm_block <- as.matrix(cbind(block$year, block[library_var], block[target_var]))
+            
+      #*********** CCM function ***********
+      ccm <-  ccm(ccm_block, lib = lib, E = as.numeric(as.character(CCM_outputlist$E[i])), tp = tp, lib_column = library_var, target_column = target_var, first_column_time = TRUE, lib_sizes = libsize, random_libs = TRUE, num_samples=100, replace=TRUE, RNGseed=2301, silent = TRUE)      
+      
+      # Test if rho is significantly different from 0 at p=0.05 level (done for Sockey in Ye et al. 2015)
+      # Calculate the median, maximum, and 1st & 3rd quantile of rho
+      rho_quant=as.matrix(aggregate(ccm[,c('rho')],by = list(as.factor(ccm$lib_size)), quantile, na.rm = TRUE)[,'x'])
+      rho_quant <- rho_quant[complete.cases(rho_quant*0),1:5] #removes rows with inf values
+      CCM_outputlist$ccm_rho[i] <- signif(rho_quant[dim(rho_quant)[1],3],2) #save the cross map skill at max library size (50th percentile)
+            
+      #Test for monotonic trend in a time series z[t] based on the Kendall rank correlation of z[t] and t. 
+      #Here the median, maximum, and 1st & 3rd quantiles of rho are tested, all need to be <0.05.
+      ccmq=as.matrix(aggregate(ccm[,c('rho')],by = list(as.factor(ccm$lib_size)), quantile)[,'x'])
+      ccmMK <- apply(ccmq[,2:5],2,MannKendall)
+      CCM_outputlist$MannKendall[i] <- (ccmMK$`25%`[[2]]<0.05 & ccmMK$`50%`[[2]]<0.05 & ccmMK$`75%`[[2]]<0.05 & ccmMK$`100%`[[2]]<0.05)    
+            
+      # Tests that the max library z is significantly higher than the begining. 
+      # Transforms the rho at the min library and max library length to a normally distributed Fisher's z value
+            # Independent correlations, different sample sizes. Our small sample sizes are a disadvantage here.
+      FZ <- paired.r(rho_quant[1,3],rho_quant[dim(rho_quant)[1],3], NULL, libsize[1], libsize[dim(rho_quant)[1]], twotailed=FALSE)
+      CCM_outputlist$FisherZ[i] <- FZ$p
+            
+      rm(library_var, target_var, tp, max_lag, lnlp_block, ccm_block, xmap, ccm, rho_quant, ccmq, ccmMK, FZ)
+    }
+      
+ saveRDS(CCM_outputlist, file = paste("Output/Rdata/3_CCM/CCM_tp_",mpgname,".RDS", sep = ""), compress = FALSE)
+}
+```
+
+```{R}
+#Figures
+rm(list=ls())  
+load("Data/Rdata/block_data_no_lags.Rdata")  
+  
+mpg <- c() 
+  for(stk in 1:length(block_data_no_lags)) { 
+      mpg[stk] <- block_data_no_lags[[stk]]$mpg[1]
+  } 
+u <- 1
+
+for(u in c(1,3,4,5)){
+  data <- block_data_no_lags[c(mpg==u)]
+  mpgname <- as.character(data[[1]]$mpg[1])
+  CCM_outputlist<- readRDS(paste("Output/Rdata/3_CCM/CCM_tp_",mpgname,".RDS", sep = ""))
+
+    # sort output table by offset then category
+    d <-  CCM_outputlist[order(CCM_outputlist$tp),]
+    d <-  d[order(d$cat),]
+    d <-  d[order(d$subcat),]
+    d$mpg <- mpgname
+ 
+    if(u==1){D <- d}
+    if(u>1){D <- rbind(D,d)}
+}
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+
+varcat <- unique(D$cat)
+for(c in c(1:length(varcat))) {
+  D_plot <- D[D$cat==varcat[c],]
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
+  
+  p1 <- ggplot(D_plot, aes(x=tp, y=rho)) +
+    geom_line(aes(col=subcat)) +
+    geom_point(aes(col=subcat, shape=(MannKendall==TRUE)), show.legend = TRUE) +
+    geom_vline(aes(xintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
+    theme_bw() + 
+    guides(col = guide_legend(ncol=1)) +
+    labs(title= varcat[c], subtitle = "convergent cross-mapping", x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) + 
+    scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
+    scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+
+p2 <- p1 + facet_grid(mpg ~ library) 
+
+ggsave(filename = paste("Output/Figures/3_CCM/tp_",varcat[c],".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
+
+}
+
+ 
+```
+

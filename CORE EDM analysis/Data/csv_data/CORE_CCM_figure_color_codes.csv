@@ -115,8 +115,8 @@ upw,#00FFCC,sum,Summer
 upw,#CC6600,fal,Fall
 upw,#CC6699,win,Winter
 upw,#999999,yr,Year
-upw,#99CC33,sti,STI
-upw,#00FFCC,lusi,LUSI
-upw,#CC6600,fti,FTI
+upw,#66FF66,sti,STI
+upw,#00CCCC,lusi,LUSI
+upw,#FF9933,fti,FTI
 upw,#006633,tumi,TUMI
-upw,#CC6699,tdmi,TDMI
+upw,#CC0066,tdmi,TDMI
