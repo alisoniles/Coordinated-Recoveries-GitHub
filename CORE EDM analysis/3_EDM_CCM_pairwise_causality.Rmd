@@ -180,6 +180,8 @@ The second analysis uses the ccm function to test the univariate causal influenc
 rm(list=ls())  
 load("Data/Rdata/block_data.Rdata")  
   
+library(ggplot2)
+
 mpg <- c() 
   for(stk in 1:length(block_data)) { 
       mpg[stk] <- block_data[[stk]]$mpg[1]
@@ -207,14 +209,17 @@ for(u in c(0,1,3,5)){
 
 D$drho <- D$rho_eff - D$rho
 
-D$region <- factor(D$mpg, levels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"), labels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"))
+D$regionlabels <- factor(D$mpg, levels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"), labels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"))
 
-D$salmoncohort <- factor(D$library, levels=c("salm.rec_n.0","salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0"), labels=c("All recruits", "3 yr old recruits", "4 yr old recruits", "5 yr old recruits"))
+D$salmoncohortlabels <- factor(D$library, levels=c("salm.rec_n.0","salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0"), labels=c("All recruits", "3 yr old recruits", "4 yr old recruits", "5 yr old recruits"))
 
 manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 
 varcat <- unique(D$cat)
 D$catlabels <- factor(D$cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales"))
+
+saveRDS(D, file = "Output/Rdata/3_CCM/3_CCM_figure_data.RDS", compress = FALSE)
+
 
 
 #Multivariate
@@ -235,7 +240,7 @@ for(c in c(1:length(varcat))) {
     labs(title= D_plot$catlabels[1], subtitle = "Multivariate CCM: uses the block_lnlp function; includes effective spawners in the embedding ", x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) + 
     scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) 
     
-p2 <- p1 + facet_grid(region ~ salmoncohort) 
+p2 <- p1 + facet_grid(regionlabels ~ salmoncohortlabels) 
 
 ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_multivariate.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 }
@@ -259,7 +264,7 @@ for(c in c(1:length(varcat))) {
     scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
     scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
 
-p2 <- p1 + facet_grid(region ~ salmoncohort) 
+p2 <- p1 + facet_grid(regionlabels ~ salmoncohortlabels) 
 
 ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_univariate.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 }
@@ -284,7 +289,7 @@ for(c in c(1:length(varcat))) {
     scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3])
 
 
-p2 <- p1 + facet_grid(region ~ salmoncohort) 
+p2 <- p1 + facet_grid(regionlabels ~ salmoncohortlabels) 
 
 ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_delta_rho.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
 }
