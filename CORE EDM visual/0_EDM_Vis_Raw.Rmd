@@ -34,8 +34,7 @@ library(viridis)
 load("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Data/Rdata/block_data.Rdata")
 
 dat <- do.call("rbind", block_data) # omg I can't believe how long it took me to unlist this data object ... in 26 characters of code 
-dat[dat$mpg == "Lower Snake", ]
-# names(dat)
+
 ```
 
 
@@ -70,12 +69,11 @@ annual <- dat %>%
   mutate(spawn_ann_tot = sum(na.omit(spawn_tot))) %>% 
   ungroup()
 
-norm_ann <- dat %>%   
+yearly <- dat %>% 
   group_by(year) %>% 
-  mutate(rec.ann.n = mean(rec_n, na.rm = T)) %>% 
-  mutate(rec3.ann.n = mean(rec3_n, na.rm = T)) %>% 
-  mutate(rec4.ann.n = mean(rec4_n, na.rm = T)) %>% 
-  mutate(rec5.ann.n = mean(rec5_n, na.rm = T))
+  summarize(rec_ann = sum(rec, na.rm = T)) %>% 
+  mutate(year2 = year + 2) %>%
+  mutate(movAveRec5 = movavg(rec_ann, 5, type = "s"))
 
 ```
 
@@ -101,6 +99,7 @@ fig_spawn_rec <- ggplot(data = annual) +
 
 ggsave(filename =         
  "Figs/Manuscript/FigA_spawner_recruit.pdf", plot = fig_spawn_rec, width = 9, height = 5, units = "in") 
+
 print(fig_spawn_rec)
 
 ```
@@ -148,14 +147,12 @@ print(fig_spawn_rec_mpg)
 ```
 
 
-
-
 ## Time series of whole SRSS recruitment (with PDO)
 
 ``` {r include=FALSE, warning=FALSE}
 
 ggplot() +
-  geom_point(data = yearly, color = "black", aes(x = year2, y = total_rec)) +
+  geom_point(data = yearly, color = "black", aes(x = year2, y = rec_ann)) +
   geom_line(data = yearly, color = "red", aes(x = year2, y = movAveRec5))
 
 ts_SRSS_pdo <- ggplot(yearly) +
@@ -166,43 +163,19 @@ ts_SRSS_pdo <- ggplot(yearly) +
               fill = "lightgray", alpha = 0.9) +
   geom_rect(aes(xmin=2013, xmax=2020, ymin=0, ymax=Inf), 
            fill = "lightgray", alpha = 0.9) +  
-  geom_line(aes(x = year2, y = total_rec), color = "black", size = .2) +
-  geom_point(aes(x = year2, y = total_rec), shape = 21, size = 2.5, fill = "white", colour = "black") +
+  geom_line(aes(x = year2, y = rec_ann), color = "black", size = .2) +
+  geom_point(aes(x = year2, y = rec_ann), shape = 21, size = 2.5, fill = "white", colour = "black") +
    geom_line(aes(x = year2, y = movAveRec5), color = "red", size = .2) +
   labs(title = "SRSS Returns across PDO regimes", x =  "First Ocean Year", y = "Total SRSS Returns") +
   xlim(1957, 2020)
 
 ggsave(filename =         
- "Figs/Manuscript/FigA_salmon_time_series.pdf", plot = ts_SRSS_pdo, width = 5, height = 3, units = "in") 
+ "Figs/Manuscript/FigC_salmon_time_series.pdf", plot = ts_SRSS_pdo, width = 5, height = 3, units = "in") 
  
 print(ts_SRSS_pdo)
 
 ```
 
-
-### Total recruitment (summed across all MPGs)
-```{r echo=FALSE, warning=FALSE}
-
-# start with raw salmon numbers in a given brood year
-r <- ggplot(annual) +
-  geom_line(aes(x = year2, y = rec.ann), color = "black", size = .2) +
-  geom_point(aes(x = year2, y = rec.ann), shape = 21, size = 2.5, fill = "white", colour = "black") +
-  theme_bw() +
-  labs(x = "First Ocean Year", y = "Recruitment") +
-  xlim(1957, 2020)
-
-print(r)
-
-# next with normalized salmon numbers in a given brood year
-r1 <- ggplot(norm_ann, aes(x = year, y = rec.ann.n)) +
-  geom_line(color = "black", size = .2) +
-  geom_point(shape = 21, size = 2.5, fill = "white", colour = "black") +
-  theme_bw() +
-  labs(x = "Year", y = " Mean of normalized recruitment")
-
-# the high values in later years (when total rec is not high) tells one that the normalized values of some stocks is skewing late
-
-```
 
 ### Takeaways
 #### - Total recruitment (summed across all MPGs) follows well known env regimes 
