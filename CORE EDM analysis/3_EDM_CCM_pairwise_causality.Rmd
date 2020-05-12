@@ -114,7 +114,7 @@ mpg <- c()
 xmap <-  block_lnlp(lnlp_block, lib = lib, columns = CCMlibrarynames, target_column = target_var, method = c("simplex"), tp = 0, first_column_time = TRUE, silent = TRUE)
             CCM_outputlist$rho[i] <- xmap$rho
             CCM_outputlist$N[i] <- xmap$num_pred
-            CCM_outputlist$`95p_crit`[i] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
+            CCM_outputlist$`95p_crit`[i] <- qnorm(0.95, sd = 1/sqrt(xmap$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than in order to be signifcantly different from zero and p=0.05 level. 
 
             
 #---------------------------------------------------------------------------------------------------------  

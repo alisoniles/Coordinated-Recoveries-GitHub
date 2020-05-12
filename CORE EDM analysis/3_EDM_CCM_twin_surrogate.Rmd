@@ -357,6 +357,8 @@ PointNext <- function(x, twins, d) {
 
 #Convergent Cross Mapping (CCM) with Twin surrogate significance test'
 
+Only used the twin surrogate significance test on univarite CCM interactions that showed convergence (MannKendall==TRUE) and whose CCM rho was greater than the critical 95% rho meaning that it is significant. 
+
 Only tested at the whole ESU level, which includes the Imnaha, the Middle Fork Salmon, and the Upper Salmon MPGs. 
 
 Only included sections of data with at least 20 time points. This is because the twin surrogate time series were generated for each data chunk separately and then concatenated together. There aren't enough twins in short time series to generate a good sample (~100) twin surrogate time series. This means that some of the data, from short spans of time of a stock, are tossed out. The resulting CCM rho values tend to be higher, even though there is less data. 
