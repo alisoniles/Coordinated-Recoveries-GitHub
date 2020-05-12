@@ -174,7 +174,12 @@ The second analysis uses the ccm function to test the univariate causal influenc
     "MannKendall": A test for convergence, or an increasing monotonic trend in rho as library size increases based on the Kendall rank correlation. Here the first, median and & 3rd quantiles of rho are tested, not the last quantile as the plot often flattens out; all need to be <0.05 for this to be 'TRUE'.  
     "FisherZ": A test that rho at the max library size is significantly higher than at the minimum. 
     
-
+“E”: the embedding dimension
+“mpg”: the MPG or ESU region
+“drho”; the delta rho representing the change and rho going from the univariate model to the multivariate model. Positive means the multivariate model had a higher rho and including effective spawners in the embedding improved the forecasting of the putative causal variable. 
+“regionlabels”: a factor version of the mpg variable for plotting purposes
+“salmoncohortlabels”: a factor version of the salmon recruit library variable for plotting purposes
+“catlabels”: a factor version of the target variable categories for plotting purposes 
 ```{R}
 #Figures
 rm(list=ls())  
