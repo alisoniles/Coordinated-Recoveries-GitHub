@@ -39,7 +39,7 @@ rm(list=ls())
 load("Data/Rdata/block_data.Rdata")  
       aa <- t(data.frame(as.list(names(block_data[[1]]))))
       rownames(aa) <- NULL #remove rownames
-      bb <- data.frame(c(aa[13:485] ))
+      bb <- data.frame(c(aa[13:nrow(aa)] ))
       colnames(bb) <- c("variable")
       cc <- str_split_fixed(bb$variable, "[.]",n=3)
 var_names <- cbind(bb,cc)
@@ -51,7 +51,7 @@ mpg <- c()
   } 
 
 u <- 1
-  for(u in  c(1,3,4,5)){
+  for(u in  c(1,3,5)){
     data <- block_data[c(mpg==u)]
     mpgname <- as.character(data[[1]]$mpg[1])
   
@@ -67,7 +67,19 @@ u <- 1
     lib[,1] <- c(1, which(diff(block$year)!=1)+1)
     lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
     minlib <- lib[,2]-lib[,1]
-    lib <- lib[minlib>5,]
+    lib <- lib[minlib>20,] #only include in the library the sections of data that are continuous for at least 20 time points. 
+    x <- block[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+        for (r in 2:nrow(lib)){
+            xtmp <- block[lib[r,1]:lib[r,2],]
+            x <- rbind(x,xtmp)
+        }
+    block <- x
+    # need to recreate the library list
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+    rm(x,minlib, xtmp, r)
+    
     libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
 
     #set up output table
@@ -107,7 +119,7 @@ u <- 1
             #CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"block$eff_n") )
 
 #---------------------------------------------------------------------------------------------------------  
-      # CCM from library var to target var   
+      # Univariate CCM using block_lnlp function
       lnlp_block <- as.matrix(cbind(library_block, block[target_var]))
             rownames(lnlp_block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
       
@@ -118,7 +130,7 @@ xmap <-  block_lnlp(lnlp_block, lib = lib, columns = CCMlibrarynames, target_col
 
             
 #---------------------------------------------------------------------------------------------------------  
-# Multivariate CCM, including the number of effective spawners in the embedding 
+# Multivariate CCM using block_lnlp, including the number of effective spawners in the embedding 
             lnlp_block_eff <- as.matrix(cbind(library_block[,1:dim(library_block)[2]-1], block["salm.eff_n.0"], block[target_var]))
             rownames(lnlp_block_eff) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"salm.eff_n.0") )
@@ -127,7 +139,7 @@ xmap_eff <-  block_lnlp(lnlp_block_eff, lib = lib, columns = CCMlibrarynames, ta
              CCM_outputlist$rho_eff[i] <- xmap_eff$rho
 
 #---------------------------------------------------------------------------------------------------------  
-# Univariate CCM from library var to target var   
+# Univariate CCM using ccm function
             ccm_block <- as.matrix(cbind(library_block[,1:2],block[target_var]))
             rownames(ccm_block) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
 ccm <-  ccm(ccm_block, lib = lib, E = as.numeric(as.character(CCM_outputlist$E[i])), lib_column = library_var, target_column = target_var, first_column_time = TRUE, tp = 0, lib_sizes = libsize, random_libs = TRUE, num_samples=100, replace=TRUE, RNGseed=2301, silent = TRUE)      
@@ -174,64 +186,13 @@ The second analysis uses the ccm function to test the univariate causal influenc
     "FisherZ": A test that rho at the max library size is significantly higher than at the minimum. 
     
 
-```{R}
-#Figures
-rm(list=ls())  
-load("Data/Rdata/block_data.Rdata")  
-  
-mpg <- c() 
-  for(stk in 1:length(block_data)) { 
-      mpg[stk] <- block_data[[stk]]$mpg[1]
-  } 
-u <- 1
-
-for(u in c(1,3,4,5)){
-  data <- block_data[c(mpg==u)]
-  mpgname <- as.character(data[[1]]$mpg[1])
-  CCM_outputlist<- readRDS(paste("Output/Rdata/3_CCM/3_CCM_MPG_",mpgname,".RDS", sep = ""))
-
-    # sort output table by offset then category
-    d <-  CCM_outputlist[order(CCM_outputlist$offset),]
-    d <-  d[order(d$cat),]
-    d <-  d[order(d$subcat),]
-    d$offset <- as.numeric(d$offset)
-    d$mpg <- mpgname
- 
-    if(u==1){D <- d}
-    if(u>1){D <- rbind(D,d)}
-}
-
-manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
-
-varcat <- unique(D$cat)
-for(c in c(1:length(varcat))) {
-  D_plot <- D[D$cat==varcat[c],]
-  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
-  mcc <- sapply(mcc, unlist)
-  rownames(mcc) <- mcc[,2]
-  
-  p1 <- ggplot(D_plot, aes(x=offset, y=rho_eff)) +
-    geom_line(aes(col=subcat)) +
-    geom_point(aes(col=subcat, shape=(MannKendall==TRUE)), show.legend = TRUE) +
-    geom_vline(aes(xintercept=0), colour='#999999') +
-    geom_hline(aes(yintercept=0), colour='#999999') +
-    geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
-    theme_bw() + 
-    guides(col = guide_legend(ncol=1)) +
-    labs(title= varcat[c], subtitle = "Multivariate CCM with block_lnlp function, without effective spawners in the embedding ", x="Variable offset, year", y=expression(paste("Cross-mapping correlation, ", {rho}))) + 
-    scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
-    scale_shape_manual(name="MK test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
-
-p2 <- p1 + facet_grid(mpg ~ library) 
-
-ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_multivariate_block_lnlp.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
-
-}
 
 
- 
-```
-## Multivariate CCM for the major population groups using 'block_lnlp' and 'ccm' on the data block with no built in lags - evaluate lags in the code by varying tp.
+
+
+
+## Multivariate CCM for the major population groups using 'block_lnlp' and 'ccm' on the data block with no built in lags 
+# evaluate lags in the code by varying tp.
 
 By default, convergent cross mapping (via the ccm function) tries to map between a lagged-coordinate vector from a “library” variable, x, and the simultaneous value of a target variable, y, where tp=0.However, note that tp is also an argument to ccm, and will accept both positive and negative values. This allows us to identify the ability to infer F from the data at different values of tp, which is, to a first approximation, the time delay by which information about y is encoded in the time series of x. Note here that negative values of tp (tp<0) indicate that past values of y are best cross mapped from the reconstructed state of x⃗. This suggests a dynamical signal that appears first in y and later in x, and is consistent with y causing x. If there is no causation in the reverse direction (i.e. x does not cause y), then we would expect that CCM in the opposite direction would be best at a positive values of tp (tp>0).
 
@@ -239,6 +200,8 @@ This presumes that the time series are sampled frequently enough relative to the
 
 This method doesn't take advange of the whole data set as the ends of the data are cut off with the lags, but it helps to ID which lags are important for each variable.
 ```{R}
+# no built in lags analysis. Varies tp instead.
+
 rm(list=ls()) 
 u <- 1
 for(u in c(1,3,4,5)){
@@ -274,8 +237,20 @@ load("Data/Rdata/block_data_no_lags.Rdata")
     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
     lib[,1] <- c(1, which(diff(block$year)!=1)+1)
     lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
-    minlib <- lib[,2]-lib[,1]
-    lib <- lib[minlib>5,]
+        minlib <- lib[,2]-lib[,1]
+    lib <- lib[minlib>20,] #only include in the library the sections of data that are continuous for at least 20 time points. 
+    x <- block[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+        for (r in 2:nrow(lib)){
+            xtmp <- block[lib[r,1]:lib[r,2],]
+            x <- rbind(x,xtmp)
+        }
+   block <- x
+   # need to recreate the library list
+   lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+        rm(x,minlib, xtmp, r)
+    
     libsize <- round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
 
     #set up output table

@@ -483,8 +483,8 @@ for(l in 1:length(library_vars)){ #For each library var
          ccm.tmp <- cbind(ccm.tmp, twin.sur$rho)
      
            CCM$ter_rho[i] = rev(ccm.tmp$rho)[1] #terminal rho - rho for CCM at largest library size
-           CCM$d_rho[i] = rev(ccm.tmp$rho)[1] - ccm.tmp$rho[1] #delta rho - the change in rho from smalles to largest library size
-           CCM$u_rho[i] = rev(twin.sur$rho$u_rho)[1] #difference between rho and the top of the 95% CI of the surrogate data rho, for the largest library size
+           CCM$d_rho[i] = rev(ccm.tmp$rho)[1] - ccm.tmp$rho[1] #delta rho - the change in rho from smallest to largest library size
+           CCM$u_rho[i] = rev(twin.sur$rho$u_rho)[1] #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
            CCM$xmap_from_to[i] = sprintf("Xmap from %s to %s", library_var, target_var) 
       
     }}
@@ -558,9 +558,9 @@ for(c in c(1:length(varcat))) {
     geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
     theme_bw() + 
     guides(col = guide_legend(ncol=1)) +
-    labs(title= D_plot$catlabels[1], subtitle = "CCM Twin Surrogate significance test: uses the ccm function; without effective spawners in the embedding ", x="Variable offset, year", y="difference between true {rho} and the 95% CI of the surrogate {rho}") + 
+    labs(title= D_plot$catlabels[1], subtitle = "CCM Twin Surrogate significance test: uses the ccm function; without effective spawners in the embedding ", x="Variable offset, year", y=expression(paste("difference between true ", rho," and the 95% CI of the surrogate", rho, sep=""))) + 
     scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
-    scale_shape_manual(name="Convergence test, {delta} rho>0",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+    scale_shape_manual(name=expression(paste("Convergence test ", delta, rho,">0")),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
 
 p2 <- p1 + facet_grid(catlabels ~ salmoncohortlabels) 
 
@@ -574,7 +574,7 @@ p2 <- ggplot(D, aes(x=d_rho, y=u_rho))+
   geom_vline(aes(xintercept=0), colour='#999999') +
   geom_hline(aes(yintercept=0), colour='#999999') +
     labs(title= D_plot$catlabels[1], subtitle = "CCM Twin Surrogate significance test: comparison of u_rho and delta rho ", x="Delta rho", y="u_rho") + 
-    scale_shape_manual(name="Convergence test, {delta} rho>0",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+    scale_shape_manual(name=expression(paste("Convergence test, ", delta, rho, " > 0", sep="")),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
 
 print(p2)  
 ```

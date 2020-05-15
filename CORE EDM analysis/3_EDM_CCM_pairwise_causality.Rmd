@@ -40,19 +40,14 @@ rm(list=ls())
 load("Data/Rdata/block_data.Rdata")  
       aa <- t(data.frame(as.list(names(block_data[[1]]))))
       rownames(aa) <- NULL #remove rownames
-      bb <- data.frame(c(aa[13:485] ))
+      bb <- data.frame(c(aa[13:nrow(aa)] ))
       colnames(bb) <- c("variable")
       cc <- str_split_fixed(bb$variable, "[.]",n=3)
 var_names <- cbind(bb,cc)
       colnames(var_names) <- c("name","cat","subcat","offset")
-      
-mpg <- c() 
-  for(stk in 1:length(block_data)) { 
-      mpg[stk] <- block_data[[stk]]$mpg[1]
-  } 
 
-    data <- block_data[c(mpg==1 | mpg==3 | mpg==5)] #only include Imnaha, Middle Fork Salmon and Upper Salmon MPGs. We tossed the Lower Snake and South Fork Salmon because there weren't enough stocks for these MPGs
-    esuname <- as.character("SnakeESU")
+data <- block_data #Include all mpgs at the whole ESU level
+esuname <- as.character("SnakeESU")
   
     #concatenate the time series of each variable together
     keys <-c(names(data[[1]]))
@@ -66,9 +61,22 @@ mpg <- c()
     lib[,1] <- c(1, which(diff(block$year)!=1)+1)
     lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
     minlib <- lib[,2]-lib[,1]
-    lib <- lib[minlib>5,]
-    libsize <- c(50,100,150,300,450,700,1000,NROW(block))  #round(seq(NROW(block)/8, NROW(block), by = NROW(block)/8))
-
+    lib <- lib[minlib>20,] #only include in the library the sections of data that are continuous for at least 20 time points. 
+    x <- block[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+        for (r in 2:nrow(lib)){
+            xtmp <- block[lib[r,1]:lib[r,2],]
+            x <- rbind(x,xtmp)
+        }
+   block <- x
+   # need to recreate the library list
+   lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+        rm(x,minlib, xtmp, r)
+    
+    
+    libsize <- c(50,100,150,300,450,700,1000,NROW(block))  
+    
     #set up output table
     library_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
     
