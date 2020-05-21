@@ -222,14 +222,14 @@ for(u in c(0,1,3,5)){
 
 D$drho <- D$rho_eff - D$rho
 
-D$regionlabels <- factor(D$mpg, levels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"), labels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"))
+D$regionlabels <- factor(D$mpg, levels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"), labels=c("Snake River ESU", "Imnaha MPG", "Middle Fork Salmon MPG", "Upper Salmon MPG"))
 
 D$salmoncohortlabels <- factor(D$library, levels=c("salm.rec_n.0","salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0"), labels=c("All recruits", "3 yr old recruits", "4 yr old recruits", "5 yr old recruits"))
 
 manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 
 varcat <- unique(D$cat)
-D$catlabels <- factor(D$cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales"))
+D$catlabels <- factor(D$cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca", "flow" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales", "River flow"))
 
 saveRDS(D, file = "Output/Rdata/3_CCM/3_CCM_figure_data.RDS", compress = FALSE)
 
