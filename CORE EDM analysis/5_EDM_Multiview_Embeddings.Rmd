@@ -120,38 +120,53 @@ for(tv in 1:length(target_vars)){ # for each target variable
                               stats_only = TRUE, first_column_time = TRUE)
      saveRDS(in_results, file = paste("Output/Rdata/5_MVE/5_MVE_in_results_",target_vars[tv],".RData", sep = ""), compress = FALSE)
      
-     # rank embeddings
+     #Choose the best embeddings for each predictor variable
      num_embeddings <- NROW(in_results)
-     in_sample_ranking <- order(in_results$rho, decreasing = TRUE)
-     best_embeddings <- embeddings_list[in_sample_ranking,][1:floor(sqrt(num_embeddings)),]
+     in_sample_ranking <- order(in_results$rho, decreasing = TRUE)  # rank embeddings by rho
+     ordered_embeddings <- embeddings_list[in_sample_ranking,] # order by rho
+     chosen_embeddings <- matrix(0,nrow(ordered_embeddings),1)
+     for (v in (3:nrow(ccm))){ #for each predictor variable
+         ordered_embed_rowindex <- which(ordered_embeddings==v, arr.ind=TRUE)[1:100,1] #ID the 100 models with the highest rho (their embedding index from the ordered list of embeddings) containing that predictor variable
+         chosen_embeddings[ordered_embed_rowindex] <- 1
+         }
+     best_embeddings <- ordered_embeddings[chosen_embeddings==1,]
+     
                
 # Save smap coefficients
      out_results <- block_lnlp(MVE_block, lib = lib, pred = lib, 
                                method = "s-map", 
-                               columns = embeddings_list, tp=1, 
+                               columns = best_embeddings, tp=1, 
                                target_column = 1,
                                theta = best_E_T[tv,3],
                                stats_only = FALSE, first_column_time = TRUE,
                                save_smap_coefficients = TRUE)
      saveRDS(out_results, file = paste("Output/Rdata/5_MVE/5_MVE_out_results_MVE_block_",target_vars[tv],".RData", sep = ""), compress = FALSE)
+
      
+rm(list=ls()) 
+name <- "Snake River ESU"
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+
+for(tv in 1:length(target_vars)){ # for each target variable
+  load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
      smap_coeffs <- as.data.frame(MVE_block[,1])
      colnames(smap_coeffs) <- "year"
-     for (k in 1:length(out_results)){ #for each embedding  
-     k_coeffs <- data.frame(out_results$smap_coefficients[[k]]) #extract the interaction coefficients for each variable over time
-     embed_names <- colnames(lagged_block[embeddings_list[k,]+1])
-     coeff_names <- sapply(embed_names,function(x) paste(k,"_", target_vars[tv], "/", x, sep = ""))
-     colnames(k_coeffs) <- paste(c(coeff_names, "constant"))
-     smap_coeffs <- cbind(smap_coeffs, k_coeffs[,1:ncol(embeddings_list)])
-      # calculate the mean of each coeff for each year (accross the different stocks in the ESU/MPG)
-     k_stock_mean_coeff <- aggregate(k_coeffs[,1:ncol(embeddings_list)], list(smap_coeffs$year), mean,na.rm = TRUE)
-     if (k==1){smap_coeffs_ESU_mean <-  k_stock_mean_coeff} 
-     if (k>1){smap_coeffs_ESU_mean <- cbind(smap_coeffs_ESU_mean,  k_stock_mean_coeff[,2:ncol(embeddings_list)])}
-     }
+     for (k in 1:nrow(out_results)){ #for each embedding  
+         k_coeffs <- data.frame(out_results$smap_coefficients[[k]]) #extract the interaction coefficients for each variable over time
+         embed_names <- colnames(lagged_block[embeddings_list[k,]+1])
+         coeff_names <- sapply(embed_names,function(x) paste(k,"_", target_vars[tv], "/", x, sep = ""))
+         colnames(k_coeffs) <- paste(c(coeff_names, "constant"))
+         smap_coeffs <- cbind(smap_coeffs, k_coeffs[,1:ncol(embeddings_list)])
+          # calculate the mean of each coeff for each year (accross the different stocks in the ESU/MPG)
+         k_stock_mean_coeff <- aggregate(k_coeffs[,1:ncol(embeddings_list)], list(smap_coeffs$year), mean,na.rm = TRUE)
+         if (k==1){smap_coeffs_ESU_mean <-  k_stock_mean_coeff} 
+         if (k>1){smap_coeffs_ESU_mean <- cbind(smap_coeffs_ESU_mean,  k_stock_mean_coeff[,2:ncol(embeddings_list)])}
+         }
      
      saveRDS(smap_coeffs, file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_",name,"_",target_vars[tv],".RData", sep = ""))
      saveRDS(smap_coeffs_ESU_mean, file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",name,"_",target_vars[tv],".RData", sep = ""))
-     save.image(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
+}    
+     #save.image(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
 }
 
 ```
@@ -174,16 +189,17 @@ mpg <- c()
       mpg[stk] <- block_data[[stk]]$mpg[1]
   } 
 
-target_vars <- c("salm.rec_n.0", "salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0")
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
 
 u <- 0
-tv <- 1
+
 for(u in c(0)){ #} c(0,1,3,5)){
 
     if(u==0){ 
     mpgname <- "Snake River ESU"
         for(tv in 1:length(target_vars)){ # for each target variable 
-        load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
+        smap_coeffs_ESU_mean <- readRDS(file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",name,"_",target_vars[tv],".RData", sep = ""))
+          #load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
           if(tv==1){D <- smap_coeffs_ESU_mean}
           if(tv>1){d <- smap_coeffs_ESU_mean
           D <- cbind(D, d[,2:ncol(d)])}
@@ -226,7 +242,7 @@ D$catlabels <- factor(D$causal.cat, levels=c("hatch", "npgo", "pdo", "upw", "csl
             
             print(p2)
             
-            ggsave(filename = paste("Output/Figures/5_MVE/5_MVE_", varcat[i], "_interaction_coeff_", mpgname, ".pdf", sep = ""), plot = p, width = 7, height = 9.5, units = "in")  # saves the last plot
+            ggsave(filename = paste("Output/Figures/5_MVE/5_MVE_", varcat[i], "_interaction_coeff_", mpgname, ".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
 
               }
 }
