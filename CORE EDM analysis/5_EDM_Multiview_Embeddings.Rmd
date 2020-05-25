@@ -149,7 +149,7 @@ for(tv in 1:length(target_vars)){ # for each target variable
 ```
 
 ```{R}
-#this code is for extracting info from the out results of the MVE runs above
+#this code is for extracting info from the in results of the MVE run above
 target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
 mpgname <- "Snake River ESU"
 tv <- 1
@@ -159,10 +159,13 @@ load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars
    num_embeddings <- NROW(in_results)
    in_sample_ranking <- order(in_results$rho, decreasing = TRUE)  # rank embeddings by rho
    ordered_embeddings <- embeddings_list[in_sample_ranking,] # order by rho
-   
-     
-   MVE_model_summary <- as.data.frame(MVE_block[,1])
-   
+   rho_embeddings <- in_results$rho[in_sample_ranking]
+   ordered_embeddings <- cbind(ordered_embeddings,rho_embeddings)
+   embed_var_names <- cbind((1:155), colnames(lagged_block)[2:156])
+   colnames(embed_var_names) <- c("code_num", "var_name")
+   MVE_list <- list(ordered_embeddings, embed_var_names)
+   saveRDS(MVE_list, file = paste("Output/Rdata/5_MVE/5_MVE_model_summary_",target_vars[tv],".RData", sep = ""))
+
  }
 ```
 
