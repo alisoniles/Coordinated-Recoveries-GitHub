@@ -60,19 +60,21 @@ for(tv in 1:length(target_vars)){ # for each target variable
     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
             lib[,1] <- c(1, which(diff(block$year)!=1)+1)
             lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
-    minlib <- lib[,2]-lib[,1]
-            lib <- lib[minlib>20,] #only include in the library the sections of data that are continuous for at least 20 time points. 
-    x <- block[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
-        for (r in 2:nrow(lib)){
-            xtmp <- block[lib[r,1]:lib[r,2],]
-            x <- rbind(x,xtmp)
-        }
-   block <- x
-   # need to recreate the library list
-   lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
-            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
-            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
-        rm(x,minlib, xtmp, r)
+           #only include in the library the sections of data that are continuous for at least 20 time points. 
+            minlib <- lib[,2]-lib[,1]
+                  lib <- lib[minlib>20,] 
+           #narrow the data block to these large library sections
+                  x <- block[lib[1,1]:lib[1,2],] 
+                  for (r in 2:nrow(lib)){
+                  xtmp <- block[lib[r,1]:lib[r,2],]
+                  x <- rbind(x,xtmp)
+                  }
+                  block <- x
+           #recreate the library list
+           lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+                  lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+                  lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+              rm(x,minlib, xtmp, r)
             
     # determine the best univariate embedding dimension and theta for each target variable
     block_target <- as.matrix(cbind(block$year, block[target_vars[tv]]))
@@ -131,7 +133,6 @@ for(tv in 1:length(target_vars)){ # for each target variable
          }
      best_embeddings <- ordered_embeddings[chosen_embeddings==1,]
      
-               
 # Save smap coefficients
      out_results <- block_lnlp(MVE_block, lib = lib, pred = lib, 
                                method = "s-map", 
@@ -142,36 +143,58 @@ for(tv in 1:length(target_vars)){ # for each target variable
                                save_smap_coefficients = TRUE)
      saveRDS(out_results, file = paste("Output/Rdata/5_MVE/5_MVE_out_results_MVE_block_",target_vars[tv],".RData", sep = ""), compress = FALSE)
 
-     
-rm(list=ls()) 
-name <- "Snake River ESU"
-target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+     save.image(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
+}
 
-for(tv in 1:length(target_vars)){ # for each target variable
-  load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
+```
+
+```{R}
+#this code is for extracting info from the out results of the MVE runs above
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+mpgname <- "Snake River ESU"
+tv <- 1
+ for(tv in 1:length(target_vars)){ # for each target variable 
+load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
+   
+   num_embeddings <- NROW(in_results)
+   in_sample_ranking <- order(in_results$rho, decreasing = TRUE)  # rank embeddings by rho
+   ordered_embeddings <- embeddings_list[in_sample_ranking,] # order by rho
+   
+     
+   MVE_model_summary <- as.data.frame(MVE_block[,1])
+   
+ }
+```
+
+
+
+```{R} 
+#this code is for extracting info from the out results of the MVE runs above
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+mpgname <- "Snake River ESU"
+tv <- 1
+ for(tv in 1:length(target_vars)){ # for each target variable 
+load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
+          
      smap_coeffs <- as.data.frame(MVE_block[,1])
      colnames(smap_coeffs) <- "year"
+     k <- 1
      for (k in 1:nrow(out_results)){ #for each embedding  
          k_coeffs <- data.frame(out_results$smap_coefficients[[k]]) #extract the interaction coefficients for each variable over time
          embed_names <- colnames(lagged_block[embeddings_list[k,]+1])
-         coeff_names <- sapply(embed_names,function(x) paste(k,"_", target_vars[tv], "/", x, sep = ""))
+         coeff_names <- sapply(embed_names,function(x) paste(k,"_", round(out_results$rho[k],3),"_", target_vars[tv], "/", x, sep = ""))
          colnames(k_coeffs) <- paste(c(coeff_names, "constant"))
          smap_coeffs <- cbind(smap_coeffs, k_coeffs[,1:ncol(embeddings_list)])
           # calculate the mean of each coeff for each year (accross the different stocks in the ESU/MPG)
          k_stock_mean_coeff <- aggregate(k_coeffs[,1:ncol(embeddings_list)], list(smap_coeffs$year), mean,na.rm = TRUE)
          if (k==1){smap_coeffs_ESU_mean <-  k_stock_mean_coeff} 
-         if (k>1){smap_coeffs_ESU_mean <- cbind(smap_coeffs_ESU_mean,  k_stock_mean_coeff[,2:ncol(embeddings_list)])}
-         }
-     
+         if (k>1){smap_coeffs_ESU_mean <- cbind(smap_coeffs_ESU_mean,  k_stock_mean_coeff[,2:(ncol(embeddings_list)+1)])}
+     }
      saveRDS(smap_coeffs, file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_",name,"_",target_vars[tv],".RData", sep = ""))
      saveRDS(smap_coeffs_ESU_mean, file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",name,"_",target_vars[tv],".RData", sep = ""))
-}    
-     #save.image(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",name,"_",target_vars[tv],".RData", sep = "")) 
-}
+ }
 
 ```
-
-
 
 #S-map Coefficients
 Plot interaction strengths from the top k multiview embeddings.
@@ -198,8 +221,7 @@ for(u in c(0)){ #} c(0,1,3,5)){
     if(u==0){ 
     mpgname <- "Snake River ESU"
         for(tv in 1:length(target_vars)){ # for each target variable 
-        smap_coeffs_ESU_mean <- readRDS(file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",name,"_",target_vars[tv],".RData", sep = ""))
-          #load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
+        smap_coeffs_ESU_mean <- readRDS(file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",mpgname,"_",target_vars[tv],".RData", sep = ""))
           if(tv==1){D <- smap_coeffs_ESU_mean}
           if(tv>1){d <- smap_coeffs_ESU_mean
           D <- cbind(D, d[,2:ncol(d)])}
@@ -209,7 +231,7 @@ for(u in c(0)){ #} c(0,1,3,5)){
     D <- D %>% pivot_longer(-Group.1, names_to = "var", values_to = "IS")  #create long data for plotting
     D$mpg <- mpgname
     D <- separate(D, var, into=c("model","var"), sep = "/")  #add columns for model number, variable
-    D <- separate(D, model, into=c("model","target","offset"), sep = "_")  #add columns for model number, target variable
+    D <- separate(D, model, into=c("model","rho","target","offset"), sep = "_")  #add columns for model number, model rho, target variable
     D$offset <- NULL
     D <- separate(D, var, into=c("causal.cat","causal.subcat","causal.offset"), sep = "\\.")  #add columns for causal variable category,  
     D$year <- D$Group.1
@@ -224,6 +246,8 @@ manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 varcat <- unique(D$causal.cat)
 D$catlabels <- factor(D$causal.cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca", "flow" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales", "River flow"))
 
+saveRDS(D, file = paste("Output/Rdata/5_MVE/5_MVE_coeff_data_for_plotting_",mpgname,".RData", sep = ""))
+
 # For each variable, plot the changing coefficients over time from different mutivariate embeddings
             # loop through the different chosen variables
             for(i in 1:NROW(varcat)) {  
@@ -233,12 +257,14 @@ D$catlabels <- factor(D$causal.cat, levels=c("hatch", "npgo", "pdo", "upw", "csl
             rownames(mcc) <- mcc[,2]
             
             p1 <- ggplot(df, aes(x=year, y=IS)) +
-              geom_line(aes(col=causal.subcat)) +    
+              geom_line(aes(col=causal.subcat, group=model)) +    
               geom_hline(aes(yintercept=0), colour='#999999') +
               theme_bw() + 
-              labs(title= df$catlabels[1], subtitle = paste("Mean effect across stocks in", mpgname, "from all multiview embeddings", sep = " "), x="year", y="interaction coefficient")
+              guides(col = guide_legend(ncol=1)) +
+              labs(title= df$catlabels[1], subtitle = paste("Mean effect across stocks in", mpgname, "from all multiview embeddings", sep = " "), x="year", y="interaction coefficient") + 
+              scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3])
             
-            p2 <- p1 + facet_grid(causal.offset ~ salmoncohortlabels) 
+            p2 <- p1 + facet_grid( ~ salmoncohortlabels) 
             
             print(p2)
             
