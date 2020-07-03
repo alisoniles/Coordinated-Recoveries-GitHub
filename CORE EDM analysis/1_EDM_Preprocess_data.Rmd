@@ -20,6 +20,8 @@ library(gridExtra)
 library(xtable)
 library(rlist)
 library(tidyr)
+library(tidyr)
+library(pracma) #detrending function
 ```
 
 #load Chinook stock data and harvest data
@@ -326,19 +328,12 @@ block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_da
 
 # make a data block with no lags
 ```{R}
-env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
-esu_data <- read.csv("Data/csv_data/CORE_2020_data_ESU.csv")
-mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
+rm(list=ls())  
+data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
 
-# Change the peak flow date to day of year
-startyrdate <- as.Date(paste(as.character(mpg_data$year),"-01-01",sep=""))
-peakflowdate <- as.Date(mpg_data$flow.peakdate)
-mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
-mpg_data$flow.peakdate <- NULL
-
-# use this to focus on one stock to trouble-shoot the function code:
- # stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
-
+library(tidyr)
+library(stringr)
+library(ggplot2)
 
 normalize <- function(block)
 {
@@ -354,24 +349,110 @@ normalize <- function(block)
         return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
 }
 
+mydetrend <- function(block)
+{
+  if(NCOL(block)==1)
+  {
+         index <- complete.cases(block)
+         x <- as.matrix(block[index])
+         dx <- detrend(x)
+         block[index] <- dx
+  }
+  else
+  for(i in 1:NCOL(block)) 
+    {
+         index <- complete.cases(block[,i])
+         x <- as.matrix(block[index,i])
+         dx <- detrend(x)
+         block[index,i] <- dx
+    }
+     return(block)
+}
+
+    preprocess_stock <- function(stock_df)
+    {
+        n <- NROW(stock_df)  #n is the number of observations for the stock
+         
+        stock_df$ret <- stock_df$rec3 + c(NA, stock_df$rec4[1:(n-1)]) + c(NA, NA, stock_df$rec5[1:(n-2)]) #total returns in a given year are calculated by adding 3 year old recruits plus 4 year old recruits from the previous brood year, plus 5 year olds from two years prior...etc. This value is aligned to the rec3 brood year, not the year they are actually returning together. 
+       
+        # Normalize on a 1 year cycle line (i.e. NO cycle line!)
+        temp <- mydetrend(stock_df$spawn_tot)
+        temp <- normalize(temp)
+        stock_df$salm.eff_n <- temp #normalized number of effective spawners
+      
+        temp <- mydetrend(stock_df$rec3)
+        temp <- normalize(temp)
+        stock_df$salm.rec3_n <- temp #normalized 3 year old recruits
+
+        temp <- mydetrend(stock_df$rec4)
+        temp <- normalize(temp)
+        stock_df$salm.rec4_n <- temp #normalized 4 year old recruits
+
+        temp <- mydetrend(stock_df$rec5)
+        temp <- normalize(temp)
+        stock_df$salm.rec5_n <- temp #normalized 5 year old recruits
+
+        temp <- mydetrend(stock_df$rec)
+        temp <- normalize(temp)
+        stock_df$salm.rec_n <- temp #normalized total recruits
+        
+        temp <- mydetrend(stock_df$harvest)
+        temp <- normalize(temp)
+        stock_df$harv.SPSS <- temp #normalized harvest with name in the same format as ESU level harvest data
+        
+        temp <- mydetrend(stock_df$recspn)
+        temp <- normalize(temp)
+        stock_df$salm.recspn_n <- temp #normalized total recruits
+        
+        temp <- mydetrend(stock_df$recspn3)
+        temp <- normalize(temp)
+        stock_df$salm.recspn3_n <- temp #normalized 3 year old recruits
+
+        temp <- mydetrend(stock_df$recspn4)
+        temp <- normalize(temp)
+        stock_df$salm.recspn4_n <- temp #normalized 4 year old recruits
+
+        temp <- mydetrend(stock_df$recspn5)
+        temp <- normalize(temp)
+        stock_df$salm.recspn5_n <- temp #normalized 5 year old recruits
+   
+        
+        return(stock_df)
+    }   
+     
+stock_data <- split(data, data$stk)
+#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+stock_data <- lapply(stock_data, preprocess_stock) 
+save(stock_data, file = "Data/Rdata/stock_data_no_lags.Rdata")
+
+env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+esu_data <- read.csv("Data/csv_data/CORE_2020_data_ESU_NAforZeros.csv")
+mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
+
+# Change the peak flow date to day of year
+startyrdate <- as.Date(paste(as.character(mpg_data$year),"-01-01",sep=""))
+peakflowdate <- as.Date(mpg_data$flow.peakdate)
+mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
+mpg_data$flow.peakdate <- NULL
 
 make_block <- function(stock_df, env_data, esu)
     {
         # line up environmental data at ESU level        
         env_names <- names(env_data)[2:length(names(env_data))]  
-        env_data[, 2:NCOL(env_data)] <- normalize(env_data[2:NCOL(env_data)]) 
-    
         desired_years <- stock_df$year
         index_in_env_data <- match(desired_years, env_data$year)
         index_in_stock_df <- 1:length(desired_years)
   
         df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
         df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
+        df <- mydetrend(df)
+        df <- normalize(df)
         df.colnames <- env_names
         stock_df[, df.colnames] <- df
         
         # line up species data at ESU level     
         esu_names <- names(esu_data)[2:length(names(esu_data))]  
+        esu_data[, 2:NCOL(esu_data)] <- mydetrend(esu_data[, 2:NCOL(esu_data)])
         esu_data[, 2:NCOL(esu_data)] <- normalize(esu_data[2:NCOL(esu_data)])
 
         desired_years <- stock_df$year
@@ -388,6 +469,7 @@ make_block <- function(stock_df, env_data, esu)
         mpg_tempdata <- mpg_data[mpg_data$mpg==desired_mpg,]
         mpg_tempdata$mpg <- NULL
         mpgdata_names <- c("flow.mean", "flow.peak", "flow.gageht", "flow.peakday")
+        mpg_tempdata[, 2:NCOL(mpg_tempdata)] <- mydetrend(mpg_tempdata[, mpgdata_names]) 
         mpg_tempdata[, 2:NCOL(mpg_tempdata)] <- normalize(mpg_tempdata[, mpgdata_names]) 
 
         desired_years <- stock_df$year
@@ -410,5 +492,39 @@ block_data_no_lags <- lapply(stock_data, function(stock_df) {make_block(stock_df
     
 # save and return
     save(block_data_no_lags, file = "Data/Rdata/block_data_no_lags.Rdata")
+
+```
+
+# plot the data
+
+```{R}
+
+#concatenate the time series of each variable together
+    keys <-c(names(stock_data[[1]]))
+    block <-setNames(do.call(mapply, c(FUN=c, lapply(stock_data, `[`, keys))), keys)
+    block <- as.data.frame(block)
+    rownames(block) <- NULL
+
+keycol <- "variable"
+valuecol <- "value"
+gathercols <- colnames(block[4:26])
+
+D <- gather(block, keycol, valuecol, gathercols)
+     colnames(D) <- c("mpg", "stk","year","key","value")
+
+varcat <- unique(D$stk) 
+for(c in c(1:length(varcat))) {
+     D_plot <- D[D$stk==varcat[c],]     
+     p1 <- ggplot(D_plot, aes(x=year, y=value) )+
+         geom_line(aes(col=key)) +
+         geom_point(aes(col=key)) +
+         geom_hline(aes(yintercept=0), colour='#999999') +
+         theme_bw() + 
+         guides(col = guide_legend(ncol=1)) +
+         labs(title= varcat[c], subtitle = "", x="year", y="normalized value") 
+         #facet_wrap(vars(key)) 
+     print(p1)
+}
+
 
 ```

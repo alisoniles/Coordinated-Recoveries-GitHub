@@ -160,7 +160,6 @@ for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which ther
             MultiEDM_data <- as.matrix(cbind(block["year"], block[target_var], block["eff_n"], block[testvar[i]]))
             rownames( MultiEDM_data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             smap <- block_lnlp(MultiEDM_data, lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = TRUE, save_smap_coefficients = TRUE)
-            #smap <- block_lnlp(MultiEDM_data[,2:4], lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = FALSE, save_smap_coefficients = TRUE)
            
                   a <- data.frame(smap[[1]]$smap_coefficients)
                   colnames(a) <- paste(i, c(colnames(MultiEDM_data[,2:4]),"constant"))
@@ -210,3 +209,80 @@ saveRDS(df, file = "~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/
 
 ```
 
+
+
+
+
+#Multivariate models of all variables of interest
+```{R}
+rm(list=ls()) 
+load("Data/Rdata/block_data.Rdata")  
+name <- "Snake River ESU"
+
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+
+best_E_T <- matrix(NA, nrow = length(target_vars), ncol = 3) # Save the optimal embedding dimension for each target variable
+          colnames(best_E_T) <- c("target","E", "theta")
+          best_E_T[,1] <- t(target_vars)    
+tv <- 1
+for(tv in 1:length(target_vars)){ # for each target variable 
+
+    # concatenate the time series of the different stocks together
+    keys <-c(names(block_data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(block_data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+     valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.eff_n.0)
+    block <- merged_data[valid,]  
+    rm(keys, merged_data, valid)
+    
+    # list the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+           #only include in the library the sections of data that are continuous for at least 20 time points. 
+            minlib <- lib[,2]-lib[,1]
+                  lib <- lib[minlib>20,] 
+           #narrow the data block to these large library sections
+                  x <- block[lib[1,1]:lib[1,2],] 
+                  for (r in 2:nrow(lib)){
+                  xtmp <- block[lib[r,1]:lib[r,2],]
+                  x <- rbind(x,xtmp)
+                  }
+                  block <- x
+           #recreate the library list
+           lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+                  lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+                  lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+              rm(x,minlib, xtmp, r)
+            
+    # determine the best univariate embedding dimension and theta for each target variable
+    block_target <- as.matrix(cbind(block$year, block[target_vars[tv]]))
+          rownames(block_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+          simplex_output <- simplex(block_target, E = 1:10, silent = TRUE)
+          # choose the smallest E whose rho is within 1 stdv of the maximum rho)
+          best_E_T[tv,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) 
+          smap_output <- s_map(block_target, lib=lib, pred=lib, E=as.numeric(best_E_T[tv,2])) 
+          best_E_T[tv,3]  <- smap_output$theta[which.max(smap_output$rho)] 
+  
+    # determine which library variables to include from the CCM analysis    
+    ccm <- readRDS("Output/Rdata/3_CCM/3_CCM_SnakeESU.RDS")
+          ccm <- ccm %>% filter(library==target_vars[tv]) #The 'library' variable from the ccm analysis is the target variable here. 
+          ccm <- ccm[ccm$rho_eff>(3*ccm$`95p_crit`),] #only keep variables whose CCM rho from the multivariate embedding with the effective spawners is greater than the critical value
+          max_ret_year <- c(3,4,5,5) #max return year for each target variable
+                  #remove offsets greater than return year 
+          ccm <- ccm[ccm$offset<=max_ret_year[tv],]
+          #remove effective spawners as a potential causal variable, as it will be included in all multivariate embeddings
+          ccm <- ccm %>% filter(target!="salm.eff_n.0")
+          #remove lagged salmon variables as they will dominate the best embeddings and we are not interested in producting great forecasting models
+          ccm <- ccm %>% filter(cat!="salm")
+          #remove the current MVE target variable as a potential causal variable, as it will be included in all multivariate embeddings
+          ccm <- ccm %>% filter(target!=target_vars[tv])
+
+    # make a multivariate embeddings for each of the chosen variables from the CCM analysis. Include the target variable plus lags of the target variable (to match the optimal embedding dimention) and the number of effective spawners in each embedding.       
+          
+          Multivar_block <- as.matrix(cbind(block["year"], block[target_vars[tv]], block["salm.eff_n.0"], block[ccm$target]))  #The chosen predictor variables are the sames as the target variables from the CCM; Here they are the library vars
+          rownames(MVE_block) <- NULL #remove rownames to supress error 
+          
+          E <- as.numeric(max(3, best_E_T[tv,2])) #embedding dimension for the target variable
+          max_lag <- E-2 #number of lags of each of the target_var for the multivariate embedding equal to E-2 because of the caulsal var and the eff spawners
+          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = max_lag)

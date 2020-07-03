@@ -152,7 +152,7 @@ for(tv in 1:length(target_vars)){ # for each target variable
 #this code is for extracting info from the in results of the MVE run above
 target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
 mpgname <- "Snake River ESU"
-tv <- 1
+tv <- 4
  for(tv in 1:length(target_vars)){ # for each target variable 
 load(file = paste("Output/Rdata/5_MVE/5_MVE_work_space_",mpgname,"_",target_vars[tv],".RData", sep = "")) # load work space from the MVE run for that target variable
    
@@ -252,7 +252,7 @@ D$catlabels <- factor(D$causal.cat, levels=c("hatch", "npgo", "pdo", "upw", "csl
 saveRDS(D, file = paste("Output/Rdata/5_MVE/5_MVE_coeff_data_for_plotting_",mpgname,".RData", sep = ""))
 
 # For each variable, plot the changing coefficients over time from different mutivariate embeddings
-            # loop through the different chosen variables
+# loop through the different chosen variables
             for(i in 1:NROW(varcat)) {  
             df <- filter(D,causal.cat==varcat[i])
             mcc <- manual_color_codes[manual_color_codes$cat==varcat[i],2:4]

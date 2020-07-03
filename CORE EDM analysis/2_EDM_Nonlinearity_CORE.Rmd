@@ -1,0 +1,177 @@
+---
+title: "2_nonlinearity_test_CORE"
+author: "Alison Iles"
+date: "7/1/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rEDM)
+```
+
+
+
+#Find the optimal embedding dimension
+The embedding dimension, E, is an estimate of the number of dimensions, or 'active variables', of the attractor underlying a time series. In practice, it is simply the OPTIMAL number of dimensions with which to unfold the attractor that maximizes the forecast skill (rho) of the embedding. Additional data may reveal additional dimensionality that was otherwise obscurred by process or observational noise.
+
+We evaluated a range of embedding dimensions (E from 1:7) using simplex projection and predicting 1:12 years into the future. We also varied tau. Forecast skill (rho) between predicted and observed values determines the optimal model parameters.
+
+
+#Test for nonlinearity in the SRKW time series 
+Nonlinear state dependence dynamics frequently occur nature. Such nonlinearaties arise when variables have interdependent effects. For example, the strength of predation of orcas on chinook may depend on the relative abundance of pink salmon. Consequently, applying models that assume independent effects of causal variables can give the appearance of stochasticity and unpredictability, even when the underlying mechanics are deterministic. 
+
+Thus, nonlinearity complicates the identification of causal drivers. Here we test whether the salmon population data exhibits non-linearity. We test for nonlinearity using S-maps by comparing improvements in forecast skill (delta rho and delta mae) between linear and nonlinear models. Finally we test for the significance of the nonlinearity with a null distribution from surrogate data.
+
+
+```{R}
+rm(list=ls())  
+
+pdf("Output/Figures/best_ET_MPG.pdf")
+
+test_nonlin <- function(ts, method = "ebisuzaki", num_surr = 200, 
+                              T_period = 1, E = 3, ...)
+{
+    compute_test_stat <- function(ts, ...)
+    {
+        results <- s_map(ts, stats_only = TRUE, silent = TRUE, ...)
+        delta_rho <- max(results$rho) - results$rho[results$theta == 0]
+        delta_mae <- results$mae[results$theta == 0] - min(results$mae)
+        return(c(delta_rho = delta_rho, delta_mae = delta_mae))
+    }
+    
+    actual_stats <- compute_test_stat(ts, ...)
+    delta_rho <- actual_stats["delta_rho"]
+    delta_mae <- actual_stats["delta_mae"]
+    names(delta_rho) <- NULL
+    names(delta_mae) <- NULL
+    surrogate_data <- make_surrogate_ebisuzaki(ts) #generate surrogate data 
+    null_stats <- data.frame(t(apply(surrogate_data, 2, compute_test_stat, ...)))
+    
+    return(data.frame(
+        delta_rho = delta_rho, 
+        delta_mae = delta_mae, 
+        num_surr = num_surr, 
+        E = E, 
+        delta_rho_p_value = (sum(null_stats$delta_rho > delta_rho) + 1) / 
+            (num_surr + 1), 
+        delta_mae_p_value = (sum(null_stats$delta_mae > delta_mae) + 1) / 
+            (num_surr + 1)))
+}
+
+
+load("Data/Rdata/stock_data_no_lags.Rdata")  
+     #concatenate the time series of each stock together
+data <- rbind(stock_data$'Bear Valley Creek', stock_data$'Big Creek', stock_data$'Camas Creek', stock_data$'Catherine Creek', stock_data$'Chamberlain Creek', stock_data$'East Fork Salmon River', stock_data$'East Fork South Fork', stock_data$'Grande Ronde Upper Mainstem', stock_data$'Imnaha River', stock_data$'Lemhi River', stock_data$'Loon Creek', stock_data$'Marsh Creek', stock_data$'Middle Fork Salmon River above Indian Creek', stock_data$'Middle Fork Salmon River below Indian Creek', stock_data$'Minam River', stock_data$'North Fork Salmon River', stock_data$'Pahsimeroi River', stock_data$'Salmon River Lower Mainstem below Redfish Lake', stock_data$'Salmon River Upper Mainstem above Redfish Lake', stock_data$'Secesh River', stock_data$'South Fork Salmon River Mainstem', stock_data$'Sulphur Creek', stock_data$'Tucannon River', stock_data$'Valley Creek', stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', stock_data$'Wenaha River', stock_data$'Yankee Fork')
+
+     #list the library variables we are interested in
+         library_vars <- c("salm.rec_n", "salm.rec3_n", "salm.rec4_n", "salm.rec5_n", "salm.recspn_n", "salm.recspn3_n", "salm.recspn4_n", "salm.recspn5_n")   
+         
+     #set up output table for the best E, theta, tau and the corresponding EDM rho using simplex and smap methods, the change in rho with theta and its significance test against surrogate data
+
+         # best E and theta based on optimizing rho
+         best_E_theta_rho <- matrix(NA, nrow = length(library_vars), ncol = 7) 
+         colnames(best_E_theta_rho) <- c("library", "E", "theta", "simplex_rho", "smap_rho", "delta_rho", "delta_rho_p")
+         best_E_theta_rho[,1] <- t(library_vars)
+         
+         # best E and theta based on optimizing mae
+         best_E_theta_mae <- matrix(NA, nrow = length(library_vars), ncol = 7) 
+         colnames(best_E_theta_mae) <- c("library", "E", "theta", "simplex_rho", "smap_rho", "delta_mae", "delta_mae_p")
+         best_E_theta_mae[,1] <- t(library_vars)
+
+## To run for each MPG separately
+MPGs <- unique(data$mpg)
+for(m in 1:length(MPGs)){  
+dataMPG <- data[data$mpg==MPGs[m],]
+         #dataMPG <- data
+         #MPGs <- "ESU"
+          #m <- 1
+
+#plot the result to evaluate E, Tp, and       
+layout(matrix(c(1,2,3,4,5,6), 3, 2, byrow = TRUE))
+
+    for(j in 1:length(library_vars)){ #for each library variable
+         
+     D <- as.matrix(cbind(dataMPG$year, dataMPG[library_vars[j]]))
+            rownames(D) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            D <- D[complete.cases(D), ]#remove rows with NA
+            colnames(D) <- c("year", library_vars[j])
+           
+         
+      #List in lib the begin and end points of each stock and the break points within stocks
+         lib <- matrix(NA, nrow = length(which(diff(D[,1])!=1))+1, ncol = 2)
+         lib[,1] <- c(1, which(diff(D[,1])!=1)+1)
+         lib[,2] <- c(which(diff(D[,1])!=1), nrow(D))
+      #only include in the library the sections of data that are continuous for at least 20 time points. 
+         minlib <- lib[,2]-lib[,1]
+         lib <- lib[minlib>20,] 
+         x <- D[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+             for (r in 2:nrow(lib)){
+                 xtmp <- D[lib[r,1]:lib[r,2],]
+                 x <- rbind(x,xtmp)}
+         D <- x
+      # need to recreate the library list
+         lib <- matrix(NA, nrow = length(which(diff(D[,1])!=1))+1, ncol = 2)
+              lib[,1] <- c(1, which(diff(D[,1])!=1)+1)
+              lib[,2] <- c(which(diff(D[,1])!=1), nrow(D))
+              rm(x,minlib, xtmp, r)
+        
+         
+      
+     #Determine best embedding dimension
+      Simp_out <- simplex(D, lib=lib, E = 1:12, tau=1, silent = TRUE)
+            best_E_theta_rho[j,2] <- min(Simp_out$E[Simp_out$rho>max(Simp_out$rho)-(sd(Simp_out$rho)/2)]) #choose the smallest E whose rho is within 0.5 stdv of the maximum rho
+            best_E_theta_rho[j,4] <- round(Simp_out$rho[Simp_out$E==best_E_theta_rho[j,2]], digits = 2)
+            
+            best_E_theta_mae[j,2] <- min(Simp_out$E[Simp_out$mae<min(Simp_out$mae)+(sd(Simp_out$mae)/2)])
+            best_E_theta_mae[j,4] <- round(Simp_out$rho[Simp_out$E==best_E_theta_mae[j,2]], digits = 2)
+            
+       plot(Simp_out$E, Simp_out$rho, type="l", xlab = "Embedding dimension (E)", ylab="Forecast skill (rho)", main=paste(MPGs[m], ": ", library_vars[j], ", E = ", best_E_theta_rho[j,2]))
+       plot(Simp_out$E, Simp_out$mae, type="l", xlab = "Embedding dimension (E)", ylab="Mean absolute error (mae)", main=paste(MPGs[m], ": ", library_vars[j], ", E = ", best_E_theta_mae[j,2]))
+       
+     #Modify the time to prediction to test for deterministic chaos vs stochasticity
+      Tp_out_rho <- simplex(D, lib=lib, E = as.numeric(best_E_theta_rho[j,2]), tau=1, tp = 1:12, silent = TRUE)
+      Tp_out_mae <- simplex(D, lib=lib, E = as.numeric(best_E_theta_mae[j,2]), tau=1, tp = 1:12, silent = TRUE)
+
+      plot(Tp_out_rho$tp, Tp_out_rho$rho, type="l", xlab = "Time to prediction (Tp)", ylab="Forecast skill (rho)", main=paste(MPGs[m], ": ", "Time to prediction"))
+      plot(Tp_out_mae$tp, Tp_out_rho$mae, type="l", xlab = "Time to prediction (Tp)", ylab="Mean absolute error (mae)", main=paste(MPGs[m], ": ", "Time to prediction"))
+      
+     #Determine the optimal theta and test that it is significantly different from zero       
+      Smap_out <-s_map(D, lib=lib, E = as.numeric(best_E_theta_rho[j,2]), tau=1, silent = TRUE)
+            best_E_theta_rho[j,3] <-  min(Smap_out$theta[Smap_out$rho==max(Smap_out$rho)]) #choose the theta that maximizes rho
+            best_E_theta_rho[j,5] <- round(max(Smap_out$rho), digits = 2)
+
+            test_nonlin_out <- test_nonlin(ts = D, E = as.numeric(best_E_theta_rho[j,2]), lib=lib)
+            best_E_theta_rho[j,6] <- round(test_nonlin_out$delta_rho, digits = 2)
+            best_E_theta_rho[j,7] <- round(test_nonlin_out$delta_rho_p_value, digits = 2)
+       
+      plot(Smap_out$theta, Smap_out$rho, type="l", xlab = "theta ()", ylab="Forecast skill (rho)", main=paste(MPGs[m], ": ", library_vars[j], " theta = ", best_E_theta_rho[j,3]))
+      
+      Smap_out <-s_map(D, lib=lib, E = as.numeric(best_E_theta_mae[j,2]), tau=1, silent = TRUE)      
+            best_E_theta_mae[j,3] <-  min(Smap_out$theta[Smap_out$mae==min(Smap_out$mae)]) #choose the theta that minimizes mae
+            best_E_theta_mae[j,5] <- round(Smap_out$rho[Smap_out$mae==min(Smap_out$mae, na.rm = TRUE)], digits = 2)
+
+            test_nonlin_out <- test_nonlin(ts = D, E = as.numeric(best_E_theta_mae[j,2]), lib=lib)
+            best_E_theta_mae[j,6] <- round(test_nonlin_out$delta_mae, digits = 2)
+            best_E_theta_mae[j,7] <- round(test_nonlin_out$delta_mae_p_value, digits = 2)
+  
+      plot(Smap_out$theta, Smap_out$mae, type="l", xlab = "theta ()", ylab="Mean absolute error (mae)", main=paste(MPGs[m], ": ", library_vars[j], " theta = ", best_E_theta_mae[j,3]))
+            
+    }
+    
+    print(best_E_theta_rho)
+    saveRDS(best_E_theta_rho, file = paste("Output/Rdata/best_E_theta_rho_recspn_", MPGs[m], ".RDS", sep = ""), compress = FALSE)
+    print(best_E_theta_mae)
+    saveRDS(best_E_theta_mae, file = paste("Output/Rdata/best_E_theta_mae_recspn_", MPGs[m], ".RDS", sep = ""), compress = FALSE)
+
+layout(matrix(c(1,1), 1, 1, byrow = TRUE))
+
+}
+
+dev.off()
+```
+Results for embedding dimension, time to prediction, nonlinearity and predictability:
+
+For the detrended and normalized stock time series, the joint ESU level embedding dimension is high and the data is complex as indicated by both rho and mae, although the plots show that a lower E of 5 or 6 captures a great deal of the complexity and would be easier to work with.  Each time series is significantly non-linear with theta >= 1. Forecast skill declines slightly with the number of time steps ahead to prediction, indicating that the dynamics have a large stochastic component, but are at least somewhat deterministic which is probably why forecasting this system is so difficult.  The MPG level might be more appropriate for analysis if the time to prediction drops more precipitously at smaller spatial scales. These nonlinear and chaotic time series are ideally suited to analysis with EDM. 
