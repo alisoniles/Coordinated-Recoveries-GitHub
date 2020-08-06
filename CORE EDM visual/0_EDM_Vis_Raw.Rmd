@@ -14,6 +14,7 @@ output:
 
 rm(list = ls(all.names = TRUE)) 
 
+# install.packages("rEDM")
 library(rEDM)
 library(tidyr)
 library(ggplot2)
@@ -21,12 +22,16 @@ library(PNWColors)
 library(gridExtra)
 library(dplyr)
 library(reshape2)
+# install.packages("patchwork")
 library(patchwork)
+# install.packages("pracma")
 library(pracma)
+# install.packages("viridis")
 library(viridis)
-
-
+# install.packages("PNWColors")
+library(PNWColors)
 ```
+
 
 
 ```{R include=FALSE, warning=FALSE}
@@ -209,7 +214,6 @@ rSST <- ggplot(sst) +
   labs(x = "Year", y = "SST") +
   xlim(1957, 2020)
 
-r/rSST 
 
 salm_ts <- dat %>% 
   group_by(year) %>% 

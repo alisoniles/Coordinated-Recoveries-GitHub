@@ -1,0 +1,94 @@
+---
+title: "Vars in top MVE models"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+
+rec_mods_mve <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/5_MVE/5_MVE_model_summary_salm.rec_n.0.Rdata")
+
+data.frame(rec_mods_mve[[1]]) %>% slice(201:300)
+# Most common
+
+vars <- rec_mods_mve[[2]]
+
+# 1 salm.rec_n.0 (recruits = target)
+# 2 salm.eff_n.0 (spawners)
+
+# [1] 88 npgo.feb.1, 107 arc.win.1, 34 harv.CRsport.4
+# [2] 112 pdo.may.2, 118 npgo.apr.2, 124 npgo.nov.2
+# [3]  88 npgo.feb.1, 107 arc.win.1, 113 pdo.yr.2
+# [4]   107 arc.win.1, 134 pdo.may.3 143 npgo.spr.3    
+# [5]   88 npgo.feb.1,107 arc.win.1, 111 pdo.apr.2    
+# [6]  101 npgo.spr.1 113 pdo.yr.2, 124 npgo.nov.2      
+# [7]   90 npgo.apr.1 113 pdo.yr.2, 124 npgo.nov.2    
+# [8]  112 pdo.may.2, 118 npgo.apr.2, 142 npgo.win.3    
+# [9]  112 pdo.may.2, 124 npgo.nov.2, 127 npgo.win.2   
+# [10] 112 pdo.may.2, 128 npgo.spr.2, 135 npgo.jan.3 
+# ...
+# [19] 3 harv.SPSS.0, 90 npgo.apr.1, 111 pdo.apr.2
+# ...
+# [204] 67 csl.pups.5 108 116
+
+## Insight from rec_n" 
+### top 300 models nearly 100% ocean vars
+### very little decay in rho  
+### harv.SPSS.0 best predictor outside of ocean vars
+
+```
+
+```{r}
+
+
+rec5_mods_mve <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/5_MVE/5_MVE_model_summary_salm.rec5_n.0.Rdata")
+
+data.frame(rec5_mods_mve[[1]]) %>% slice(1:300)
+# Again many by the ocean vars but ... in top models
+# mostly 1 biological + same two ocean vars. 
+# putting all rec together is introducing too much noise?
+
+
+# [2] 67	ssl.WAK.4 103	npgo.fal.1, 108	arc.spr.1
+# [6] 79 hseal.WA.4
+# [8] 63 ssl.WA.4
+# [11] 72 orca.SEAK.4
+# [12] 66 ssl.SEAK.4
+# [15] 65 csl.pups.3
+# [16] 64 csl.pups.2
+# [17] 49 ssl.WAK.3
+# [18] 49 ssl.WAK.3
+# [19] 71 ssl.SEAK.5
+# [20] 63 ssl.WA.4
+vars <- rec5_mods_mve[[2]]
+
+# 1 salm.rec_n.0 (recruits = target)
+# 2 salm.eff_n.0 (spawners)
+
+
+```
+```{r}
+
+
+rec4_mods_mve <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/5_MVE/5_MVE_model_summary_salm.rec4_n.0.Rdata")
+
+data.frame(rec4_mods_mve[[1]]) %>% slice(1:100)
+vars <- rec4_mods_mve[[2]]
+
+# [1] 4	hatch.COL.1 93 pdo.may.3
+# [2] 45 pdo.feb.1	93 pdo.may.3	
+# [3] 45 pdo.feb.1	94 pdo.spr.3	
+# [4] 9 hatch.all.1 93 pdo.may.3
+# [5] 77 pdo.yr.2	92 pdo.apr.3	
+# [6] 80 npgo.may.2 93	pdo.may.3
+# [7] 8	hatch.sum.1 93 pdo.may.3		
+# [8] 10 hatch.COL.2	93 pdo.may.3
+# [9] 45 pdo.feb.1	73 pdo.may.2
+# [10] 22	hatch.all.3 93	pdo.may.3
+
+```
+
