@@ -19,8 +19,8 @@ library(stringr)
 rm(list=ls()) 
 
 #Choose the variable to run the analysis for
-tarvar <- "salm.rec5n.0"
-tarvarshort <- "rec5"
+tarvar <- "salm.rec4n.0"
+tarvarshort <- "rec4"
 
 #Possible causal variable list 
 load("Data/Rdata/block_data.Rdata")  
@@ -66,9 +66,13 @@ data_MFS <- data_ESU[data_ESU$mpg=="Middle Fork Salmon",]
 data_IMN <- data_ESU[data_ESU$mpg=="Imnaha",]
 data_UPS <- data_ESU[data_ESU$mpg=="Upper Salmon",]
 
-if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.-1", "salm.rec3n.1", var_names[,1])} #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year and 3 year old from the next brood year. 
-   
-if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.1", "salm.rec3n.2", var_names[,1])} #for salm.rec5n.0, use rec5n, effective spawners from the same brood year and returning 4 year old recruits from the next brood year 
+# for base embed with effn and other returning cohorts in the same return year:
+    #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year and 3 year old from the next brood year. 
+    #for salm.rec5n.0, use rec5n, effective spawners from the same brood year and returning 4 year old recruits from the next brood year 
+
+# for base embed with effn and other ages from the same cohort returning in different years
+if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.0", "salm.rec3n.0", var_names[,1])} 
+if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.0", "salm.rec3n.0", var_names[,1])}
 
 level=c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon")
 for(l in (1:4)){  #loop through the ESU and the different MPGs
@@ -141,7 +145,7 @@ coeffs <- smap$smap_coefficients[[1]][NCOL(d)-1]
      IC <- rbind.data.frame(IC, coeffs)     
 }
 
-saveRDS(IC, file = paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_",level[l],"_",tarvarshort,".RDS", sep = ""), compress = FALSE)
+saveRDS(IC, file = paste("Output/Rdata/4_IC/Interaction_coeffs_",level[l],"_",tarvarshort,".RDS", sep = ""), compress = FALSE)
 }
 ```
 
@@ -157,10 +161,9 @@ rm(list=ls())
 
 
 #Change the following for rec4 ans rec5 analyses
-IC <- readRDS("Output/Rdata/4_smap_coeffs/Interaction_coeffs_ESU_rec4.RDS") 
-tarvar = "4 yr old recruits"
-tarvarshort = "rec4"
-#IC <- IC[IC$offset!="4",] #remove 5 year offsets for 4 yr old recruits and remove 4 year offsets for 5 year old recruits (manually)
+IC <- readRDS("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_ESU_rec5.RDS") 
+tarvar = "5 yr old recruits"
+tarvarshort = "rec5"
 
 varcat <- unique(IC$cat)
 IC$catlabels <- factor(IC$cat, 
@@ -211,9 +214,10 @@ for(c in c(1:length(varcat))) {
                 geom_point(shape=23, size = 3, aes(y=rho/5, colour = subcat)) + 
                 scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*5, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0", "0.2", "0.4", "0.6", "0.8"), name = "model forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
                 scale_colour_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
-                
+                geom_hline(aes(yintercept=0.51/5), colour="black", linetype="dashed") +
     
                 geom_hline(aes(yintercept=0), colour='#999999') +
+
                 
                 theme_bw() + 
                 theme(title = element_blank(),
@@ -228,7 +232,7 @@ for(c in c(1:length(varcat))) {
 
   
   
-  p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at different offsets from brood year", sep=""), left="Interaction coefficient")
+  p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at chosen offsets from brood year", sep=""), left="Interaction coefficient")
 
 
   ggsave(filename = paste("Output/Figures/4_IC/4_IC_",varcat[c],"_",tarvarshort,".pdf", sep = ""), plot = p, width = 7, height = 2+(length(unique(D$offset))*1.5), units = "in")  
@@ -249,14 +253,14 @@ rm(list=ls())
 
 #Change the following for rec4 and rec5 analyses
 #*******change plot labels below, too********
-tarvar = "4 yr old recruits"
-tarvarshort = "rec4"
+tarvar = "5 yr old recruits"
+tarvarshort = "rec5"
 
 #load interaction coeffs
-IC_ESU <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
-IC_MFS <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
-IC_IMN <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
-IC_UPS <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
 
 #add grouping variable
 IC_ESU$level <- "ESU"
@@ -274,28 +278,42 @@ IC$catlabels <- factor(IC$cat,
 
 manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 
-c <- 6
+c <- 3
 for(c in c(1:length(varcat))) {
   
   D <- IC[IC$cat==varcat[c],]
- 
+  if(tarvarshort == "rec4") {D <- D[D$offset!="5",]} # remove offset 5 for rec4 models
+  if(tarvarshort == "rec5") {D <- D[D$offset!="4",]} # remove offset 4 for rec5 models 
+  
   mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
   mcc <- sapply(mcc, unlist)
   rownames(mcc) <- mcc[,2]
   D$subcat <- factor(D$subcat, levels=mcc[,2])
 
-  p <- ggplot(D, aes(x=subcat, y=meanIS, fill=subcat)) +
-                geom_boxplot(lwd=0.4) +    
+  p <- ggplot(D, aes(x=subcat)) +
+    # box plot of interaction strengths for each variable subcategory
+                geom_boxplot(aes(y=meanIS, fill=subcat), lwd=0.4) +  
+                scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
+                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+    
+    # overlay the model rho info, transformed to match roughly the range of the IC
+                geom_point(shape=23, size = 3, aes(y=rho, colour = subcat)) + 
+                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*1, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0","0.2", "0.4", "0.6", "0.8"), name = "model forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
+                scale_colour_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+                geom_hline(aes(yintercept=0.51), colour="black", linetype="dashed") +
+
                 geom_hline(aes(yintercept=0), colour='#999999') +
                 theme_bw() + 
-                scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
                 theme(axis.ticks.x = element_blank(),
+                      axis.title.y.right = element_text(size=11),
                       legend.title = element_blank()) +
-                labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec4n.0 (focal), salm.effn.0, salm.rec5n.-1, salm.rec3n.1") +
-                #labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec5n.0, salm.effn.0, salm.rec4n.1, salm.rec3n.2") +
-                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+    
+                #labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec4n.0 (focal), salm.effn.0, salm.rec5n.-1, salm.rec3n.1") +
+                labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec5n.0 (focal), salm.effn.0, salm.rec4n.1, salm.rec3n.2") +
+                
                 facet_grid(offset ~ level)
 
+  
   print(p)
   ggsave(filename = paste("Output/Figures/4_IC/4_IC_",varcat[c],"_ESU_and_MPG_",tarvarshort,".pdf", sep = ""), plot = p, width = 7, height = 2+(length(unique(D$offset))*1.5), units = "in")  
 
