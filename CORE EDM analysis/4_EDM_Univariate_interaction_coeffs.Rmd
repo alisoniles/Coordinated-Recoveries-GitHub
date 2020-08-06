@@ -1,0 +1,289 @@
+---
+title: "4_EDM_Univariate_interaction_coeffs"
+author: "Alison Iles"
+date: "8/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{R}
+library(rEDM)
+library(tidyr)
+library(stringr)
+
+rm(list=ls()) 
+
+#Choose the variable to run the analysis for
+tarvar <- "salm.rec5n.0"
+tarvarshort <- "rec5"
+
+#Possible causal variable list 
+load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(c(aa[27:nrow(aa)] ))
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+      var_names <- cbind(bb,cc)
+      colnames(var_names) <- c("var","cat","subcat", "offset")
+      rm("aa", "bb", "cc")
+
+data_ESU <- rbind(block_data$'Bear Valley Creek', 
+              block_data$'Big Creek', 
+              block_data$'Camas Creek', 
+              block_data$'Catherine Creek', 
+              block_data$'Chamberlain Creek', 
+              block_data$'East Fork Salmon River', 
+              block_data$'East Fork South Fork', 
+              block_data$'Grande Ronde Upper Mainstem', 
+              block_data$'Imnaha River', 
+              block_data$'Lemhi River', 
+              block_data$'Loon Creek', 
+              block_data$'Lostine Creek', 
+              block_data$'Marsh Creek', 
+              block_data$'Middle Fork Salmon River above Indian Creek', 
+              block_data$'Middle Fork Salmon River below Indian Creek', 
+              block_data$'Minam River', 
+              block_data$'North Fork Salmon River', 
+              block_data$'Pahsimeroi River', 
+              block_data$'Salmon River Lower Mainstem below Redfish Lake', 
+              block_data$'Salmon River Upper Mainstem above Redfish Lake', 
+              block_data$'Secesh River', 
+              block_data$'South Fork Salmon River Mainstem', 
+              block_data$'Sulphur Creek', 
+              block_data$'Tucannon River', 
+              block_data$'Valley Creek', 
+              block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', 
+              block_data$'Wenaha River', 
+              block_data$'Yankee Fork')   
+
+data_MFS <- data_ESU[data_ESU$mpg=="Middle Fork Salmon",]
+data_IMN <- data_ESU[data_ESU$mpg=="Imnaha",]
+data_UPS <- data_ESU[data_ESU$mpg=="Upper Salmon",]
+
+if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.-1", "salm.rec3n.1", var_names[,1])} #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year
+   
+if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.1", "salm.rec3n.2", var_names[,1])} #for salm.rec5n.0, use rec5n, effective spawners from the same brood year and returning 4 year old recruits from the next brood year 
+
+level=c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon")
+for(l in (1:4)){  #loop through the ESU and the different MPGs
+  if(l==1){MVE_block <- as.data.frame(data_ESU[vars])}
+  if(l==2){MVE_block <- as.data.frame(data_MFS[vars])}
+  if(l==3){MVE_block <- as.data.frame(data_IMN[vars])}
+  if(l==4){MVE_block <- as.data.frame(data_UPS[vars])}
+
+#Theta and E
+  #From the nonlinearity analysis, 5 is a generally good E for rec5 across the MPGs, 4 is the best for rec4 but 5 isn't bad either. I'm going to go with 5 for both to make the embeddings the same and comparable
+  E <- 5
+  theta <- 1.5
+
+
+IC <- data.frame() #make data frame to store interaction coefficients
+
+s <- 1
+for (s in (1:NROW(var_names))){  
+     d  <- MVE_block[,c(1, 2, 3, 4, 5)] #The four time series selected in 'vars' above form the base embedding to which we add each of the putative causal variables for a total embedding dimension of 5
+     varname <- var_names$var[s]
+     d <- cbind(d,MVE_block[,varname])
+     colnames(d) <- c(colnames(d[1:5]), varname)
+     d <- d[complete.cases(d), ] #remove rows with NA
+     
+     #set up the library for the embedding
+     lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) #List in lib the begin and end points of each stock's data
+         lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
+         lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
+     minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 20 time points. 
+     lib <- lib[minlib>17,] #only include in the library the sections of data that are continuous for at least 20 time points. 
+     if (NROW(lib)==0) {
+      next
+      }       
+     x <- d[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+            for (r in 2:nrow(lib)){
+                xtmp <- d[lib[r,1]:lib[r,2],]
+                x <- rbind(x,xtmp)
+            }
+         d <- x
+     lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) #recreate the library list
+         lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
+         lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
+     rm(x,minlib, xtmp, r) 
+     
+     
+smap <- block_lnlp(d, lib = lib, pred = lib, 
+                      method='s-map',
+                      tp=1,
+                      num_neighbors = 0,
+                      target_column = 1,
+                      columns = 1:(NCOL(d)-1),
+                      stats_only = FALSE,
+                      first_column_time = TRUE,
+                      exclusion_radius = 0,
+                      theta = theta,
+                      save_smap_coefficients = TRUE)     
+
+coeffs <- smap$smap_coefficients[[1]][NCOL(d)-1]
+     coeffs <- cbind(d[,1],coeffs)
+     colnames(coeffs) <- c("Year", names(d)[NCOL(d)])
+     coeffs <- pivot_longer(coeffs, names_to = "var", values_to = "IS", cols=2)
+     coeffs_mean <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), mean, na.rm = TRUE)
+     coeffs_sd <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), sd, na.rm = TRUE)
+     coeffs <- cbind(coeffs_mean, coeffs_sd[,3])
+     colnames(coeffs) <- c("year", "var", "meanIS", "sdIS")
+     coeffs <- coeffs[complete.cases(coeffs), ] #remove rows with NA
+     coeffs <- as.data.frame(coeffs)
+     coeffs$rho <- signif(smap$rho,2)
+     coeffs <- merge(coeffs, var_names, by="var")
+     IC <- rbind.data.frame(IC, coeffs)     
+}
+
+saveRDS(IC, file = paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_",level[l],"_",tarvarshort,".RDS", sep = ""), compress = FALSE)
+}
+```
+
+#plot interaction coefficients grouped by variable category
+
+```{R}
+library(ggplot2)
+library(gridExtra)
+library(egg)
+library(rlang)
+
+rm(list=ls())  
+
+
+#Change the following for rec4 ans rec5 analyses
+IC <- readRDS("Output/Rdata/4_smap_coeffs/Interaction_coeffs_ESU_rec4.RDS") 
+tarvar = "4 yr old recruits"
+tarvarshort = "rec4"
+#IC <- IC[IC$offset!="4",] #remove 5 year offsets for 4 yr old recruits and remove 4 year offsets for 5 year old recruits (manually)
+
+varcat <- unique(IC$cat)
+IC$catlabels <- factor(IC$cat, 
+                      levels=c("pdo", "npgo", "upw", "arc", "orca", "ssl", "hseal", "csl", "hatch", "harv", "flow"), 
+                      labels=c("PDO", "NPGO", "Upwelling", "Sea surface temperature", "Orca whales", "Steller sea lions", "Harbor seals", "California sea lions", "Hatcheries", "Chinook harvest", "River flow"))
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+
+c <- 6
+for(c in c(1:length(varcat))) {
+  
+  D <- IC[IC$cat==varcat[c],]
+ 
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
+  D$subcat <- factor(D$subcat, levels=mcc[,2])
+
+  my_tag <- c(paste(letters, ") ", unique(D$offset), sep=""))
+  
+  p1a <- ggplot(D, aes(x=year, y=meanIS)) +
+                geom_line(aes(col=subcat)) +    
+                geom_hline(aes(yintercept=0), colour='#999999') +
+                theme_bw() +
+                theme(axis.title.y = element_blank(), 
+                      plot.title = element_text(face = "bold"),
+                      legend.position = "none",
+                      title = element_blank()) +
+                scale_color_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3]) +
+                facet_wrap(vars(offset), ncol=1)
+                
+  p1a <- tag_facet(p1a,
+            open="",
+            close="",
+            fontface = 1, 
+            tag_pool = my_tag)
+  
+  p1b <- ggplot(D, aes(x=subcat, y=meanIS, fill=subcat)) +
+                geom_boxplot(lwd=0.4) +    
+                geom_hline(aes(yintercept=0), colour='#999999') +
+                theme_bw() + 
+                scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
+                theme(title = element_blank(),
+                      axis.title.y = element_blank(), 
+                      axis.ticks.x = element_blank(),
+                      legend.title = element_blank(), 
+                      strip.text = element_blank(), 
+                      strip.background = element_blank()) +
+                labs(title= "", x="") +
+                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+                facet_wrap(vars(offset), ncol=1)
+
+  
+  p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at different offsets from brood year", sep=""), left="Interaction coefficient")
+
+
+  ggsave(filename = paste("Output/Figures/4_IC/4_IC_",varcat[c],"_",tarvarshort,".pdf", sep = ""), plot = p, width = 7, height = 2+(length(unique(D$offset))*1.5), units = "in")  
+
+  
+}
+
+
+```
+
+```{R}
+library(ggplot2)
+library(gridExtra)
+library(egg)
+library(rlang)
+
+rm(list=ls())  
+
+#Change the following for rec4 ans rec5 analyses
+tarvar = "5 yr old recruits"
+tarvarshort = "rec5"
+
+#load interaction coeffs
+IC_ESU <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+IC_MFS <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+IC_IMN <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+IC_UPS <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+
+#add grouping variable
+IC_ESU$level <- "ESU"
+IC_MFS$level <- "MFS"
+IC_IMN$level <- "IMN"
+IC_UPS$level <- "UPS"
+
+#bind together
+IC <- rbind(IC_ESU, IC_MFS, IC_IMN, IC_UPS)
+
+varcat <- unique(IC$cat)
+IC$catlabels <- factor(IC$cat, 
+                      levels=c("pdo", "npgo", "upw", "arc", "orca", "ssl", "hseal", "csl", "hatch", "harv", "flow"), 
+                      labels=c("PDO", "NPGO", "Upwelling", "Sea surface temperature", "Orca whales", "Steller sea lions", "Harbor seals", "California sea lions", "Hatcheries", "Chinook harvest", "River flow"))
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+
+c <- 6
+for(c in c(1:length(varcat))) {
+  
+  D <- IC[IC$cat==varcat[c],]
+ 
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
+  D$subcat <- factor(D$subcat, levels=mcc[,2])
+
+  p <- ggplot(D, aes(x=subcat, y=meanIS, fill=subcat)) +
+                geom_boxplot(lwd=0.4) +    
+                geom_hline(aes(yintercept=0), colour='#999999') +
+                theme_bw() + 
+                scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
+                theme(title = element_blank(),
+                      axis.title.y = element_blank(), 
+                      axis.ticks.x = element_blank(),
+                      legend.title = element_blank()) +
+                labs(title= "", x="") +
+                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+                facet_grid(offset ~ level)
+
+  print(p)
+  ggsave(filename = paste("Output/Figures/4_IC/4_IC_",varcat[c],"_ESU_and_MPG_",tarvarshort,".pdf", sep = ""), plot = p, width = 7, height = 2+(length(unique(D$offset))*1.5), units = "in")  
+
+}
+```

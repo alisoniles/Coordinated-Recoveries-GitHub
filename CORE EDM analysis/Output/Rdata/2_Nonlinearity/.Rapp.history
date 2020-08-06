@@ -1,2 +1,4 @@
 load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/2_Nonlinearity/best_E_theta_mae.RDS")
 load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/2_Nonlinearity/best_E_theta_rho_ESU.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/2_Nonlinearity/best_E_theta_mae_recspn_South Fork Salmon.RDS")
+load("/Users/alisoniles/Google Drive/Coordinated Recoveries/CORE_EDM/Analysis/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/2_Nonlinearity/best_E_theta_mae_recspn_Imnaha.RDS")
