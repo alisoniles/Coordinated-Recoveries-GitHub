@@ -66,7 +66,7 @@ data_MFS <- data_ESU[data_ESU$mpg=="Middle Fork Salmon",]
 data_IMN <- data_ESU[data_ESU$mpg=="Imnaha",]
 data_UPS <- data_ESU[data_ESU$mpg=="Upper Salmon",]
 
-if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.-1", "salm.rec3n.1", var_names[,1])} #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year
+if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.-1", "salm.rec3n.1", var_names[,1])} #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year and 3 year old from the next brood year. 
    
 if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.1", "salm.rec3n.2", var_names[,1])} #for salm.rec5n.0, use rec5n, effective spawners from the same brood year and returning 4 year old recruits from the next brood year 
 
@@ -173,7 +173,10 @@ c <- 6
 for(c in c(1:length(varcat))) {
   
   D <- IC[IC$cat==varcat[c],]
- 
+  
+  if(tarvarshort == "rec4") {D <- D[D$offset!="5",]} # remove offset 5 for rec4 models
+  if(tarvarshort == "rec5") {D <- D[D$offset!="4",]} # remove offset 4 for rec5 models
+  
   mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
   mcc <- sapply(mcc, unlist)
   rownames(mcc) <- mcc[,2]
@@ -198,21 +201,32 @@ for(c in c(1:length(varcat))) {
             fontface = 1, 
             tag_pool = my_tag)
   
-  p1b <- ggplot(D, aes(x=subcat, y=meanIS, fill=subcat)) +
-                geom_boxplot(lwd=0.4) +    
-                geom_hline(aes(yintercept=0), colour='#999999') +
-                theme_bw() + 
+  p1b <- ggplot(D, aes(x=subcat)) +
+    # box plot of interaction strengths for each variable subcategory
+                geom_boxplot(aes(y=meanIS, fill=subcat), lwd=0.4) +  
                 scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
+                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+    
+    # overlay the model rho info, transformed to match roughly the range of the IC
+                geom_point(shape=23, size = 3, aes(y=rho/5, colour = subcat)) + 
+                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*5, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0", "0.2", "0.4", "0.6", "0.8"), name = "model forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
+                scale_colour_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+                
+    
+                geom_hline(aes(yintercept=0), colour='#999999') +
+                
+                theme_bw() + 
                 theme(title = element_blank(),
-                      axis.title.y = element_blank(), 
+                      axis.title.y.right = element_text(size=11),
                       axis.ticks.x = element_blank(),
                       legend.title = element_blank(), 
                       strip.text = element_blank(), 
                       strip.background = element_blank()) +
-                labs(title= "", x="") +
-                scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
+                labs(title= "", x="", y="") +
+                
                 facet_wrap(vars(offset), ncol=1)
 
+  
   
   p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at different offsets from brood year", sep=""), left="Interaction coefficient")
 
@@ -233,9 +247,10 @@ library(rlang)
 
 rm(list=ls())  
 
-#Change the following for rec4 ans rec5 analyses
-tarvar = "5 yr old recruits"
-tarvarshort = "rec5"
+#Change the following for rec4 and rec5 analyses
+#*******change plot labels below, too********
+tarvar = "4 yr old recruits"
+tarvarshort = "rec4"
 
 #load interaction coeffs
 IC_ESU <- readRDS(paste("Output/Rdata/4_smap_coeffs/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
@@ -274,11 +289,10 @@ for(c in c(1:length(varcat))) {
                 geom_hline(aes(yintercept=0), colour='#999999') +
                 theme_bw() + 
                 scale_x_discrete(labels = function(breaks) {rep_along(breaks, "")}) +
-                theme(title = element_blank(),
-                      axis.title.y = element_blank(), 
-                      axis.ticks.x = element_blank(),
+                theme(axis.ticks.x = element_blank(),
                       legend.title = element_blank()) +
-                labs(title= "", x="") +
+                labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec4n.0 (focal), salm.effn.0, salm.rec5n.-1, salm.rec3n.1") +
+                #labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec5n.0, salm.effn.0, salm.rec4n.1, salm.rec3n.2") +
                 scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
                 facet_grid(offset ~ level)
 
