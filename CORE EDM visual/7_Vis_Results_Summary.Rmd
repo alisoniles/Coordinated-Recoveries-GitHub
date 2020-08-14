@@ -1,0 +1,226 @@
+---
+title: "7_Vis_Results_Summary"
+author: "Kurt Ingeman"
+date: "6/16/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls(all.names = TRUE)) 
+
+```
+
+---
+title: "Summary Results from CCM and MVE efforts"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+## Read in CCM results and normalized time series 
+```{r}
+
+
+ccm <- readRDS("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Output/Rdata/3_CCM/3_CCM_SnakeESU.RDS")
+
+```
+
+## Produce a table of causal vars with CCM rho and linear correlations
+```{r}
+# Capture the top univariate CCM vars from each major category (for each cohort): Hatcheries, Harvest, Ocean Vars, Predators
+
+# To do so, produce a new data frame that is grouped by library, then by cat, sorted by rho, then sliced to capture only the top row.  
+
+ccm_top <- ccm %>% 
+  filter(!cat == "salm") %>% 
+  filter(!library == "salm.rec3_n.0") %>% 
+  filter(!library == "salm.rec_n.0") %>% 
+  filter(!grepl('SPSS', target)) %>% # removes suspect harvest 
+  group_by(library,cat) %>% 
+  slice_max(rho, n = 2)
+
+ccm_sig4 <- ccm %>%   
+  filter(!cat == "salm") %>% 
+  filter(library == "salm.rec4_n.0") %>% 
+  filter(!offset == "5") %>% 
+  filter(!grepl('SPSS', target)) %>% # removes suspect harvest 
+  filter(MannKendall == "TRUE") %>% 
+  group_by(library,cat) %>% 
+  slice_max(rho, n = 3) %>% 
+  arrange(library, desc(rho))
+
+ccm_sig5 <- ccm %>%   
+  filter(!cat == "salm") %>% 
+  filter(library == "salm.rec5_n.0") %>% 
+  filter(!grepl('SPSS', target)) %>% # removes suspect harvest 
+  filter(MannKendall == "TRUE") %>% 
+  group_by(library,cat) %>% 
+  slice_max(rho, n = 3) %>% 
+  arrange(library, desc(rho))
+
+
+```
+
+
+## Load normailized data
+```{r}
+
+load("~/Github/Coordinated-Recoveries-GitHub/CORE EDM analysis/Data/Rdata/block_data.Rdata")
+
+ts <- do.call("rbind", block_data)
+
+```
+
+## Produce linear correlations for the identical variable-offset-location combos identified with highest rho in each category above 
+```{r}
+## First for rec4, select vars, group_by year and summarize rec4
+
+corr4 <- ts %>% 
+  select(year, rec4, hatch.COL.3, 
+         orca.SRKWpodL.4, harv.CRsport.3, 
+         pdo.may.2, ssl.SalishSea.3, 
+         csl.males6.2, arc.spr.1, upw.oct.2, 
+         npgo.may.2, flow.gageht.1, hseal.WA.4) %>% 
+  group_by(year) %>% 
+  mutate(rec4_ann = as.numeric(sum(rec4, na.rm = T))) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  filter(year > 1956) %>% 
+  select(!rec4)
+
+corr4 <- corr4 %>% 
+  mutate(rec4_stan = scale(rec4_ann)) %>% 
+  select(!rec4_ann)
+
+c1 <- pairs(corr4[,1:13], lower.panel = NULL, pch = 19)
+
+
+cormat <- round(cor(corr4[,1:13], use = "pairwise.complete.obs"),2)
+# reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+# dd <- as.dist((1-cormat)/2)
+# hc <- hclust(dd)
+# cormat <-cormat[hc$order, hc$order]
+# }
+
+# cormat <- reorder_cormat(cormat)
+
+mel_cor <- melt(cormat)
+
+
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+  
+upper_tri <- get_upper_tri(cormat)
+
+melted_cormat <- reshape2::melt(upper_tri, na.rm = TRUE)
+
+c2 <- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) +
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1), 
+    axis.text.y = element_text(size= 12))+
+ coord_fixed()
+
+c2 + 
+  geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5)) +
+  scale_x_discrete(labels = c("Year", "Hatcheries", "SRKW", "Harvest", "PDO", "SSL", "CSL", "SST", "Upwelling", "NPGO", "Flow", "HS", "Salmon 4YO")) +
+ scale_y_discrete(labels = c("Year", "Hatcheries", "SRKW", "Harvest", "PDO", "SSL", "CSL", "SST", "Upwelling", "NPGO", "Flow", "HS", "Salmon 4YO"))
+
+```
+
+```{r}
+corr5 <- ts %>% 
+  select(year, rec5, ssl.SalishSea.5, hseal.WA.5,hatch.all.3, 
+         csl.pups.5, harv.PACtot.5, orca.NRKW.5, arc.sum.2,
+         pdo.may.1, upw.lusi.3, 
+         npgo.mar.1 , flow.gageht.1, ) %>% 
+  group_by(year) %>% 
+  mutate(rec5_ann = as.numeric(sum(rec5, na.rm = T))) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  filter(year > 1956) %>% 
+  select(!rec5)
+
+corr5 <- corr5 %>% 
+  mutate(rec5_stan = scale(rec5_ann)) %>% 
+  select(!rec5_ann)
+
+cormat5 <- round(cor(corr5[,1:13], use = "pairwise.complete.obs"),2)
+
+
+cor.test(corr4$rec4_stan, corr4$flow.gageht.1 )
+```
+
+
+```{r}
+
+corr4mk <- ts %>% 
+  select(year, rec4, harv.COL.3, pdo.jul.1, upw.apr.4,
+         npgo.dec.4, arc.spr.4, flow.gageht.3, 
+         hatch.SNAK.3, ssl.WA.3, hseal.COL.2, 
+         orca.NRKW.4) %>% 
+  group_by(year) %>% 
+  mutate(rec4_ann = as.numeric(sum(rec4, na.rm = T))) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  filter(year > 1956) %>% 
+  select(!rec4)
+
+corr4mk <- corr4mk %>% 
+  mutate(rec4_stan = scale(rec4_ann)) %>% 
+  select(!rec4_ann)
+
+cormat4mk <- round(cor(corr4mk[,1:12], use = "pairwise.complete.obs"),2)
+
+
+```
+
+```{r}
+corr5mk <- ts %>% 
+  select(year, rec5, ssl.SalishSea.3, hseal.WA.5, orca.NRKW.5,
+         csl.SalishSea.5, harv.PACtot.5, hatch.all.1, 
+         upw.jan.2, npgo.jul.3, arc.fal.5, pdo.feb.4,
+         flow.gageht.0) %>% 
+  group_by(year) %>% 
+  mutate(rec5_ann = as.numeric(sum(rec5, na.rm = T))) %>%
+  slice(1) %>%
+  ungroup() %>% 
+  filter(year > 1956) %>% 
+  select(!rec5)
+
+corr5mk <- corr5mk %>% 
+  mutate(rec5_stan = scale(rec5_ann)) %>% 
+  select(!rec5_ann)
+
+cormat5mk <- round(cor(corr5mk[,1:13], use = "pairwise.complete.obs"),2)
+
+cor.test(corr5mk$rec5_stan, corr5mk$ssl.SalishSea.3 )
+```
+

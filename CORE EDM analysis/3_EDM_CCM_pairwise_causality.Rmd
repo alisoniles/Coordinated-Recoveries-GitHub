@@ -40,7 +40,7 @@ rm(list=ls())
 load("Data/Rdata/block_data.Rdata")  
       aa <- t(data.frame(as.list(names(block_data[[1]]))))
       rownames(aa) <- NULL #remove rownames
-      bb <- data.frame(c(aa[13:nrow(aa)] ))
+      bb <- data.frame(c(aa[27:nrow(aa)] ))
       colnames(bb) <- c("variable")
       cc <- str_split_fixed(bb$variable, "[.]",n=3)
 var_names <- cbind(bb,cc)
@@ -49,12 +49,9 @@ var_names <- cbind(bb,cc)
 data <- block_data #Include all mpgs at the whole ESU level
 esuname <- as.character("SnakeESU")
   
-    #concatenate the time series of each variable together
-    keys <-c(names(data[[1]]))
-    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
-    merged_data <- as.data.frame(merged_data)
-    valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.eff_n.0)
-    block <- merged_data[valid,]  
+ #concatenate the time series of each stock together
+block <- rbind(data$'Bear Valley Creek', data$'Big Creek', data$'Camas Creek', data$'Catherine Creek', data$'Chamberlain Creek', data$'East Fork Salmon River', data$'East Fork South Fork', data$'Grande Ronde Upper Mainstem', data$'Imnaha River', data$'Lemhi River', data$'Loon Creek', data$'Marsh Creek', data$'Middle Fork Salmon River above Indian Creek', data$'Middle Fork Salmon River below Indian Creek', data$'Minam River', data$'North Fork Salmon River', data$'Pahsimeroi River', data$'Salmon River Lower Mainstem below Redfish Lake', data$'Salmon River Upper Mainstem above Redfish Lake', data$'Secesh River', data$'South Fork Salmon River Mainstem', data$'Sulphur Creek', data$'Tucannon River', data$'Valley Creek', data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', data$'Wenaha River', data$'Yankee Fork')
+rownames(block) <- NULL
     
     #List in lib the begin and end points of each stock and the break points within stocks
     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
@@ -78,7 +75,7 @@ esuname <- as.character("SnakeESU")
     libsize <- c(50,100,150,300,450,700,1000,NROW(block))  
     
     #set up output table
-    library_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+    library_vars <- c("salm.rec4n.0", "salm.rec5n.0")
     
     #Determine best embedding dimension: E would be set to the best univariate embedding dimension for each lib_column variable:
     best_E <- matrix(NA, nrow = length(library_vars), ncol = 2) # Save the optimal embedding dimension for each library variable
@@ -127,8 +124,8 @@ xmap <-  block_lnlp(lnlp_block, lib = lib, columns = CCMlibrarynames, target_col
             
 #---------------------------------------------------------------------------------------------------------  
 # Multivariate CCM with block_lnlp function, including the number of effective spawners in the embedding 
-            eff_data <- make_block(block["salm.eff_n.0"],t=block$year, max_lag=2, tau=1, lib=lib)
-            lnlp_block_eff <- as.matrix(cbind(library_block[,1:dim(library_block)[2]-1], eff_data["salm.eff_n.0"], target_block[target_var]))
+            eff_data <- make_block(block["salm.effn.0"],t=block$year, max_lag=2, tau=1, lib=lib)
+            lnlp_block_eff <- as.matrix(cbind(library_block[,1:dim(library_block)[2]-1], eff_data["salm.effn.0"], target_block[target_var]))
             rownames(lnlp_block_eff) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
             CCMlibrarynames <- as.character(cbind(t(CCMlibrarynames),"salm.eff_n.0") )
       

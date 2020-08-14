@@ -18,6 +18,22 @@ library(stringr)
 
 rm(list=ls()) 
 
+#create list of beginning and end points for chunks of time series combined in the same embedding. Year must be in the first column of the time series. Complete cases only. Removes sections that are not continuous for at least 18 time points. Returns lib and the narrowed data block. 
+    create_lib <- function(d, cont_tp)
+{
+         lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) 
+             lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
+             lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
+        
+         minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 'cont_tp' time points. 
+         lib <- lib[minlib>=cont_tp,] 
+             
+    return(lib)
+    }
+
+```
+    
+```{R}
 #Choose the variable to run the analysis for
 tarvar <- "salm.rec4n.0"
 tarvarshort <- "rec4"
@@ -67,12 +83,15 @@ data_IMN <- data_ESU[data_ESU$mpg=="Imnaha",]
 data_UPS <- data_ESU[data_ESU$mpg=="Upper Salmon",]
 
 # for base embed with effn and other returning cohorts in the same return year:
+#if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.-1", "salm.rec3n.1", var_names[,1])}
+#if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.1", "salm.rec3n.2", var_names[,1])}
     #for salm.rec4n.0, use rec4n, effective spawners from the same brood year and returning 5 year old recruits from the previous brood year and 3 year old from the next brood year. 
     #for salm.rec5n.0, use rec5n, effective spawners from the same brood year and returning 4 year old recruits from the next brood year 
-
 # for base embed with effn and other ages from the same cohort returning in different years
-if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.0", "salm.rec3n.0", var_names[,1])} 
-if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.0", "salm.rec3n.0", var_names[,1])}
+
+
+if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar, "salm.effn.0", var_names[,1])} 
+if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar, "salm.effn.0", var_names[,1])}
 
 level=c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon")
 for(l in (1:4)){  #loop through the ESU and the different MPGs
@@ -80,74 +99,123 @@ for(l in (1:4)){  #loop through the ESU and the different MPGs
   if(l==2){MVE_block <- as.data.frame(data_MFS[vars])}
   if(l==3){MVE_block <- as.data.frame(data_IMN[vars])}
   if(l==4){MVE_block <- as.data.frame(data_UPS[vars])}
-
-#Theta and E
-  #From the nonlinearity analysis, 5 is a generally good E for rec5 across the MPGs, 4 is the best for rec4 but 5 isn't bad either. I'm going to go with 5 for both to make the embeddings the same and comparable
-  E <- 5
+  
+  d  <- MVE_block[,c(1:(length(vars)-nrow(var_names)))] #The four time series selected in 'vars' above form the base embedding to which we add each of the putative causal variables for a total embedding dimension of 5
+  d <- d[complete.cases(d), ] #remove rows with NA
+  lib <- create_lib(d, 18) #create library for data block d that includes only sections continuous for at least 18 time points
+           x <- d[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+                  for (r in 2:nrow(lib)){
+                      xtmp <- d[lib[r,1]:lib[r,2],]
+                      x <- rbind(x,xtmp)
+                  }
+           d <- x
+          lib <- create_lib(d, 18) #recreate the library list
+  
+  #Theta and E
+  E <- 5 #From the nonlinearity analysis, 5 is a generally good E for rec5 across the MPGs, 4 is the best for rec4 but 5 isn't bad either. I'm going to go with 5 for both to make the embeddings the same and comparable
   theta <- 1.5
+    
+  #smap for just base embedding to evaluate the improvement in rho from adding the putative causal variable
+  basesmap <- block_lnlp(d, lib = lib, pred = lib, 
+                        method='s-map',
+                        tp=1,
+                        num_neighbors = 0,
+                        target_column = 1,
+                        stats_only = FALSE,
+                        first_column_time = TRUE,
+                        exclusion_radius = 0,
+                        theta = theta,
+                        save_smap_coefficients = FALSE)   
+  
+  IC <- data.frame() #make data frame to store interaction coefficients
 
-
-IC <- data.frame() #make data frame to store interaction coefficients
-
-s <- 1
-for (s in (1:NROW(var_names))){  
-     d  <- MVE_block[,c(1, 2, 3, 4, 5)] #The four time series selected in 'vars' above form the base embedding to which we add each of the putative causal variables for a total embedding dimension of 5
-     varname <- var_names$var[s]
-     d <- cbind(d,MVE_block[,varname])
-     colnames(d) <- c(colnames(d[1:5]), varname)
-     d <- d[complete.cases(d), ] #remove rows with NA
-     
-     #set up the library for the embedding
-     lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) #List in lib the begin and end points of each stock's data
-         lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
-         lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
-     minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 20 time points. 
-     lib <- lib[minlib>17,] #only include in the library the sections of data that are continuous for at least 20 time points. 
-     if (NROW(lib)==0) {
-      next
-      }       
-     x <- d[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
-            for (r in 2:nrow(lib)){
-                xtmp <- d[lib[r,1]:lib[r,2],]
-                x <- rbind(x,xtmp)
-            }
-         d <- x
-     lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) #recreate the library list
-         lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
-         lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
-     rm(x,minlib, xtmp, r) 
-     
-     
-smap <- block_lnlp(d, lib = lib, pred = lib, 
-                      method='s-map',
-                      tp=1,
-                      num_neighbors = 0,
-                      target_column = 1,
-                      columns = 1:(NCOL(d)-1),
-                      stats_only = FALSE,
-                      first_column_time = TRUE,
-                      exclusion_radius = 0,
-                      theta = theta,
-                      save_smap_coefficients = TRUE)     
-
-coeffs <- smap$smap_coefficients[[1]][NCOL(d)-1]
-     coeffs <- cbind(d[,1],coeffs)
-     colnames(coeffs) <- c("Year", names(d)[NCOL(d)])
-     coeffs <- pivot_longer(coeffs, names_to = "var", values_to = "IS", cols=2)
-     coeffs_mean <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), mean, na.rm = TRUE)
-     coeffs_sd <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), sd, na.rm = TRUE)
-     coeffs <- cbind(coeffs_mean, coeffs_sd[,3])
-     colnames(coeffs) <- c("year", "var", "meanIS", "sdIS")
-     coeffs <- coeffs[complete.cases(coeffs), ] #remove rows with NA
-     coeffs <- as.data.frame(coeffs)
-     coeffs$rho <- signif(smap$rho,2)
-     coeffs <- merge(coeffs, var_names, by="var")
-     IC <- rbind.data.frame(IC, coeffs)     
-}
+          for (s in (1:NROW(var_names))){  
+               varname <- var_names$var[s]
+               d <- cbind(MVE_block[,c(1:(length(vars)-nrow(var_names)))],MVE_block[,varname])
+               colnames(d) <- c(colnames(d[1:ncol(d)-1]), varname)
+               d <- d[complete.cases(d), ] #remove rows with NA
+               lib <- create_lib(d, 18) #create library for data block d that includes only sections continuous for at least 18 time points
+               if (nrow(lib)==0) {
+               next
+               }
+                   x <- d[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+                          for (r in 2:nrow(lib)){
+                              xtmp <- d[lib[r,1]:lib[r,2],]
+                              x <- rbind(x,xtmp)
+                          }
+                    d <- x
+              lib <- create_lib(d, 18) #recreate the library list
+                
+              smap <- block_lnlp(d, lib = lib, pred = lib, 
+                                method='s-map',
+                                tp=1,
+                                num_neighbors = 0,
+                                target_column = 1,
+                                stats_only = FALSE,
+                                first_column_time = TRUE,
+                                exclusion_radius = 0,
+                                theta = theta,
+                                save_smap_coefficients = TRUE)     
+          
+              coeffs <- smap$smap_coefficients[[1]][NCOL(d)-1]
+                               coeffs <- cbind(d[,1],coeffs)
+                               colnames(coeffs) <- c("Year", names(d)[NCOL(d)])
+                               coeffs <- pivot_longer(coeffs, names_to = "var", values_to = "IS", cols=2)
+                               coeffs_mean <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), mean, na.rm = TRUE)
+                               coeffs_sd <- aggregate(coeffs$IS, list(coeffs$Year, coeffs$var), sd, na.rm = TRUE)
+                               coeffs <- cbind(coeffs_mean, coeffs_sd[,3])
+                               colnames(coeffs) <- c("year", "var", "meanIS", "sdIS")
+                               coeffs <- coeffs[complete.cases(coeffs), ] #remove rows with NA
+                               coeffs <- as.data.frame(coeffs)
+                               coeffs$base_rho <- signif(basesmap$rho,2)
+                               coeffs$rho <- signif(smap$rho,2)
+                               coeffs <- merge(coeffs, var_names, by="var")
+                               IC <- rbind.data.frame(IC, coeffs)     
+          }
 
 saveRDS(IC, file = paste("Output/Rdata/4_IC/Interaction_coeffs_",level[l],"_",tarvarshort,".RDS", sep = ""), compress = FALSE)
 }
 ```
+
+
+#plots to compare the rho of the different base models - which one to use?
+```{R}
+baseE_summary <- data.frame()
+direc <- list.dirs(path = "Output/Rdata/4_IC", full.names = TRUE, recursive = FALSE)
+for(d in 1:length(direc)){ #loop through each directory
+  filelist <- list.files(path = direc[d], pattern = "RDS", all.files = FALSE, full.names = TRUE, recursive = FALSE) 
+  for(f in (1:length(filelist))){  #loop through each file in each directory
+    IC <- readRDS(filelist[f]) 
+    
+    #extract info from file name for plotting
+    x  <- strsplit(filelist[f], "/")
+    x2 <- strsplit(x[[1]][5],"_")
+    x3 <- strsplit(x2[[1]][4],".RDS")
+    x4 <- strsplit(x[[1]][4], "base embed with ")
+    x5 <- c(x4[[1]][2], x2[[1]][3], x3[[1]][1], IC$base_rho[1])
+    baseE_summary <- rbind.data.frame(baseE_summary, x5)
+  
+}
+}
+
+colnames(baseE_summary) <- c("base_embedding", "level", "focal_cohort", "base_rho")
+
+D <- baseE_summary[baseE_summary$focal_cohort=="rec4",]
+p4 <- ggplot(D, aes(x=level, y=base_rho, fill=base_embedding)) +
+        geom_col(position=position_dodge()) +
+        labs(title= "4 year old recruits")
+
+D <- baseE_summary[baseE_summary$focal_cohort=="rec5",]
+p5 <- ggplot(D, aes(x=level, y=base_rho, fill=base_embedding)) +
+        geom_col(position=position_dodge()) +
+        labs(title= "5 year old recruits")
+
+p <- grid.arrange(p4, p5, layout_matrix=rbind(c(1), c(2)), top="Forcast skill of different base embeddings", left="Forecast skill, rho")
+print(p)  
+ggsave(filename = paste("Output/Figures/4_IC/4_IC_base_embedding_comparison.pdf", sep = ""), plot = p, width = 7, height = 5, units = "in")  
+
+```
+
 
 #plot interaction coefficients grouped by variable category
 
@@ -159,11 +227,24 @@ library(rlang)
 
 rm(list=ls())  
 
+##Change the following for rec4 ans rec5 analyses
+#IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_rec4.RDS") 
+#CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec4.RDS")
+#tarvar = "4 yr old recruits"
+#tarvarshort = "rec4"
 
-#Change the following for rec4 ans rec5 analyses
-IC <- readRDS("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_ESU_rec5.RDS") 
+IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_rec5.RDS") 
+CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec5.RDS")
 tarvar = "5 yr old recruits"
 tarvarshort = "rec5"
+
+ccm <- cbind(CCM$var, as.numeric(CCM$ccm_rho), as.numeric(CCM$`95p_crit_rho`), as.numeric(CCM$FisherZ))
+colnames(ccm) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
+IC <- merge(IC, ccm)
+IC$ccm_rho <- as.numeric(IC$ccm_rho)
+IC$p_ccm_rho <- as.numeric(IC$p_ccm_rho)
+IC$crit_ccm_rho <- as.numeric(IC$crit_ccm_rho)
+IC$sig_ccm <- IC$p_ccm_rho<=0.05
 
 varcat <- unique(IC$cat)
 IC$catlabels <- factor(IC$cat, 
@@ -172,7 +253,7 @@ IC$catlabels <- factor(IC$cat,
 
 manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
 
-c <- 6
+c <- 3
 for(c in c(1:length(varcat))) {
   
   D <- IC[IC$cat==varcat[c],]
@@ -211,17 +292,20 @@ for(c in c(1:length(varcat))) {
                 scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
     
     # overlay the model rho info, transformed to match roughly the range of the IC
-                geom_point(shape=23, size = 3, aes(y=rho/5, colour = subcat)) + 
-                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*5, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0", "0.2", "0.4", "0.6", "0.8"), name = "model forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
+                geom_point(size = 2, colour = "red", aes(y=ccm_rho/3, shape=(sig_ccm==TRUE))) + 
+                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*3, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0", "0.2", "0.4", "0.6", "0.8"), name = "ccm rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
                 scale_colour_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
-                geom_hline(aes(yintercept=0.51/5), colour="black", linetype="dashed") +
+                scale_shape_manual(name="FZ test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False")) +
+                geom_hline(aes(yintercept=crit_ccm_rho/3), colour="red", linetype="dashed") +
     
                 geom_hline(aes(yintercept=0), colour='#999999') +
 
                 
                 theme_bw() + 
                 theme(title = element_blank(),
-                      axis.title.y.right = element_text(size=11),
+                      axis.title.y.right = element_text(color = "red", size=11),
+                      axis.ticks.y.right = element_line(color = "red"),
+                      axis.text.y.right = element_text(color = "red"),
                       axis.ticks.x = element_blank(),
                       legend.title = element_blank(), 
                       strip.text = element_blank(), 
@@ -232,7 +316,7 @@ for(c in c(1:length(varcat))) {
 
   
   
-  p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at chosen offsets from brood year", sep=""), left="Interaction coefficient")
+  p <- grid.arrange(p1a, p1b, layout_matrix=rbind(c(1,2,2)), top=paste("Partial effects of ",varcat[c], " on ", tarvar, " at chosen offsets from brood year", sep=""), left="Interaction coefficient")
 
 
   ggsave(filename = paste("Output/Figures/4_IC/4_IC_",varcat[c],"_",tarvarshort,".pdf", sep = ""), plot = p, width = 7, height = 2+(length(unique(D$offset))*1.5), units = "in")  
@@ -253,23 +337,60 @@ rm(list=ls())
 
 #Change the following for rec4 and rec5 analyses
 #*******change plot labels below, too********
-tarvar = "5 yr old recruits"
-tarvarshort = "rec5"
 
-#load interaction coeffs
-IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
-IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
-IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
-IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn and same cohort returning in different years/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+#For rec5, choose the following
+#tarvar = "5 yr old recruits"
+#tarvarshort = "rec5"
+#IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+#IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+#IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+#IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
 
+
+
+
+#For rec4, choose the following
+tarvar = "4 yr old recruits"
+tarvarshort = "rec4"
+IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+
+
+
+
+CCM_ESU <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_", tarvarshort, ".RDS", sep=""))
+CCM_MFS <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_optimal_base_MiddleForkSalmon_", tarvarshort, ".RDS", sep=""))
+CCM_IMN <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_optimal_base_Imnaha_", tarvarshort, ".RDS", sep=""))
+CCM_UPS <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_optimal_base_UpperSalmon_", tarvarshort, ".RDS", sep=""))
+
+CCM_ESU <- cbind(CCM_ESU$var, as.numeric(CCM_ESU$ccm_rho), as.numeric(CCM_ESU$`95p_crit_rho`), as.numeric(CCM_ESU$FisherZ))
+        colnames(CCM_ESU) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
+        IC_ESU <- merge(IC_ESU, CCM_ESU)
+CCM_MFS <- cbind(CCM_MFS$var, as.numeric(CCM_MFS$ccm_rho), as.numeric(CCM_MFS$`95p_crit_rho`), as.numeric(CCM_MFS$FisherZ))
+        colnames(CCM_MFS) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
+        IC_MFS <- merge(IC_MFS, CCM_MFS)
+CCM_IMN <- cbind(CCM_IMN$var, as.numeric(CCM_IMN$ccm_rho), as.numeric(CCM_IMN$`95p_crit_rho`), as.numeric(CCM_IMN$FisherZ))
+        colnames(CCM_IMN) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
+        IC_IMN <- merge(IC_IMN, CCM_IMN)
+CCM_UPS <- cbind(CCM_UPS$var, as.numeric(CCM_UPS$ccm_rho), as.numeric(CCM_UPS$`95p_crit_rho`), as.numeric(CCM_UPS$FisherZ))
+        colnames(CCM_UPS) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
+        IC_UPS <- merge(IC_UPS, CCM_UPS)
+        
 #add grouping variable
 IC_ESU$level <- "ESU"
 IC_MFS$level <- "MFS"
 IC_IMN$level <- "IMN"
 IC_UPS$level <- "UPS"
 
+
 #bind together
 IC <- rbind(IC_ESU, IC_MFS, IC_IMN, IC_UPS)
+IC$ccm_rho <- as.numeric(IC$ccm_rho)
+IC$p_ccm_rho <- as.numeric(IC$p_ccm_rho)
+IC$crit_ccm_rho <- as.numeric(IC$crit_ccm_rho)
+IC$sig_ccm <- IC$p_ccm_rho<=0.05
 
 varcat <- unique(IC$cat)
 IC$catlabels <- factor(IC$cat, 
@@ -297,15 +418,18 @@ for(c in c(1:length(varcat))) {
                 scale_fill_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
     
     # overlay the model rho info, transformed to match roughly the range of the IC
-                geom_point(shape=23, size = 3, aes(y=rho, colour = subcat)) + 
-                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*1, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0","0.2", "0.4", "0.6", "0.8"), name = "model forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
+                geom_point(size = 2, colour = "red", aes(y=ccm_rho/1, shape=(sig_ccm==TRUE))) + 
+                scale_y_continuous(name = "IC axis", sec.axis = sec_axis(~.*1, breaks = c(0, 0.2, 0.4, 0.6, 0.8), labels = c("0","0.2", "0.4", "0.6", "0.8"), name = "ccm forecast skill, rho"))+ # now adding the secondary axis and, very important, reverting the above transformation
                 scale_colour_manual(values = mcc[,1], breaks = mcc[,2], labels = mcc[,3])  +
-                geom_hline(aes(yintercept=0.51), colour="black", linetype="dashed") +
+                scale_shape_manual(name="FZ test",  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False")) +
+                geom_hline(aes(yintercept=crit_ccm_rho/1), colour="red", linetype="dashed") +
 
                 geom_hline(aes(yintercept=0), colour='#999999') +
                 theme_bw() + 
                 theme(axis.ticks.x = element_blank(),
-                      axis.title.y.right = element_text(size=11),
+                      axis.title.y.right = element_text(color = "red", size=11),
+                      axis.ticks.y.right = element_line(color = "red"),
+                      axis.text.y.right = element_text(color = "red"),
                       legend.title = element_blank()) +
     
                 #labs(title= varcat[c], subtitle = paste("Partial effects of ",varcat[c], " on ", tarvar, " at different ESU/MPGs and offsets from brood year", sep=""), y="Interaction coefficient", x="E=5; theta=1.5; base embedding: salm.rec4n.0 (focal), salm.effn.0, salm.rec5n.-1, salm.rec3n.1") +
