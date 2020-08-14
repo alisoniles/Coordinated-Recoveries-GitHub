@@ -1,0 +1,166 @@
+---
+title: "3_EDM_CCM_pairwise_causality_optimal_base_embedding"
+author: "Alison Iles"
+date: "8/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##This analysis calculates the forecast skill of the chosen base embedding for rec4 and rec5 to predict each putative causal variable (as in convergent cross-mapping). If the causal variable is recoverable, then it can be assumed that it is significantly affecting the dynamics of the salmon. 
+
+```{R}
+library(rEDM)
+library(tidyr)
+library(stringr)
+library(psych) #for paired.r function
+
+rm(list=ls()) 
+
+#create list of beginning and end points for chunks of time series combined in the same embedding. Year must be in the first column of the time series. Complete cases only. Removes sections that are not continuous for at least 18 time points. Returns lib and the narrowed data block. 
+    create_lib <- function(d, cont_tp)
+{
+         lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) 
+             lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
+             lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
+        
+         minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 'cont_tp' time points. 
+         lib <- lib[minlib>=cont_tp,] 
+             
+    return(lib)
+    }
+
+```
+
+
+```{R}
+#Choose the variable to run the analysis for
+tarvar <- "salm.rec4n.0"
+tarvarshort <- "rec4"
+
+#shape causal variable list and output data frame
+load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(c(aa[27:nrow(aa)] ))
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+      var_names <- cbind(bb,cc)
+      colnames(var_names) <- c("var","cat","subcat", "offset")
+      rm("aa", "bb", "cc")
+
+      CCM_out <- var_names  
+      CCM_out$tarvar <- tarvar
+      CCM_out[,6:10] <- matrix(NA, nrow = NROW(CCM_out), ncol = 5)
+      colnames(CCM_out) <- c("var","cat","subcat", "offset","tarvar", "ccm_rho","N", "95p_crit_rho", "Nrow_lib", "FisherZ")
+
+      
+data_ESU <- rbind(block_data$'Bear Valley Creek', 
+              block_data$'Big Creek', 
+              block_data$'Camas Creek', 
+              block_data$'Catherine Creek', 
+              block_data$'Chamberlain Creek', 
+              block_data$'East Fork Salmon River', 
+              block_data$'East Fork South Fork', 
+              block_data$'Grande Ronde Upper Mainstem', 
+              block_data$'Imnaha River', 
+              block_data$'Lemhi River', 
+              block_data$'Loon Creek', 
+              block_data$'Lostine Creek', 
+              block_data$'Marsh Creek', 
+              block_data$'Middle Fork Salmon River above Indian Creek', 
+              block_data$'Middle Fork Salmon River below Indian Creek', 
+              block_data$'Minam River', 
+              block_data$'North Fork Salmon River', 
+              block_data$'Pahsimeroi River', 
+              block_data$'Salmon River Lower Mainstem below Redfish Lake', 
+              block_data$'Salmon River Upper Mainstem above Redfish Lake', 
+              block_data$'Secesh River', 
+              block_data$'South Fork Salmon River Mainstem', 
+              block_data$'Sulphur Creek', 
+              block_data$'Tucannon River', 
+              block_data$'Valley Creek', 
+              block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', 
+              block_data$'Wenaha River', 
+              block_data$'Yankee Fork')   
+
+data_MFS <- data_ESU[data_ESU$mpg=="Middle Fork Salmon",]
+data_IMN <- data_ESU[data_ESU$mpg=="Imnaha",]
+data_UPS <- data_ESU[data_ESU$mpg=="Upper Salmon",]
+
+#use optimal base embeddings for each target variable, rec4 and rec 5
+if(tarvar=="salm.rec4n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec5n.0", var_names[,1])
+                            nvars <- 4}  #effn and rec5s from the same cohort
+if(tarvar=="salm.rec5n.0") {vars <-  c("year", tarvar,"salm.effn.0", "salm.rec4n.1", "salm.rec3n.2", var_names[,1])
+                            nvars <- 5} #effn, rec3s and rec4s from the same return year
+
+level=c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon")
+for(l in (1:4)){  #loop through the ESU and the different MPGs
+  if(l==1){MVE_block <- as.data.frame(data_ESU[vars])}
+  if(l==2){MVE_block <- as.data.frame(data_MFS[vars])}
+  if(l==3){MVE_block <- as.data.frame(data_IMN[vars])}
+  if(l==4){MVE_block <- as.data.frame(data_UPS[vars])}
+  
+  base_d  <- MVE_block[,c(1:nvars)] #The first few time series selected in 'vars' above form the base embedding 
+
+ # Run multivariate CCM with block_lnlp function on each putative causal variable
+for (s in (1:NROW(var_names))){  
+               varname <- var_names$var[s]
+               d <- cbind(base_d,MVE_block[,varname])
+               colnames(d) <- c(colnames(base_d), varname)
+               
+               #create library for data block d that excludes rows with NA and includes only sections continuous for at least 18 time points
+               d <- d[complete.cases(d), ] #remove rows with NA
+               lib <- create_lib(d, 18) #create library for data block d that includes only sections continuous for at least 18 time points
+               if (nrow(lib)==0) {
+               next
+               }
+                   x <- d[lib[1,1]:lib[1,2],] #narrow the data block to these library sections
+                          for (r in 2:nrow(lib)){
+                              xtmp <- d[lib[r,1]:lib[r,2],]
+                              x <- rbind(x,xtmp)
+                          }
+                    d <- x
+              lib <- create_lib(d, 18) #recreate the library list
+              
+              ccm <- block_lnlp(d, lib = lib, 
+                                 columns = 1:(NCOL(d)-1), 
+                                 target_column = varname, 
+                                 method = 'simplex', 
+                                 tp = 1, 
+                                 first_column_time = TRUE, 
+                                 silent = TRUE)
+             
+             CCM_out$ccm_rho[s] <- ccm$rho
+             CCM_out$N[s] <- ccm$num_pred
+             CCM_out$`95p_crit_rho`[s] <- qnorm(0.95, sd = 1/sqrt(ccm$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than in order to be signifcantly different from zero and p=0.05 level. 
+             CCM_out$Nrow_lib[s] <- nrow(lib)
+              
+             #Basic convergence test: calculate the mean rho from thr minimum library size and use Fisher's Z to test that the max library z is significantly higher than the begining. Transforms the rho at the min library and max library length to a normally distributed Fisher's z value Independent correlations, different sample sizes. 
+                        min_rho <- matrix(NA, nrow = NROW(lib), ncol = 1)
+                        for(i in 1:nrow(lib)){
+                         min_rho_ccm <- block_lnlp(d, lib = lib[i,], pred = lib,
+                                           columns = 1:(NCOL(d)-1), 
+                                           target_column = varname, 
+                                           method = 'simplex', 
+                                           tp = 1, 
+                                           first_column_time = TRUE, 
+                                           silent = TRUE)
+                        min_rho[i] <- min_rho_ccm$rho
+                        }
+            minlibsize <- median(lib[,2]-lib[,1])
+            maxlibsize <- nrow(d) - minlibsize
+            FZ <- paired.r(mean(min_rho), ccm$rho, NULL, minlibsize, maxlibsize, twotailed=FALSE)
+            CCM_out$FisherZ[s] <- FZ$p              
+              
+
+
+          }
+
+saveRDS(CCM_out, file = paste("Output/Rdata/3_CCM/3_CCM_optimal_base_",level[l],"_",tarvarshort,".RDS", sep = ""), compress = FALSE)
+
+}  
+```
+  

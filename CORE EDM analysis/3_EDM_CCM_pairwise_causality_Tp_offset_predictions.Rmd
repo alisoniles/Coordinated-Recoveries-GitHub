@@ -36,7 +36,7 @@ data <- block_data_no_lags
 rownames(data)
       aa <- t(data.frame(as.list(names(block_data_no_lags[[1]]))))
       rownames(aa) <- NULL #remove rownames
-      bb <- data.frame(c(aa[39:43], aa[56:61], aa[74:103], aa[105:108], aa[110:112], aa[114:NROW(aa)] ))
+      bb <- data.frame(c(aa[40:44], aa[57:62], aa[75:104], aa[106:109], aa[111:113], aa[115:NROW(aa)] ))
       colnames(bb) <- c("variable")
       cc <- str_split_fixed(bb$variable, "[.]",n=2)
 var_names <- cbind(bb,cc)
@@ -48,7 +48,7 @@ var_names[4] <- matrix(NA, nrow = NROW(var_names), ncol = 1)
      #concatenate the time series of each stock together
 block <- rbind(data$'Bear Valley Creek', data$'Big Creek', data$'Camas Creek', data$'Catherine Creek', data$'Chamberlain Creek', data$'East Fork Salmon River', data$'East Fork South Fork', data$'Grande Ronde Upper Mainstem', data$'Imnaha River', data$'Lemhi River', data$'Loon Creek', data$'Marsh Creek', data$'Middle Fork Salmon River above Indian Creek', data$'Middle Fork Salmon River below Indian Creek', data$'Minam River', data$'North Fork Salmon River', data$'Pahsimeroi River', data$'Salmon River Lower Mainstem below Redfish Lake', data$'Salmon River Upper Mainstem above Redfish Lake', data$'Secesh River', data$'South Fork Salmon River Mainstem', data$'Sulphur Creek', data$'Tucannon River', data$'Valley Creek', data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', data$'Wenaha River', data$'Yankee Fork')
 rownames(block) <- NULL
-    library_vars <- c("salm.rec4_n", "salm.rec5_n")
+    library_vars <- c("salm.rec4n", "salm.rec5n")
     
     #For CCM we need to use the best univariate E for each target variable
     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
@@ -62,8 +62,7 @@ rownames(block) <- NULL
           }
      
     #load optimal theta for library vars
-    Etheta <- readRDS(file="Output/Rdata/best_E_theta_rho_recspn_ESU.RDS")
-    Etheta <- Etheta[c(3:4),] 
+    Etheta <- readRDS(file="Output/Rdata/2_Nonlinearity/best_E_theta_rho_recspn_ESU.RDS")
     
     #set up output table
     env_vars <- as.character(var_names[,1])
@@ -168,7 +167,7 @@ ccm <-  ccm(ccm_block, lib = lib, E = E_tar, lib_column = library_var, target_co
 #-----------------------------------------------------------------------------------------------------  
      }
     
-saveRDS(CCM_outputlist, file = paste("Output/Rdata/CCM_tp.RDS", sep = ""), compress = FALSE)
+saveRDS(CCM_outputlist, file = paste("Output/Rdata/CCM_tp_E_tar.RDS", sep = ""), compress = FALSE)
 ```    
 
 #CCM output list meta data:
@@ -195,7 +194,7 @@ rm(list=ls())
 #load("Data/Rdata/block_data_no_lags.Rdata") 
  
  
-CCM_outputlist<- readRDS("Output/Rdata/CCM_tp.RDS")
+CCM_outputlist<- readRDS("Output/Rdata/3_CCM/CCM_tp_E_tar.RDS")
 
     # sort output table by offset then category
     d <-  CCM_outputlist[order(CCM_outputlist$library),]
@@ -205,8 +204,8 @@ CCM_outputlist<- readRDS("Output/Rdata/CCM_tp.RDS")
     d <- d[order(d$library),]
     d$tp <- as.numeric(d$tp)
     
-library_vars <- c("salm.rec4_n", "salm.rec5_n")
-    d <- d[d$library=="salm.rec5_n",]
+library_vars <- c("salm.rec4n", "salm.rec5n")
+    d <- d[d$library=="salm.rec5n",]
 
 manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv") #csv file containing the manual color codes and labels for plots 
      manual_color_codes <- manual_color_codes[order(manual_color_codes$labels),]
