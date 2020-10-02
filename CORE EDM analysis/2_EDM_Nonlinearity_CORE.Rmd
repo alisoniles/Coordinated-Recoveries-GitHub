@@ -10,14 +10,31 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(rEDM)
+library(tseriesChaos)
+library(multispatialCCM)
+library(tidyr)
+library(stringr)
+
+library(ggplot2)
+library(ggforce)
+library(gridExtra)
 ```
+# This code runs several optimizations of parameters for nonlinear time series analysis
 
+#1: Evaluate the optimal tau
+The time-delay of the embedding, tau, is introduced to improve the observability of a time series (Judd and Mees 1998). The time lag is chosen to optimize the spread of the embedded time series without confusing the dynamics. 
 
+The criteria for estimating a proper time lag is based on the following reasoning: if the time lag used to build the Takens' vectors is too small, the coordinates will be too highly temporally correlated and the embedding will tend to cluster around the diagonal in the phase space. If the time lag is chosen too large, the resulting coordinates may be almost uncorrelated and the resulting embedding will be very complicated. 
+
+There are two principle methods for choosing the lags, the first zero of the autocorrelation function and the first local minimum of the time-delayed mutual information. However, it must be noted that the autocorrelation is a linear statistic, and thus it does not take into account nonlinear dynamical correlations. To take into account nonlinear correlations the average mutual information (AMI) is the most appropriate. 
+
+For all stocks, the optimal tau was <= 5. Run the rest of the diagnostic plots for tau=1:5. Many stocks had missing data points, which the mutual information calculation cannot handle properly. To get better estimates of Tau for each stock, consider running on the largest continuous time chunks or doing two separate evaluations for a stock with a missing year in the middle of the time series. 
 
 #Find the optimal embedding dimension
 The embedding dimension, E, is an estimate of the number of dimensions, or 'active variables', of the attractor underlying a time series. In practice, it is simply the OPTIMAL number of dimensions with which to unfold the attractor that maximizes the forecast skill (rho) of the embedding. Additional data may reveal additional dimensionality that was otherwise obscurred by process or observational noise.
 
-We evaluated a range of embedding dimensions (E from 1:7) using simplex projection and predicting 1:12 years into the future. We also varied tau. Forecast skill (rho) between predicted and observed values determines the optimal model parameters.
+The maximum E that can be tested depends on the length of the data as max E < sqrt(n). 
+For each stock, we evaluated a range of embedding dimensions (E from 1:7) using simplex projection and predicting 1:12 years into the future. We also varied tau. Forecast skill (rho) between predicted and observed values determines the optimal model parameters.
 
 
 #Test for nonlinearity in the SRKW time series 
@@ -25,12 +42,601 @@ Nonlinear state dependence dynamics frequently occur nature. Such nonlinearaties
 
 Thus, nonlinearity complicates the identification of causal drivers. Here we test whether the salmon population data exhibits non-linearity. We test for nonlinearity using S-maps by comparing improvements in forecast skill (delta rho and delta mae) between linear and nonlinear models. Finally we test for the significance of the nonlinearity with a null distribution from surrogate data.
 
+```{R}
+# Final diagnostic analyses for rec4n, rec5n, recspn4n, and recspn5n for each MPG and ESU
+
+rm(list=ls()) 
+load("Data/Rdata/stock_data_no_lags.Rdata")  
+
+vars <- c("stk", "year", "salm.rec4n", "salm.rec5n", "salm.recspn4n", "salm.recspn5n") 
+
+#concatenate the stock time series together for each MPG and ESU
+D_ESU <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], NA,  
+              stock_data$'Big Creek'[vars], NA,  
+              stock_data$'Camas Creek'[vars], NA,  
+              stock_data$'Catherine Creek'[vars], NA,  
+              stock_data$'Chamberlain Creek'[vars], NA,  
+              stock_data$'East Fork Salmon River'[vars], NA,  
+              stock_data$'East Fork South Fork'[vars], NA,  
+              stock_data$'Grande Ronde Upper Mainstem'[vars], NA,  
+              stock_data$'Imnaha River'[vars], NA,  
+              stock_data$'Lemhi River'[vars], NA,  
+              stock_data$'Loon Creek'[vars], NA,  
+              stock_data$'Lostine Creek'[vars], NA,  
+              stock_data$'Marsh Creek'[vars], NA,  
+              stock_data$'Middle Fork Salmon River above Indian Creek'[vars], NA,  
+              stock_data$'Middle Fork Salmon River below Indian Creek'[vars], NA,  
+              stock_data$'Minam River'[vars], NA,  
+              stock_data$'North Fork Salmon River'[vars], NA,  
+              stock_data$'Pahsimeroi River'[vars], NA,  
+              stock_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
+              stock_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA,  
+              stock_data$'Secesh River'[vars], NA,  
+              stock_data$'South Fork Salmon River Mainstem'[vars], NA,  
+              stock_data$'Sulphur Creek'[vars], NA,  
+              stock_data$'Tucannon River'[vars], NA,  
+              stock_data$'Valley Creek'[vars], NA,  
+              stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA,  
+              stock_data$'Wenaha River'[vars], NA,  
+              stock_data$'Yankee Fork'[vars]))
+
+D_MFS <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], NA, 
+           stock_data$'Big Creek'[vars], NA, 
+           stock_data$'Camas Creek'[vars], NA, 
+           stock_data$'Chamberlain Creek'[vars], NA, 
+           stock_data$'Loon Creek'[vars], NA, 
+           stock_data$'Marsh Creek'[vars], NA, 
+           stock_data$'Middle Fork Salmon River above Indian Creek'[vars], NA, 
+           stock_data$'Middle Fork Salmon River above Indian Creek'[vars], NA, 
+           stock_data$'Sulphur Creek'[vars]))
+
+D_IMN <- as.matrix(rbind(stock_data$'Catherine Creek'[vars], NA, 
+                     stock_data$'Grande Ronde Upper Mainstem'[vars], NA, 
+                     stock_data$'Imnaha River'[vars], NA, 
+                     stock_data$'Lostine Creek'[vars], NA, 
+                     stock_data$'Minam River'[vars], NA, 
+                     stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
+                     stock_data$'Wenaha River'[vars], NA))
+  
+D_UPS <- as.matrix(rbind(stock_data$'East Fork Salmon River'[vars], NA, 
+                     stock_data$'Lemhi River'[vars], NA, 
+                     stock_data$'North Fork Salmon River'[vars], NA, 
+                     stock_data$'Pahsimeroi River'[vars], NA, 
+                     stock_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
+                     stock_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA, 
+                     stock_data$'Valley Creek'[vars], NA, 
+                     stock_data$'Yankee Fork'[vars], NA))
+
+# D_SFS <- as.matrix(rbind(stock_data$'East Fork South Fork'[vars], NA, 
+#                      stock_data$'Secesh River'[vars], NA, 
+#                      stock_data$'South Fork Salmon River Mainstem'[vars], NA))
+  
+
+
+#Function to remove to extra NAs, but leave one NA between each stock's data in an MPG
+shape_stock_data <- function(data, min_stock_size = 20) {
+         CC <- complete.cases(data[,3]) 
+         lib <- matrix(NA, nrow = length(which(diff(CC)==1))+1, ncol = 2)
+         lib[,1] <- c(1, (which(diff(CC)==1)+1))
+         lib[,2] <- c((which(diff(CC)==-1)+1))
+         #only include in the library the sections of data that are continuous for at least 20 time points. 
+         minlib <- lib[,2]-lib[,1]
+         lib <- lib[minlib>min_stock_size,] 
+         x <- c(NA, NA, NA)
+             for (r in 1:nrow(lib)){
+                 xtmp <- data[lib[r,1]:lib[r,2],]
+                 x <- rbind(x,xtmp)}
+         data <- (x[2:(nrow(x)-1),])
+         data <- as.data.frame(data)
+         dataNA <- is.na(data[,3])
+         data[dataNA,1:2] <- NA
+         return(data)
+}
+
+D_ESU_r4n <- shape_stock_data(D_ESU[,c(1,2,3)], 10)
+D_ESU_r5n <- shape_stock_data(D_ESU[,c(1,2,4)], 10)
+D_ESU_rs4n <- shape_stock_data(D_ESU[,c(1,2,5)], 10)
+D_ESU_rs5n <- shape_stock_data(D_ESU[,c(1,2,6)], 10)
+
+D_MFS_r4n <- shape_stock_data(D_MFS[,c(1,2,3)], 10)
+D_MFS_r5n <- shape_stock_data(D_MFS[,c(1,2,4)], 10)
+D_MFS_rs4n <- shape_stock_data(D_MFS[,c(1,2,5)], 10)
+D_MFS_rs5n <- shape_stock_data(D_MFS[,c(1,2,6)], 10)
+
+D_IMN_r4n <- shape_stock_data(D_IMN[,c(1,2,3)], 10)
+D_IMN_r5n <- shape_stock_data(D_IMN[,c(1,2,4)], 10)
+D_IMN_rs4n <- shape_stock_data(D_IMN[,c(1,2,5)], 10)
+D_IMN_rs5n <- shape_stock_data(D_IMN[,c(1,2,6)], 10)
+
+D_UPS_r4n <- shape_stock_data(D_UPS[,c(1,2,3)], 10)
+D_UPS_r5n <- shape_stock_data(D_UPS[,c(1,2,4)], 10)
+D_UPS_rs4n <- shape_stock_data(D_UPS[,c(1,2,5)], 10)
+D_UPS_rs5n <- shape_stock_data(D_UPS[,c(1,2,6)], 10)
+
+
+## Run diagnostics for each MPG separately and the whole ESU
+level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
+variables <- c("salm.rec4n", "salm.rec5n", "salm.recspn4n", "salm.recspn5n")
+results <- matrix(nrow=16, ncol=4); colnames(results)<-c("level", "variable", "tau", "E") #Matrix for storing output
+results[,2] <- variables
+
+l <- 1; v <- 1
+for(l in (1:4)){  #loop through each analysis level the ESU and the different MPGs
+
+  subplot_list = list(); 
+  for(v in 1:4){ #loop through the four different variables
+      if(l==1 & v==1){D <- D_ESU_r4n; results[((l-1)*4 + 1):((l-1)*4 + 4),1] <- "ESU"}
+      if(l==1 & v==2){D <- D_ESU_r5n}
+      if(l==1 & v==3){D <- D_ESU_rs4n}
+      if(l==1 & v==4){D <- D_ESU_rs5n}
+      
+      if(l==2 & v==1){D <- D_MFS_r4n; results[((l-1)*4 + 1):((l-1)*4 + 4),1] <- "MFS"}
+      if(l==2 & v==2){D <- D_MFS_r5n}
+      if(l==2 & v==3){D <- D_MFS_rs4n}
+      if(l==2 & v==4){D <- D_MFS_rs5n}
+      
+      if(l==3 & v==1){D <- D_IMN_r4n; results[((l-1)*4 + 1):((l-1)*4 + 4),1] <- "IMN"}
+      if(l==3 & v==2){D <- D_IMN_r5n}
+      if(l==3 & v==3){D <- D_IMN_rs4n}
+      if(l==3 & v==4){D <- D_IMN_rs5n}
+      
+      if(l==4 & v==1){D <- D_UPS_r4n; results[((l-1)*4 + 1):((l-1)*4 + 4),1] <- "UPS"}
+      if(l==4 & v==2){D <- D_UPS_r5n}
+      if(l==4 & v==3){D <- D_UPS_rs4n}
+      if(l==4 & v==4){D <- D_UPS_rs5n}
+          
+
+
+#---------------------------- time-delay, tau ----------------------------
+# the 'mutual' function that calculates the average mutual information needs a time series with no NA
+Dt <- as.numeric(D[complete.cases(D[,3]),3])
+AMI <- mutual(Dt, lag.max = 20, plot=FALSE)
+minAMI <- min(which(diff(AMI)>=0))-1
+
+  AMI <- as.data.frame(as.numeric(AMI)); 
+  AMI <- cbind( c(0:(nrow(AMI)-1)), AMI); colnames(AMI) <- c("lag", "AMI")
+  tau <- AMI[AMI[,2]==min(AMI[1:5,2]),1] #choose the tau <=4 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
+    results[((l-1)*4 + v),3] <- tau
+  
+  pAMI <- ggplot(AMI, aes(x=lag, y=AMI)) +
+    geom_point() +
+    theme_bw(base_size = 7) +
+    theme(legend.position = "none") +
+    labs(title = paste(variables[v], ", tau = ", tau, sep="")) 
+ 
+subplot_list[[((v-1)*4 + 1)]] = pAMI
+
+  
+  
+  
+#---------------------------- lagged population plot ----------------------------
+
+NAmat <- matrix(NA, ncol = 3, nrow=tau)
+colnames(NAmat) <- colnames(D)
+Lagblock <- cbind(rbind(NAmat, D), rbind(D, NAmat))
+removerows <- Lagblock[,1]!=Lagblock[,4] | is.na(Lagblock[,1]) | is.na(Lagblock[,4])
+Lagblock[removerows,] <- NA 
+Lagblock <- Lagblock[complete.cases(Lagblock[,1]),]
+
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+
+
+ 
+pLag <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     geom_point(shape=1)+
+     geom_hline(aes(yintercept=0), colour='#999999') +
+     theme_bw(base_size = 10) + # big text
+     theme(legend.position = "none") 
+ 
+subplot_list[[((v-1)*4 + 2)]] = pLag
+
+
+
+
+#---------------------------- Embedding dimension, E ----------------------------
+
+#set optimal E for each MPG and the ESU levels
+maxE<-20 #Maximum E to test based on the square root of the number of samples, also depends on tau
+
+Emat<-matrix(nrow=maxE-1, ncol=4); colnames(Emat)<-c("E", "Tau2", "Tau3", "Tau4") #Matrix for storing output
+#Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
+
+A <- as.numeric(D[,3])
+
+for(E in 2:maxE) {
+  #Uses defaults of looking forward one prediction step (predstep)
+  Emat[E-1,"E"] <- E
+  Emat[E-1,"Tau2"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=2)$rho
+  Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
+  Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
+}
+
+
+#We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+#n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+maxrho=max(Emat[,"Tau2"], na.rm=TRUE)
+    E2 <- min(Emat[(Emat[,"Tau2"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau3"], na.rm=TRUE)
+    E3 <- min(Emat[(Emat[,"Tau3"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau4"], na.rm=TRUE)
+    E4 <- min(Emat[(Emat[,"Tau4"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+
+Edf <- as.data.frame(Emat)
+Edf <- pivot_longer(Edf, cols=c(2:4))
+Edf$chosen <- 0
+Edf$chosen [(Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4")] <- 1
+
+#manual color codes for plot
+pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
+     geom_line() +
+     geom_point(data=Edf[Edf$chosen==1,], aes(x=E, y=value, color=name), size=2, shape=1) +
+     labs(x = "E", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+subplot_list[[((v-1)*4 + 3)]] = pE
+
+
+#---------------------------- Time to prediction, TP ----------------------------
+##Check data for nonlinear signal that is not dominated by noise
+#Checks whether predictive ability of processes declines with increasing time distance
+#Loop over the number of time steps into the future to make predictions from past observations. 
+#Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
+
+maxTP <- 20 #Maximum TP to test
+
+TPdf <- matrix(nrow=maxTP, ncol=4); colnames(TPdf)<-c("TP", "Tau2", "Tau3", "Tau4") #Matrix for storing output
+TPdf[,"TP"] <- c(1:maxTP) 
+TPdf[,"Tau2"]<-SSR_check_signal(A=as.matrix(A), E=E2, tau=2, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau3"]<-SSR_check_signal(A=as.matrix(A), E=E3, tau=3, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau4"]<-SSR_check_signal(A=as.matrix(A), E=E4, tau=4, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+
+TPdf <- as.data.frame(TPdf) 
+TPdf <- pivot_longer(TPdf, cols=c(2:4))
+pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
+     geom_line() +
+     labs(x = "time steps to prediction", y = expression(rho)) +
+     theme_bw() +
+     theme( legend.position = c(.99, .99),
+              legend.justification = c("right", "top"),
+              legend.box.just = "left",
+              legend.margin=margin(0,0,0,0),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 8),
+              legend.background = element_blank(),
+              legend.key.size = unit(0.3, "cm"))
+
+subplot_list[[((v-1)*4 + 4)]] = pTP
+
+}  #variables loop  
+
+
+ n <- length(subplot_list)
+ nCol <- 4 #floor(sqrt(n))
+ pDIAGNOSTICS <- do.call("grid.arrange", c(subplot_list, ncol=nCol, top=level[l]))
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/",level[l],"_diagnostics.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
+
+} 
+ 
+```
+
+
+
+
+
+
 
 ```{R}
-rm(list=ls())  
+# Find the optimal tau for each stock
 
-pdf("Output/Figures/2_Nonlinearity/best_ET_MPG_ESU.pdf")
+rm(list=ls()) 
+load("Data/Rdata/stock_data_no_lags.Rdata")  
 
+tarvars <- c("salm.recspn4n", "salm.recspn5n") 
+
+Tau_df<-matrix(nrow=28, ncol=6); colnames(Tau_df)<-c("stock", "MPG",  "n", "No. missing years", "rec4n tau", "rec5n tau") #Storing output
+
+i <- 1
+for(i in 1:28){
+par(mfrow = c(1, 2))
+  stock <- names(stock_data)[i]
+    Tau_df[i,1] <- stock
+    Tau_df[i,2] <- stock_data[[i]]$mpg[1]
+    
+  A4 <- stock_data[[i]]$salm.rec4n
+  A5 <- stock_data[[i]]$salm.rec5n
+
+  year <- stock_data[[i]]$year
+  year4 <- year[complete.cases(A4)]
+  year5 <- year[complete.cases(A5)]
+  
+  A4 <- A4[complete.cases(A4)]
+  A5 <- A5[complete.cases(A5)]
+  
+  Tau_df[i,3] <- length(A5)
+  Tau_df[i,4] <- sum(diff(year5)!=1)
+  
+ami4 <- mutual(A4, lag.max = 20, plot=TRUE, main=paste(stock, ", rec4n", sep=""))
+  ami4min <-min(which(diff(ami4)>=0))-1
+  Tau_df[i,5] <- ami4min
+  points(ami4min, ami4[ami4min+1][[1]], cex = 1, col = "red")
+
+ami5 <- mutual(A5, lag.max = 20, plot=TRUE, main=paste(stock, ", rec5n", sep=""))
+  ami5min <-min(which(diff(ami5)>=0))-1
+  Tau_df[i,6] <- ami5min
+  points(ami5min, ami5[ami5min+1][[1]], cex = 1, col = "red")
+
+}
+
+rm()
+
+```
+
+```{R}
+# Run diagnostics for each MPG and ESU at Tau from 1:5
+
+load("Data/Rdata/stock_data_no_lags.Rdata")  
+
+
+#choose the library variable to analyze
+vars <- c("stk", "year", "salm.recspn4n", "salm.recspn5n") 
+
+#concatenate the stock time series together for each MPG and ESU
+D_MFS <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], c(NA, NA), 
+           stock_data$'Big Creek'[vars], c(NA, NA), 
+           stock_data$'Camas Creek'[vars], c(NA, NA), 
+           stock_data$'Chamberlain Creek'[vars], c(NA, NA), 
+           stock_data$'Loon Creek'[vars], c(NA, NA), 
+           stock_data$'Marsh Creek'[vars], c(NA, NA), 
+           stock_data$'Middle Fork Salmon River above Indian Creek'[vars], c(NA, NA), 
+           stock_data$'Middle Fork Salmon River above Indian Creek'[vars], c(NA, NA), 
+           stock_data$'Sulphur Creek'[vars]))
+
+D_IMN <- as.matrix(rbind(stock_data$'Catherine Creek'[vars], c(NA, NA), 
+                     stock_data$'Grande Ronde Upper Mainstem'[vars], c(NA, NA), 
+                     stock_data$'Imnaha River'[vars], c(NA, NA), 
+                     stock_data$'Lostine Creek'[vars], c(NA, NA), 
+                     stock_data$'Minam River'[vars], c(NA, NA), 
+                     stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], c(NA, NA), 
+                     stock_data$'Wenaha River'[vars], c(NA, NA)))
+  
+D_UPS <- as.matrix(rbind(stock_data$'East Fork Salmon River'[vars], c(NA, NA), 
+                     stock_data$'Lemhi River'[vars], c(NA, NA), 
+                     stock_data$'North Fork Salmon River'[vars], c(NA, NA), 
+                     stock_data$'Pahsimeroi River'[vars], c(NA, NA), 
+                     stock_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], c(NA, NA), 
+                     stock_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], c(NA, NA), 
+                     stock_data$'Valley Creek'[vars], c(NA, NA), 
+                     stock_data$'Yankee Fork'[vars], c(NA, NA)))
+
+D_SFS <- as.matrix(rbind(stock_data$'East Fork South Fork'[vars], c(NA, NA), 
+                     stock_data$'Secesh River'[vars], c(NA, NA), 
+                     stock_data$'South Fork Salmon River Mainstem'[vars], c(NA, NA)))
+  
+D_ESU <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], c(NA, NA),  
+              stock_data$'Big Creek'[vars], c(NA, NA),  
+              stock_data$'Camas Creek'[vars], c(NA, NA),  
+              stock_data$'Catherine Creek'[vars], c(NA, NA),  
+              stock_data$'Chamberlain Creek'[vars], c(NA, NA),  
+              stock_data$'East Fork Salmon River'[vars], c(NA, NA),  
+              stock_data$'East Fork South Fork'[vars], c(NA, NA),  
+              stock_data$'Grande Ronde Upper Mainstem'[vars], c(NA, NA),  
+              stock_data$'Imnaha River'[vars], c(NA, NA),  
+              stock_data$'Lemhi River'[vars], c(NA, NA),  
+              stock_data$'Loon Creek'[vars], c(NA, NA),  
+              stock_data$'Lostine Creek'[vars], c(NA, NA),  
+              stock_data$'Marsh Creek'[vars], c(NA, NA),  
+              stock_data$'Middle Fork Salmon River above Indian Creek'[vars], c(NA, NA),  
+              stock_data$'Middle Fork Salmon River below Indian Creek'[vars], c(NA, NA),  
+              stock_data$'Minam River'[vars], c(NA, NA),  
+              stock_data$'North Fork Salmon River'[vars], c(NA, NA),  
+              stock_data$'Pahsimeroi River'[vars], c(NA, NA),  
+              stock_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], c(NA, NA),  
+              stock_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], c(NA, NA),  
+              stock_data$'Secesh River'[vars], c(NA, NA),  
+              stock_data$'South Fork Salmon River Mainstem'[vars], c(NA, NA),  
+              stock_data$'Sulphur Creek'[vars], c(NA, NA),  
+              stock_data$'Tucannon River'[vars], c(NA, NA),  
+              stock_data$'Valley Creek'[vars], c(NA, NA),  
+              stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], c(NA, NA),  
+              stock_data$'Wenaha River'[vars], c(NA, NA),  
+              stock_data$'Yankee Fork'[vars]))
+
+
+#Function to remove to extra NAs, but leave one NA between each stock's data in an MPG
+shape_stock_data <- function(data, min_stock_size = 20) {
+         CC <- complete.cases(data[,3]) 
+         lib <- matrix(NA, nrow = length(which(diff(CC)==1))+1, ncol = 2)
+         lib[,1] <- c(1, (which(diff(CC)==1)+1))
+         lib[,2] <- c((which(diff(CC)==-1)+1))
+         #only include in the library the sections of data that are continuous for at least 20 time points. 
+         minlib <- lib[,2]-lib[,1]
+         lib <- lib[minlib>min_stock_size,] 
+         x <- c(NA, NA, NA)
+             for (r in 1:nrow(lib)){
+                 xtmp <- data[lib[r,1]:lib[r,2],]
+                 x <- rbind(x,xtmp)}
+         data <- (x[2:(nrow(x)-1),])
+         data <- as.data.frame(data)
+         dataNA <- is.na(data[,3])
+         data[dataNA,1:2] <- NA
+         return(data)
+}
+
+D_MFS4 <- shape_stock_data(D_MFS[,1:3], 20)
+D_MFS5 <- shape_stock_data(D_MFS[,c(1,2,4)], 20)
+
+D_IMN4 <- shape_stock_data(D_IMN[,1:3], 20) 
+D_IMN5 <- shape_stock_data(D_IMN[,c(1,2,4)], 20)
+
+D_UPS4 <- shape_stock_data(D_UPS[,1:3], 20) 
+D_UPS5 <- shape_stock_data(D_UPS[,c(1,2,4)], 20) 
+
+D_SFS4 <- shape_stock_data(D_SFS[,1:3], 20) 
+D_SFS5 <- shape_stock_data(D_SFS[,c(1,2,4)], 20) 
+
+D_ESU4 <- shape_stock_data(D_ESU[,1:3], 20) 
+D_ESU5 <- shape_stock_data(D_ESU[,c(1,2,4)], 20)  
+```
+
+```{R}
+## Run diagnostics for each MPG separately and the whole ESU
+level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon", "South Fork Salmon")
+levelname <- c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon", "SouthForkSalmon") 
+
+for(l in (1:5)){  #loop through the ESU and the different MPGs
+  if(l==1){Dtemp4 <- D_ESU4; Dtemp5 <- D_ESU5}
+  if(l==2){Dtemp4 <- D_MFS4; Dtemp5 <- D_MFS5}
+  if(l==3){Dtemp4 <- D_IMN4; Dtemp5 <- D_IMN5}
+  if(l==4){Dtemp4 <- D_UPS4; Dtemp5 <- D_UPS5}
+  if(l==5){Dtemp4 <- D_SFS4; Dtemp5 <- D_SFS5}
+ 
+subplot_list = list(); sp <- 1
+for(tau in -1:-6){  #loop through the different values of tau
+  
+#---------------------------- lagged population plot ----------------------------
+
+NAmat <- matrix(NA, ncol = ncol(Dtemp4), nrow=-tau)
+colnames(NAmat) <- colnames(Dtemp4)
+Lagblock <- cbind(rbind(NAmat, Dtemp4), rbind(Dtemp4, NAmat))
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+ 
+pL4 <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     geom_point(shape=1)+
+     geom_hline(aes(yintercept=0), colour='#999999') +
+     theme_bw(base_size = 10) + # big text
+     theme(legend.position = "none") +
+     labs(title = paste("recspn4n, tau = ", tau, sep="")) 
+ 
+NAmat <- matrix(NA, ncol = ncol(Dtemp5), nrow=-tau)
+colnames(NAmat) <- colnames(Dtemp5)
+Lagblock <- cbind(rbind(NAmat, Dtemp5), rbind(Dtemp5, NAmat))
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+ 
+pL5 <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     geom_point(shape=1)+
+     geom_hline(aes(yintercept=0), colour='#999999') +
+     theme_bw(base_size = 10) + # big text
+     theme(legend.position = "none") +
+     labs(title = paste("recspn5n, tau = ", tau, sep="")) 
+
+#---------------------------- Embedding dimension, E ----------------------------
+
+
+#set optimal E for each MPG and the ESU levels
+maxE<-20 #Maximum E to test based on the square root of the number of samples
+
+Emat<-matrix(nrow=maxE-1, ncol=3); colnames(Emat)<-c("E", "rec4n rho", "rec5n rho") #Matrix for storing output
+#Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
+
+A4 <- as.numeric(Dtemp4$salm.recspn4n)
+A5 <- as.numeric(Dtemp5$salm.recspn5n)
+
+
+
+for(E in 2:maxE) {
+  #Uses defaults of looking forward one prediction step (predstep)
+  Emat[E-1,"E"] <- E
+  Emat[E-1,"rec4n"] <- SSR_pred_boot(A=A4, E=E, predstep=1, tau=-tau)$rho
+  Emat[E-1,"rec5n"] <- SSR_pred_boot(A=A5, E=E, predstep=1, tau=-tau)$rho
+}
+
+#choose smallest E that within 0.05 of the maximum rho, so as not to overfit the data
+E4 <- min(Emat[(Emat[,"rec4n"]==(max(Emat[,"rec4n"], na.rm=TRUE))),"E"], na.rm=TRUE)
+E5 <- min(Emat[(Emat[,"rec5n"]==(max(Emat[,"rec5n"], na.rm=TRUE))),"E"], na.rm=TRUE)
+
+
+Edf <- as.data.frame(Emat)
+Edf <- pivot_longer(Edf, cols=c(2:3))
+Edf$chosen <- 0
+Edf$chosen [(Edf$E==E4 & Edf$name=="rec4n") | (Edf$E==E5 & Edf$name=="rec5n")] <- 1
+
+#manual color codes for plot
+mcc <- cbind(c('#f58231', '#469990'), c("rec4n", "rec5n"), c("rec4n", "rec5n")); colnames(mcc) <- c("values", "breaks", "labels")
+pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
+     geom_line() +
+     geom_point(data=Edf[Edf$chosen==1,], aes(x=E, y=value, color=name), size=2, shape=1) +
+     scale_color_manual(values = mcc[,1], name="", breaks = mcc[,2], labels = mcc[,3]) +
+     labs(x = "E", y = expression(rho)) +
+     theme_bw()+
+     theme( legend.position = c(.01, .01),
+              legend.justification = c("left", "bottom"),
+              legend.box.just = "left",
+              legend.margin=margin(0,0,0,0),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 6),
+              legend.background = element_blank(),
+              legend.key.size = unit(0.3, "cm"))
+
+
+
+
+#---------------------------- Time to prediction, TP ----------------------------
+##Check data for nonlinear signal that is not dominated by noise
+#Checks whether predictive ability of processes declines with increasing time distance
+#Loop over the number of time steps into the future to make predictions from past observations. 
+#Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
+
+maxTP <- 50 #Maximum TP to test
+
+TPmat <- matrix(nrow=maxTP, ncol=3); colnames(TPmat)<-c("TP", "rec4n", "rec5n") #Matrix for storing output
+TPmat[,"TP"] <- c(1:maxTP) 
+TPmat[,"rec4n"]<-SSR_check_signal(A=as.matrix(A4), E=E4, tau=-tau, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPmat[,"rec5n"]<-SSR_check_signal(A=as.matrix(A5), E=E5, tau=-tau, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+
+
+TPdf <- as.data.frame(TPmat) 
+TPdf <- pivot_longer(TPdf, cols=c(2:3))
+pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
+     geom_line() +
+     scale_color_manual(values = mcc[,1], name="", breaks = mcc[,2], labels = mcc[,3]) +
+     labs(x = "time steps to prediction", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+
+
+
+
+subplot_list[[(1+((-tau-1)*4))]] = pL4
+subplot_list[[(2+((-tau-1)*4))]] = pL5
+subplot_list[[(3+((-tau-1)*4))]] = pE
+subplot_list[[(4+((-tau-1)*4))]] = pTP
+
+
+}  #tau loop
+
+
+
+
+ n <- length(subplot_list)
+ nCol <- 4 #floor(sqrt(n))
+ pDIAGNOSTICS <- do.call("grid.arrange", c(subplot_list, ncol=nCol, top=paste("lag plots for ", level[l], sep = "")))
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/",level[l],"_diagnostic_plots_recspn45.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
+
+}  #ESU and MPG levels loop
+ 
+```
+
+
+
+
+
+
+
+
+
+# The following is the older version of our diagnostics that uses the rEDM package that is not optimized for multispatial data. 
+```{R}
 test_nonlin <- function(ts, method = "ebisuzaki", num_surr = 200, 
                               T_period = 1, E = 3, ...)
 {
@@ -61,42 +667,7 @@ test_nonlin <- function(ts, method = "ebisuzaki", num_surr = 200,
             (num_surr + 1)))
 }
 
-
-load("Data/Rdata/stock_data_no_lags.Rdata")  
-     #concatenate the time series of each stock together
-data <- rbind(stock_data$'Bear Valley Creek', 
-              stock_data$'Big Creek', 
-              stock_data$'Camas Creek', 
-              stock_data$'Catherine Creek', 
-              stock_data$'Chamberlain Creek', 
-              stock_data$'East Fork Salmon River', 
-              stock_data$'East Fork South Fork', 
-              stock_data$'Grande Ronde Upper Mainstem', 
-              stock_data$'Imnaha River', 
-              stock_data$'Lemhi River', 
-              stock_data$'Loon Creek', 
-              stock_data$'Lostine Creek', 
-              stock_data$'Marsh Creek', 
-              stock_data$'Middle Fork Salmon River above Indian Creek', 
-              stock_data$'Middle Fork Salmon River below Indian Creek', 
-              stock_data$'Minam River', 
-              stock_data$'North Fork Salmon River', 
-              stock_data$'Pahsimeroi River', 
-              stock_data$'Salmon River Lower Mainstem below Redfish Lake', 
-              stock_data$'Salmon River Upper Mainstem above Redfish Lake', 
-              stock_data$'Secesh River', 
-              stock_data$'South Fork Salmon River Mainstem', 
-              stock_data$'Sulphur Creek', 
-              stock_data$'Tucannon River', 
-              stock_data$'Valley Creek', 
-              stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers', 
-              stock_data$'Wenaha River', 
-              stock_data$'Yankee Fork')
-
-     #list the library variables we are interested in
-         library_vars <- c("salm.rec4n", "salm.rec5n")   
-         
-     #set up output table for the best E, theta, tau and the corresponding EDM rho using simplex and smap methods, the change in rho with theta and its significance test against surrogate data
+      #set up output table for the best E, theta, tau and the corresponding EDM rho using simplex and smap methods, the change in rho with theta and its significance test against surrogate data
 
          # best E and theta based on optimizing rho
          best_E_theta_rho <- matrix(NA, nrow = length(library_vars), ncol = 7) 
@@ -107,16 +678,7 @@ data <- rbind(stock_data$'Bear Valley Creek',
          best_E_theta_mae <- matrix(NA, nrow = length(library_vars), ncol = 7) 
          colnames(best_E_theta_mae) <- c("library", "E", "theta", "simplex_rho", "smap_rho", "delta_mae", "delta_mae_p")
          best_E_theta_mae[,1] <- t(library_vars)
-
-## Run for each MPG separately and the whole ESU
-level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
-levelname <- c("ESU", "MiddleForkSalmon", "Imnaha", "UpperSalmon") 
-for(l in (1:4)){  #loop through the ESU and the different MPGs
-  if(l==1){Dtemp <- data}
-  if(l==2){Dtemp <- data[data$mpg==level[l],]}
-  if(l==3){Dtemp <- data[data$mpg==level[l],]}
-  if(l==4){Dtemp <- data[data$mpg==level[l],]}  
-          
+ 
 #plot the result to evaluate E, Tp, and       
 layout(matrix(c(1,2,3,4,5,6), 3, 2, byrow = TRUE))
 

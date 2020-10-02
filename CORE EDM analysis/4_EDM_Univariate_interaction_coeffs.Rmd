@@ -228,15 +228,15 @@ library(rlang)
 rm(list=ls())  
 
 ##Change the following for rec4 ans rec5 analyses
-#IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_rec4.RDS") 
-#CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec4.RDS")
-#tarvar = "4 yr old recruits"
-#tarvarshort = "rec4"
+IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_rec4.RDS") 
+CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec4.RDS")
+tarvar = "4 yr old recruits"
+tarvarshort = "rec4"
 
-IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_rec5.RDS") 
-CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec5.RDS")
-tarvar = "5 yr old recruits"
-tarvarshort = "rec5"
+#IC <- readRDS("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_rec5.RDS") 
+#CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_optimal_base_ESU_rec5.RDS")
+#tarvar = "5 yr old recruits"
+#tarvarshort = "rec5"
 
 ccm <- cbind(CCM$var, as.numeric(CCM$ccm_rho), as.numeric(CCM$`95p_crit_rho`), as.numeric(CCM$FisherZ))
 colnames(ccm) <- c("var", "ccm_rho","crit_ccm_rho","p_ccm_rho")
@@ -339,23 +339,23 @@ rm(list=ls())
 #*******change plot labels below, too********
 
 #For rec5, choose the following
-#tarvar = "5 yr old recruits"
-#tarvarshort = "rec5"
-#IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
-#IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
-#IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
-#IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+tarvar = "5 yr old recruits"
+tarvarshort = "rec5"
+IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 3s, 4|5s from same return year/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
 
 
 
 
 #For rec4, choose the following
-tarvar = "4 yr old recruits"
-tarvarshort = "rec4"
-IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
-IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
-IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
-IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
+#tarvar = "4 yr old recruits"
+#tarvarshort = "rec4"
+#IC_ESU <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_ESU_", tarvarshort, ".RDS", sep="")) 
+#IC_MFS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_MiddleForkSalmon_", tarvarshort, ".RDS", sep="")) 
+#IC_IMN <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_Imnaha_", tarvarshort, ".RDS", sep="")) 
+#IC_UPS <- readRDS(paste("Output/Rdata/4_IC/base embed with effn, 4|5s from same cohort/Interaction_coeffs_UpperSalmon_", tarvarshort, ".RDS", sep="")) 
 
 
 
