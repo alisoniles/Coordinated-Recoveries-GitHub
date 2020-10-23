@@ -22,25 +22,21 @@ library(gridExtra)
 # This code runs several optimizations of parameters for nonlinear time series analysis
 
 #1: Evaluate the optimal tau
-The time-delay of the embedding, tau, is introduced to improve the observability of a time series (Judd and Mees 1998). The time lag is chosen to optimize the spread of the embedded time series without confusing the dynamics. 
-
-The criteria for estimating a proper time lag is based on the following reasoning: if the time lag used to build the Takens' vectors is too small, the coordinates will be too highly temporally correlated and the embedding will tend to cluster around the diagonal in the phase space. If the time lag is chosen too large, the resulting coordinates may be almost uncorrelated and the resulting embedding will be very complicated. 
+The time-delay of the embedding, tau, is introduced to improve the observability of a time series (Judd and Mees 1998). The time lag is chosen to optimize the spread of the embedded time series without confusing the dynamics. The criteria for estimating a proper time lag is based on the following reasoning: if the time lag used to build the Takens' vectors is too small, the coordinates will be too highly temporally correlated and the embedding will tend to cluster around the diagonal in the phase space. If the time lag is chosen too large, the resulting coordinates may be almost uncorrelated and the resulting embedding will be very complicated. 
 
 There are two principle methods for choosing the lags, the first zero of the autocorrelation function and the first local minimum of the time-delayed mutual information. However, it must be noted that the autocorrelation is a linear statistic, and thus it does not take into account nonlinear dynamical correlations. To take into account nonlinear correlations the average mutual information (AMI) is the most appropriate. 
 
-For all stocks, the optimal tau was <= 5. Run the rest of the diagnostic plots for tau=1:5. Many stocks had missing data points, which the mutual information calculation cannot handle properly. To get better estimates of Tau for each stock, consider running on the largest continuous time chunks or doing two separate evaluations for a stock with a missing year in the middle of the time series. 
+Issues: the mutual information calculation cannot handle missing data points and multispatial data. It just treats the joined together stocks as one large data set. I will look for another algorithm that handels this better. For now, I'm calculating the 'optimal' tau (printed in the title of each subplot), but still considering all tau from 1 to 6 in the diagnostic plots for the embedding dimension and the test for non-linearity
 
 #Find the optimal embedding dimension
 The embedding dimension, E, is an estimate of the number of dimensions, or 'active variables', of the attractor underlying a time series. In practice, it is simply the OPTIMAL number of dimensions with which to unfold the attractor that maximizes the forecast skill (rho) of the embedding. Additional data may reveal additional dimensionality that was otherwise obscurred by process or observational noise.
 
-The maximum E that can be tested depends on the length of the data as max E < sqrt(n). 
-For each stock, we evaluated a range of embedding dimensions (E from 1:7) using simplex projection and predicting 1:12 years into the future. We also varied tau. Forecast skill (rho) between predicted and observed values determines the optimal model parameters.
-
+Forecast skill (rho) between predicted and observed values determines the optimal model parameters.  The maximum E that can be tested depends on the length of the data as max E < sqrt(n).  We evaluated the optimal E for each tau from 1:6
 
 #Test for nonlinearity in the SRKW time series 
 Nonlinear state dependence dynamics frequently occur nature. Such nonlinearaties arise when variables have interdependent effects. For example, the strength of predation of orcas on chinook may depend on the relative abundance of pink salmon. Consequently, applying models that assume independent effects of causal variables can give the appearance of stochasticity and unpredictability, even when the underlying mechanics are deterministic. 
 
-Thus, nonlinearity complicates the identification of causal drivers. Here we test whether the salmon population data exhibits non-linearity. We test for nonlinearity using S-maps by comparing improvements in forecast skill (delta rho and delta mae) between linear and nonlinear models. Finally we test for the significance of the nonlinearity with a null distribution from surrogate data.
+Thus, nonlinearity complicates the identification of causal drivers. Here we test whether the salmon population data exhibits non-linearity. Because the data is mulispatial, we use the SSR_pred_boot function to evaluate how forecast skill changes with the time to prediction. 
 
 ```{R}
 # Final diagnostic analyses for rec4n, rec5n, recspn4n, and recspn5n for each MPG and ESU
@@ -62,7 +58,7 @@ D_ESU <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], NA,
               stock_data$'Imnaha River'[vars], NA,  
               stock_data$'Lemhi River'[vars], NA,  
               stock_data$'Loon Creek'[vars], NA,  
-              stock_data$'Lostine Creek'[vars], NA,  
+              stock_data$'Lostine River'[vars], NA,  
               stock_data$'Marsh Creek'[vars], NA,  
               stock_data$'Middle Fork Salmon River above Indian Creek'[vars], NA,  
               stock_data$'Middle Fork Salmon River below Indian Creek'[vars], NA,  
@@ -93,7 +89,7 @@ D_MFS <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], NA,
 D_IMN <- as.matrix(rbind(stock_data$'Catherine Creek'[vars], NA, 
                      stock_data$'Grande Ronde Upper Mainstem'[vars], NA, 
                      stock_data$'Imnaha River'[vars], NA, 
-                     stock_data$'Lostine Creek'[vars], NA, 
+                     stock_data$'Lostine River'[vars], NA, 
                      stock_data$'Minam River'[vars], NA, 
                      stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
                      stock_data$'Wenaha River'[vars], NA))
@@ -156,12 +152,12 @@ D_UPS_rs5n <- shape_stock_data(D_UPS[,c(1,2,6)], 10)
 
 ## Run diagnostics for each MPG separately and the whole ESU
 level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
-variables <- c("salm.rec4n", "salm.rec5n", "salm.recspn4n", "salm.recspn5n")
+variables <- c("salm.rec4n.0", "salm.rec5n.0", "salm.recspn4n.0", "salm.recspn5n.0")
 results <- matrix(nrow=16, ncol=4); colnames(results)<-c("level", "variable", "tau", "E") #Matrix for storing output
 results[,2] <- variables
 
-l <- 1; v <- 1
-for(l in (1:4)){  #loop through each analysis level the ESU and the different MPGs
+l <- 2; v <- 2
+for(l in (2:4)){  #loop through each analysis level the ESU and the different MPGs
 
   subplot_list = list(); 
   for(v in 1:4){ #loop through the four different variables
@@ -195,7 +191,8 @@ minAMI <- min(which(diff(AMI)>=0))-1
 
   AMI <- as.data.frame(as.numeric(AMI)); 
   AMI <- cbind( c(0:(nrow(AMI)-1)), AMI); colnames(AMI) <- c("lag", "AMI")
-  tau <- AMI[AMI[,2]==min(AMI[1:5,2]),1] #choose the tau <=4 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
+  tau <- minAMI #choose the tau with the first local minimum AMI
+  #tau <- AMI[AMI[,2]==min(AMI[1:5,2]),1] #choose the tau <=4 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
     results[((l-1)*4 + v),3] <- tau
   
   pAMI <- ggplot(AMI, aes(x=lag, y=AMI)) +
@@ -238,36 +235,52 @@ subplot_list[[((v-1)*4 + 2)]] = pLag
 
 #---------------------------- Embedding dimension, E ----------------------------
 
-#set optimal E for each MPG and the ESU levels
-maxE<-20 #Maximum E to test based on the square root of the number of samples, also depends on tau
+A <- as.numeric(D[,3])
 
-Emat<-matrix(nrow=maxE-1, ncol=4); colnames(Emat)<-c("E", "Tau2", "Tau3", "Tau4") #Matrix for storing output
+#set optimal E for each MPG and the ESU levels
+maxE<-min(floor(sqrt(sum(complete.cases(A)))),15) #Maximum E to test based on the square root of the number of samples, also depends on tau
+
+Emat<-matrix(nrow=maxE-1, ncol=8); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5", "Tau6", "Tau7") #Matrix for storing output
 #Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
 
-A <- as.numeric(D[,3])
 
 for(E in 2:maxE) {
   #Uses defaults of looking forward one prediction step (predstep)
   Emat[E-1,"E"] <- E
+  Emat[E-1,"Tau1"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=1)$rho
   Emat[E-1,"Tau2"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=2)$rho
   Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
   Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
+  Emat[E-1,"Tau5"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=5)$rho
+  Emat[E-1,"Tau6"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=6)$rho
+  Emat[E-1,"Tau7"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=7)$rho
 }
 
 
 #We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
 #n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+maxrho=max(Emat[,"Tau1"], na.rm=TRUE)
+    E1 <- min(Emat[(Emat[,"Tau1"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 maxrho=max(Emat[,"Tau2"], na.rm=TRUE)
     E2 <- min(Emat[(Emat[,"Tau2"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 maxrho=max(Emat[,"Tau3"], na.rm=TRUE)
     E3 <- min(Emat[(Emat[,"Tau3"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 maxrho=max(Emat[,"Tau4"], na.rm=TRUE)
     E4 <- min(Emat[(Emat[,"Tau4"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau5"], na.rm=TRUE)
+    E5 <- min(Emat[(Emat[,"Tau5"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau6"], na.rm=TRUE)
+    E6 <- min(Emat[(Emat[,"Tau6"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau7"], na.rm=TRUE)
+    E7 <- min(Emat[(Emat[,"Tau7"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 
+maxrho=max(Emat[,tau+1], na.rm=TRUE)    
+results[((l-1)*4 + v),4] <- min(Emat[(Emat[,(tau+1)]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+            
 Edf <- as.data.frame(Emat)
-Edf <- pivot_longer(Edf, cols=c(2:4))
+Edf <- pivot_longer(Edf, cols=c(2:8))
 Edf$chosen <- 0
-Edf$chosen [(Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4")] <- 1
+Edf$chosen [(Edf$E==E1 & Edf$name=="Tau1") | (Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4") | (Edf$E==E5 & Edf$name=="Tau5") | (Edf$E==E6 & Edf$name=="Tau6") | (Edf$E==E7 & Edf$name=="Tau7")] <- 1
 
 #manual color codes for plot
 pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
@@ -277,7 +290,10 @@ pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
      theme_bw() +
      theme(legend.position = "none")
 
-subplot_list[[((v-1)*4 + 3)]] = pE
+subplot_list[[((v-1)*4 + 3)]] = pE 
+
+
+
 
 
 #---------------------------- Time to prediction, TP ----------------------------
@@ -286,16 +302,20 @@ subplot_list[[((v-1)*4 + 3)]] = pE
 #Loop over the number of time steps into the future to make predictions from past observations. 
 #Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
 
-maxTP <- 20 #Maximum TP to test
+maxTP <- 50 #Maximum TP to test
 
-TPdf <- matrix(nrow=maxTP, ncol=4); colnames(TPdf)<-c("TP", "Tau2", "Tau3", "Tau4") #Matrix for storing output
+TPdf <- matrix(nrow=maxTP, ncol=8); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5", "Tau6", "Tau7") #Matrix for storing output
 TPdf[,"TP"] <- c(1:maxTP) 
+TPdf[,"Tau1"]<-SSR_check_signal(A=as.matrix(A), E=E1, tau=1, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau2"]<-SSR_check_signal(A=as.matrix(A), E=E2, tau=2, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau3"]<-SSR_check_signal(A=as.matrix(A), E=E3, tau=3, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau4"]<-SSR_check_signal(A=as.matrix(A), E=E4, tau=4, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau5"]<-SSR_check_signal(A=as.matrix(A), E=E5, tau=5, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau6"]<-SSR_check_signal(A=as.matrix(A), E=E6, tau=6, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau7"]<-SSR_check_signal(A=as.matrix(A), E=E7, tau=7, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 
 TPdf <- as.data.frame(TPdf) 
-TPdf <- pivot_longer(TPdf, cols=c(2:4))
+TPdf <- pivot_longer(TPdf, cols=c(2:8))
 pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
      geom_line() +
      labs(x = "time steps to prediction", y = expression(rho)) +
@@ -320,7 +340,9 @@ subplot_list[[((v-1)*4 + 4)]] = pTP
 ggsave(filename = paste("Output/Figures/2_Nonlinearity/",level[l],"_diagnostics.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
 
 } 
- 
+
+saveRDS(results, file = "Output/Rdata/2_Nonlinearity/Diagnostic_results.RDS")
+
 ```
 
 

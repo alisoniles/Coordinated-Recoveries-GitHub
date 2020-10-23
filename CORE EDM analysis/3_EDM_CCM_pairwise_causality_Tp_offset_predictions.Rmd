@@ -1,5 +1,5 @@
 ---
-title: "2_CCM_pairwise_causality"
+title: "3_CCM_pairwise_causality"
 author: "Alison Iles"
 date: "7/2/2020"
 output: html_document
@@ -26,7 +26,7 @@ library(stringr)
 ```
 
 #Convergent Cross Mapping (CCM) with time delays
-To test whether pairwise causality exists between the environmental variables and the SRKW population data. Also to test all the lags for each environmental variable for biological interpretation and to determing the direction of causality. 
+To test whether pairwise causality exists.. Also to test all the lags for each environmental variable for biological interpretation and to determing the direction of causality. 
 
 ```{R}
 

@@ -113,6 +113,15 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
               stock_df[, df.colnames] <- df
               }
         
+        temp <- normalize_by_cycle_line(stock_df$recspn) #normalized total recruits per spawner
+            stock_df$salm.recspnn.0 <- temp$ts 
+        temp <- normalize_by_cycle_line(stock_df$recspn3) #normalized 3 year old recruits per spawner
+            stock_df$salm.recspn3n.0 <- temp$ts  
+        temp <- normalize_by_cycle_line(stock_df$recspn4) #normalized 4 year old recruits per spawner
+            stock_df$salm.recspn4n.0 <- temp$ts 
+        temp <- normalize_by_cycle_line(stock_df$recspn5) #normalized 5 year old recruits per spawner
+            stock_df$salm.recspn5n.0 <- temp$ts 
+        
         temp <- normalize_by_cycle_line(stock_df$rec)
         stock_df$salm.recn.0 <- temp$ts #normalized total recruits
         #stock_df$rec_mu <- temp$mu
@@ -141,7 +150,7 @@ stock_data <- lapply(stock_data, preprocess_stock)
 #load large scale (ESU scale) environmental and species data and mid scale (MPG scale) river flow data
 
 ```{R}
-env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+env_data <- read.csv("Data/csv_data/SRSS_env_seasonal.csv") #for monthly abiotic variables use 'SRSS_env_monthly.csv'
 esu_data <- read.csv("Data/csv_data/CORE_2020_data_ESU.csv") #read.csv("Data/csv_data/CORE_2020_data_ESU_NAforZeros.csv")
 mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
 
@@ -349,26 +358,6 @@ normalize <- function(block)
         return((block - mean(block, na.rm = TRUE)) / sd(block, na.rm = TRUE))
 }
 
-#  mydetrend <- function(block)
-# {
-#   if(NCOL(block)==1)
-#   {
-#          index <- complete.cases(block)
-#          x <- as.matrix(block[index])
-#          dx <- detrend(x)
-#          block[index] <- dx
-#   }
-#   else
-#   for(i in 1:NCOL(block))
-#     {
-#          index <- complete.cases(block[,i])
-#          x <- as.matrix(block[index,i])
-#          dx <- detrend(x)
-#          block[index,i] <- dx
-#     }
-#      return(block)
-# }
-
     preprocess_stock <- function(stock_df)
     {
         n <- NROW(stock_df)  #n is the number of observations for the stock
@@ -397,7 +386,7 @@ stock_data <- split(data, data$stk)
 stock_data <- lapply(stock_data, preprocess_stock) 
 save(stock_data, file = "Data/Rdata/stock_data_no_lags.Rdata")
 
-env_data <- read.csv("Data/csv_data/SRSS_env_prelim.csv")
+env_data <- read.csv("Data/csv_data/SRSS_env_seasonal.csv")
 esu_data <- read.csv("Data/csv_data/CORE_2020_data_ESU.csv")
 mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
 
@@ -418,14 +407,12 @@ make_block <- function(stock_df, env_data, esu)
         df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
         df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
         df <- normalize(df)
-        #df <- mydetrend(df)
         df.colnames <- env_names
         stock_df[, df.colnames] <- df
         
         # line up species data at ESU level     
         esu_names <- names(esu_data)[2:length(names(esu_data))]  
         esu_data[, 2:NCOL(esu_data)] <- normalize(esu_data[, 2:NCOL(esu_data)])
-        #esu_data[, 2:NCOL(esu_data)] <- mydetrend(esu_data[, 2:NCOL(esu_data)])
 
         desired_years <- stock_df$year
         index_in_esu_data <- match(desired_years, esu_data$year)
@@ -442,7 +429,6 @@ make_block <- function(stock_df, env_data, esu)
         mpg_tempdata$mpg <- NULL
         mpgdata_names <- c("flow.mean", "flow.peak", "flow.gageht", "flow.peakday")
         mpg_tempdata[, 2:NCOL(mpg_tempdata)] <- normalize(mpg_tempdata[, mpgdata_names]) 
-        #mpg_tempdata[, 2:NCOL(mpg_tempdata)] <- mydetrend(mpg_tempdata[, mpgdata_names]) 
 
         desired_years <- stock_df$year
         index_in_mpg_data <- match(desired_years, mpg_tempdata$year)

@@ -60,7 +60,7 @@ data_ESU <- rbind(block_data$'Bear Valley Creek',
               block_data$'Imnaha River', 
               block_data$'Lemhi River', 
               block_data$'Loon Creek', 
-              block_data$'Lostine Creek', 
+              block_data$'Lostine River', 
               block_data$'Marsh Creek', 
               block_data$'Middle Fork Salmon River above Indian Creek', 
               block_data$'Middle Fork Salmon River below Indian Creek', 
@@ -115,17 +115,7 @@ for(l in (1:4)){  #loop through the ESU and the different MPGs
   E <- 5 #From the nonlinearity analysis, 5 is a generally good E for rec5 across the MPGs, 4 is the best for rec4 but 5 isn't bad either. I'm going to go with 5 for both to make the embeddings the same and comparable
   theta <- 1.5
     
-  #smap for just base embedding to evaluate the improvement in rho from adding the putative causal variable
-  basesmap <- block_lnlp(d, lib = lib, pred = lib, 
-                        method='s-map',
-                        tp=1,
-                        num_neighbors = 0,
-                        target_column = 1,
-                        stats_only = FALSE,
-                        first_column_time = TRUE,
-                        exclusion_radius = 0,
-                        theta = theta,
-                        save_smap_coefficients = FALSE)   
+ 
   
   IC <- data.frame() #make data frame to store interaction coefficients
 
