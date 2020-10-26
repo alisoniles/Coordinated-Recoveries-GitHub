@@ -30,7 +30,7 @@ rm(list=ls())
 load("Data/Rdata/stock_data_no_lags.Rdata")  
 
 #choose the library variable to analyze
-tarvar <- "salm.rec4n"
+tarvar <- "salm.recspn4n"
 vars <- c("year", "stk", tarvar) 
 D_ESU <- rbind(stock_data$'Bear Valley Creek'[vars],  #1, MFS
               stock_data$'Big Creek'[vars],   #2, MFS

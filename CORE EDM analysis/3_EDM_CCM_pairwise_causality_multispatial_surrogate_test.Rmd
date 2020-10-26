@@ -207,31 +207,28 @@ D_UPS <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA,
 #shape causal variable list, output data frame and input data frames for the CCM functions
 
 #Choose the focal variable to run the analysis for
-for(a in (1:2)){
-  An_list <-  c("salm.recspn4n.0", "salm.recspn5n.0")
+for(a in (1)){
+  An_list <-  c("salm.recspn4n.0") #"salm.recspn4n.0", 
   An <- An_list[a]
-  An_short_list <- c("recspn4", "recspn5")
+  An_short_list <- c("recspn4") #, "recspn5")
   An_short <- An_short_list[a]
 
 for(l in (1:4)){
-  level_list <- c("MFS", "UPS", "IMN", "ESU")
+  level_list <- c("MFS", "UPS", "IMN")
   level <- level_list[l]
 
 #Clusters identified in '2_Clustering_Chinook_stocks.Rmd'
 #For recspn5n:
 if(An_short=="recspn5"){
-MFS_1 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,  
-                         block_data$'Loon Creek'[vars], NA,  
-                     block_data$'Camas Creek'[vars], NA))
-
-MFS_2 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
+MFS_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
            block_data$'Big Creek'[vars], NA, 
            block_data$'Marsh Creek'[vars]))
 
-UPS_1 <- as.matrix(rbind(block_data$block_data$'East Fork Salmon River'[vars], NA, 
-                     block_data$'Valley Creek'[vars], NA))
+MFS_2 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,  
+                         block_data$'Loon Creek'[vars], NA,  
+                     block_data$'Camas Creek'[vars], NA))
 
-UPS_2 <- as.matrix(rbind(block_data$block_data$'Lemhi River'[vars], NA, 
+UPS_1 <- as.matrix(rbind(block_data$block_data$'Lemhi River'[vars], NA, 
                      block_data$'Yankee Fork'[vars], NA, 
                      block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,
                      block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
@@ -240,8 +237,7 @@ IMN_1 <- as.matrix(rbind(block_data$'Grande Ronde Upper Mainstem'[vars], NA,
                      block_data$'Imnaha River'[vars], NA, 
                      block_data$'Minam River'[vars], NA))
 
-IMN_2 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
-                         block_data$'Lostine River'[vars], NA, 
+IMN_2 <- as.matrix(rbind(block_data$'Lostine River'[vars], NA, 
                      block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
                      block_data$'Wenaha River'[vars], NA))
 
@@ -266,16 +262,12 @@ names(DataClusters) <- DataClusterNames}
 #For recspn4n:
 if(An_short=="recspn4"){
 MFS_1 <- as.matrix(rbind(block_data$'Marsh Creek'[vars], NA,  
-                     block_data$'Loon Creek'[vars], NA))
+                     block_data$'Loon Creek'[vars], NA,
+                      block_data$'Bear Valley Creek'[vars], NA, 
+                     block_data$'Big Creek'[vars], NA, 
+                     block_data$'Camas Creek'[vars]))
 
-MFS_2 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
-           block_data$'Big Creek'[vars], NA, 
-           block_data$'Camas Creek'[vars]))
-
-UPS_1 <- as.matrix(rbind(block_data$block_data$'Valley Creek'[vars], NA, 
-                     block_data$'Lemhi River'[vars], NA))
-
-UPS_2 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
+UPS_1 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
                      block_data$'Yankee Fork'[vars], NA, 
                      block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
                      block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
@@ -291,12 +283,12 @@ if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS)
 DataClusterNames <- c("ESU", "MFS", "IMN", "UPS")
 names(DataClusters) <- DataClusterNames}
 
-if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
-DataClusterNames <- c("MFS", "MFS_1", "MFS_2")
+if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1)
+DataClusterNames <- c("MFS", "MFS_1")
 names(DataClusters) <- DataClusterNames}
 
-if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1, UPS_2)
-DataClusterNames <- c("UPS", "UPS_1", "UPS_2")
+if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1)
+DataClusterNames <- c("UPS", "UPS_1")
 names(DataClusters) <- DataClusterNames}
 
 if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1)
@@ -307,7 +299,7 @@ names(DataClusters) <- DataClusterNames}
 CCM_summary <- matrix(data=NA, nrow=1, ncol=17); colnames(CCM_summary) <- c("Lobs", "rho", "sdevrho", "lower", "upper", "model", "response_var", "causal_var", "pval", "E", "tau", "slope", "Lib", "level", "cat", "subcat", "offset")      
 
 unique_cat <- unique(var_list$cat) #for each unique putative causal variable category
-
+c <- 2; s <- 2; i <- 1; dc <- 2
 #Loop through all the lags of each putative causal variable and test for causality for the four main time series
 for (c in 1:length(unique_cat)){
     cat_name <- unique_cat[c]    
@@ -365,7 +357,7 @@ toc()
 }
 
 
-save(CCM_summary, file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level, "_and_smaller_clusters", An_short, ".Rdata", sep=""))
+save(CCM_summary, file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level, "_and_smaller_clusters_", An_short, ".Rdata", sep=""))
 
 }#level loop
 }#An loop
@@ -374,10 +366,10 @@ save(CCM_summary, file = paste("Output/Rdata/3_CCM/3_multispatial_results_", lev
 #figures 
 ```{R}
 rm(list=ls()) 
-level="UPS"
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clustersrecspn4.Rdata", sep=""))
+level="IMN"
+load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
 CCM_4 <- CCM_summary[-1,]
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clustersrecspn5.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
 CCM_5 <- CCM_summary[-1,]
 CCM_summary <- rbind(CCM_4, CCM_5)
 CCM_summary$rec <- NA
@@ -395,11 +387,12 @@ hatch_CCM$vargroup <- "hatchery releases"
 
 biotic_CCM <- CCM_summary[CCM_summary$cat=="orca" | CCM_summary$cat=="csl" | CCM_summary$cat=="ssl" | CCM_summary$cat=="hseal",]
 biotic_CCM <- biotic_CCM[c(which(biotic_CCM$rec==biotic_CCM$offset)),]
-biotic_CCM$vargroup <- "predators"
+biotic_CCM$vargroup <- "predation return year"
 
 abiotic_CCM <- CCM_summary[CCM_summary$cat=="pdo" | CCM_summary$cat=="npgo" | CCM_summary$cat=="upw" | CCM_summary$cat=="arc",]
 abiotic_return_year_CCM <- abiotic_CCM[c(which(abiotic_CCM$rec==abiotic_CCM$offset)),]
 abiotic_return_year_CCM$vargroup <- "return year"
+
 abiotic_first_ocean_year_CCM <- abiotic_CCM[abiotic_CCM$offset==2,]
 abiotic_first_ocean_year_CCM$vargroup <- "first ocean year"
 
@@ -417,13 +410,14 @@ unique_cat <- unique(CCM$cat) #for each unique putative causal variable category
 for(i in 1:length(unique_cat)){
 cat <- unique_cat[i]
 Dp <- CCM[CCM$cat==cat,]     
-Dp <- Dp[Dp$pval<=0.2,]
+Dp <- Dp[Dp$pval<=0.8,]
 
 p1 <- ggplot(Dp) + 
     geom_point(aes(x=pval, y=rho, color=subcat, shape=tau)) +
     #geom_errorbar(aes(x=pval, y=rho, color=subcat, ymin=lower, ymax=upper), width=0.01) +
-    scale_x_continuous(name=expression(paste("p-value terminal ", {rho}, " > starting ", {rho})), limits=c(0, 0.2), breaks=seq(0,0.2,0.1), labels=c("0", "0.1", "0.2")) +
+    scale_x_continuous(name=expression(paste("p-value terminal ", {rho}, " > starting ", {rho})), limits=c(0, 0.4), breaks=seq(0,0.4,0.1), labels=c("0", "0.1", "0.2", "0.3", "0.4")) +
     scale_y_continuous(name=expression(paste("Terminal cross-mapping correlation, ", {rho})), limits=c(-0.2, 0.8), breaks=seq(-0.2,0.8,0.2)) +
+    geom_vline(aes(xintercept=0.05), colour='#999999') +
     theme_bw() + 
     guides(col = guide_legend(ncol=1)) +
     labs(title= paste("CCM - ", cat,  Dp$vargroup[1])) + 

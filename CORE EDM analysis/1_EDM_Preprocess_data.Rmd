@@ -7,12 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-#load the necessary packages. 
-Note that the `echo = FALSE` parameter prevents printing of the R code.
-
-```{r, echo=FALSE}
 library(rEDM)
 library(reshape2)
 library(ggplot2)
@@ -22,6 +17,7 @@ library(rlist)
 library(tidyr)
 library(tidyr)
 library(pracma) #detrending function
+library(zoo) #na.approx function
 ```
 
 #load Chinook stock data and harvest data
@@ -47,7 +43,7 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
     sigma <- rep.int(NA, times = n)
     for(k in 1:1) #for each cycle line (every 4 years the population cycles in sockeye, I've changed it to 1 because there are no cycle lines for chinook)
     {
-        index <- seq(from = k, to = n, by = 1) #changed by=4 to b=1.
+        index <- seq(from = k, to = n, by = 1) #changed by=4 to by=1.
         means[k] <- mean(ts[index], na.rm = TRUE) #mean of every 4th element of the time series
         sds[k] <- sd(ts[index], na.rm = TRUE) #standard dev.
         mu[index] <- means[k]
@@ -145,6 +141,71 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
 stock_data <- split(data, data$stk)    
 stock_data <- lapply(stock_data, preprocess_stock) 
 
+
+
+#stock_df <- subset(stock_data[["Camas Creek"]]) 
+#Stock data with interpolated missing values
+interpolate_stock <- function(stock_df){
+        Dn <- stock_df$stk[1]
+        D <- stock_df$salm.rec4n.0 #normalized 4 year old recruits per spawner
+              #remove early years for as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ){D[1:5] <- NA}
+
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 58
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek"| Dn == "Sulphur Creek" | Dn == "Valley Creek" | Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:66] <- na.approx(D[1:66])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:66] <- na.approx(D[1:66])}
+              
+        stock_df$salm.rec4n.0 <- D      
+        
+        D <- stock_df$salm.rec5n.0 #normalized 5 year old recruits per spawner
+              #remove early years for Wenaha as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ) {D[1:5] <- NA}
+              
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 57
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek" | Dn == "Sulphur Creek" | Dn == "Valley Creek"| Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:65] <- na.approx(D[1:65])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:65] <- na.approx(D[1:65])}
+              
+        stock_df$salm.rec5n.0 <- D 
+        
+        D <- stock_df$salm.recspn4n.0 #normalized 4 year old recruits per spawner
+              #remove early years for as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ){D[1:5] <- NA}
+
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 58
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek"| Dn == "Sulphur Creek" | Dn == "Valley Creek" | Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:66] <- na.approx(D[1:66])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:66] <- na.approx(D[1:66])}
+              
+        stock_df$salm.recspn4n.0 <- D      
+        
+        D <- stock_df$salm.recspn5n.0 #normalized 5 year old recruits per spawner
+              #remove early years for Wenaha as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ) {D[1:5] <- NA}
+              
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 57
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek" | Dn == "Sulphur Creek" | Dn == "Valley Creek"| Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:65] <- na.approx(D[1:65])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:65] <- na.approx(D[1:65])}
+              
+        stock_df$salm.recspn5n.0 <- D 
+        return(stock_df)
+    }   
+
+interp_stock_data <- lapply(stock_data, interpolate_stock) 
 ```
 
 #load large scale (ESU scale) environmental and species data and mid scale (MPG scale) river flow data
@@ -325,7 +386,7 @@ make_block <- function(stock_df, env_data, esu_data)
 
 
 
-block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data, esu_data)})
+block_data <- lapply(interp_stock_data, function(stock_df) {make_block(stock_df, env_data, esu_data)})
 
 
     
@@ -384,6 +445,74 @@ stock_data <- split(data, data$stk)
 #stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
 
 stock_data <- lapply(stock_data, preprocess_stock) 
+
+
+#stock_df <- subset(stock_data[["Camas Creek"]]) 
+#Stock data with interpolated missing values
+interpolate_stock <- function(stock_df){
+        Dn <- stock_df$stk[1]
+        D <- stock_df$salm.rec4n #normalized 4 year old recruits per spawner
+              #remove early years for as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ){D[1:5] <- NA}
+
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 58
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek"| Dn == "Sulphur Creek" | Dn == "Valley Creek" | Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:66] <- na.approx(D[1:66])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:66] <- na.approx(D[1:66])}
+              
+        stock_df$salm.rec4n <- D      
+        
+        D <- stock_df$salm.rec5n #normalized 5 year old recruits per spawner
+              #remove early years for Wenaha as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ) {D[1:5] <- NA}
+              
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 57
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek" | Dn == "Sulphur Creek" | Dn == "Valley Creek"| Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:65] <- na.approx(D[1:65])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:65] <- na.approx(D[1:65])}
+              
+        stock_df$salm.rec5n <- D 
+        
+        D <- stock_df$salm.recspn4n #normalized 4 year old recruits per spawner
+              #remove early years for as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ){D[1:5] <- NA}
+
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 58
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek"| Dn == "Sulphur Creek" | Dn == "Valley Creek" | Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:66] <- na.approx(D[1:66])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:66] <- na.approx(D[1:66])}
+              
+        stock_df$salm.recspn4n <- D      
+        
+        D <- stock_df$salm.recspn5n #normalized 5 year old recruits per spawner
+              #remove early years for Wenaha as there is a large gap soon after the early years.
+              if(Dn == "Grande Ronde Upper Mainstem" ){D[1:6] <- NA}
+              if(Dn == "Wenaha River" ) {D[1:5] <- NA}
+              
+              #interpolate missing years for those stocks missing years in middle of their range
+              rangeend <- 57
+              if(Dn == "Camas Creek" | Dn == "Loon Creek" | Dn == "Marsh Creek" | Dn == "Sulphur Creek" | Dn == "Valley Creek"| Dn == "Yankee Fork") {D[1:rangeend] <- na.approx(D[1:rangeend])}
+              if(Dn == "Lostine River") {D[1:65] <- na.approx(D[1:65])}
+              if(Dn == "Salmon River Lower Mainstem below Redfish Lake" ) {D[1:62] <- na.approx(D[1:62])}
+              if(Dn == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers" ) {D[1:65] <- na.approx(D[1:65])}
+              
+        stock_df$salm.recspn5n <- D 
+        return(stock_df)
+    }   
+
+
+stock_data <- lapply(stock_data, interpolate_stock)
+
+
 save(stock_data, file = "Data/Rdata/stock_data_no_lags.Rdata")
 
 env_data <- read.csv("Data/csv_data/SRSS_env_seasonal.csv")
