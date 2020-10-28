@@ -30,7 +30,7 @@ rm(list=ls())
 load("Data/Rdata/stock_data_no_lags.Rdata")  
 
 #choose the library variable to analyze
-tarvar <- "salm.recspn4n"
+tarvar <- "salm.recspn5n"
 vars <- c("year", "stk", tarvar) 
 D_ESU <- rbind(stock_data$'Bear Valley Creek'[vars],  #1, MFS
               stock_data$'Big Creek'[vars],   #2, MFS
@@ -41,7 +41,6 @@ D_ESU <- rbind(stock_data$'Bear Valley Creek'[vars],  #1, MFS
               stock_data$'Catherine Creek'[vars],  #7, IMN
               stock_data$'Grande Ronde Upper Mainstem'[vars],  #8, IMN
               stock_data$'Imnaha River'[vars],  #9, IMN
-              stock_data$'Lostine River'[vars],  #10, IMN
               stock_data$'Minam River'[vars],  #11, IMN
               stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars],  #12, IMN
               stock_data$'Wenaha River'[vars],  #13, IMN; Missing 1957, 1958
@@ -69,7 +68,6 @@ D <- D_ESU
 
 #remove early years for stocks with missing early years. 
 D$`Grande Ronde Upper Mainstem`[1:9] <- NA
-D$`Lostine River` [1:9] <- NA
 D$`Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers` [1:9] <- NA
 D$`Wenaha River`[1:5] <- NA
 
@@ -86,9 +84,9 @@ D$`Yankee Fork`[9:rangeend] <- na.approx(D_ESU$`Yankee Fork`[9:rangeend])
 
 D <- as.data.frame(D)
 
-dist_mat <- matrix(data = NA, nrow=22, ncol = 22)
-for(i in c(2:23)){
-  for(j in c(2:23)){
+dist_mat <- matrix(data = NA, nrow=21, ncol = 21)
+for(i in c(2:22)){
+  for(j in c(2:22)){
       I <- as.matrix(D[!is.na(D[,c(i)]),c(1,i)])
       J <- as.matrix(D[!is.na(D[,c(j)]),c(1,j)])
       colnames(I) <- colnames(J) <- rownames(I) <- rownames(J) <- NULL
@@ -105,9 +103,9 @@ for(i in c(2:23)){
 }
 
 #Clean up dist_mat
-mpg <- c("MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "SFS"  , "SFS"  , "SFS")
-colnames(dist_mat) <- paste(names(D)[2:23], ", ", mpg, sep="")
-rownames(dist_mat) <- paste(names(D)[2:23], ", ", mpg, sep="")
+mpg <- c("MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "SFS"  , "SFS"  , "SFS")
+colnames(dist_mat) <- paste(names(D)[2:22], ", ", mpg, sep="")
+rownames(dist_mat) <- paste(names(D)[2:22], ", ", mpg, sep="")
 
 #keep only rows and cols of dist_mat from a single MPG
 dmMFS <- as.dist(dist_mat[which(mpg=="MFS"), which(mpg=="MFS")])
@@ -131,7 +129,7 @@ width=2000, height=1400)
 pMFS <- plot(hclust_MFS, main=paste(tarvar, " simplex cluster dendrogram for MFS"), cex=2)
 dev.off()
 
-png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_IMN_", tarvar, ".png", sep=""),
+png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_IMN_tau3_", tarvar, ".png", sep=""),
 width=2000, height=1400)
 pIMN <- plot(hclust_IMN, main=paste(tarvar, " simplex cluster dendrogram for IMN"), cex=2)
 dev.off()
