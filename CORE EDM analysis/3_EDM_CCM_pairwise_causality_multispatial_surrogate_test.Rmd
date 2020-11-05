@@ -197,146 +197,75 @@ D_UPS <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA,
 
 ```{R}
 #shape causal variable list, output data frame and input data frames for the CCM functions
-a <- 1;l <- 3
+
 #Choose the focal variable to run the analysis for
-for(a in (1)){
-  An_list <-  c("salm.recspn4n.0")
+for(a in (1:2)){
+  An_list <-  c("salm.recspn4n.0", "salm.recspn5n.0")
   An <- An_list[a]
-  An_short_list <- c("recspn4")
+  An_short_list <- c("recspn4", "recspn5")
   An_short <- An_short_list[a]
 
-for(l in (1)){
-  level_list <- c("ESU")
+for(l in (1:4)){
+  level_list <- c("MFS", "IMN", "UPS","ESU")
   level <- level_list[l]
 
   
   
 #Clusters identified in '2_Clustering_Chinook_stocks.Rmd'
-
-  #For recspn4n:
+  #Groups based on clustering the stock-level CCM results
+ #For recspn4n:
 if(An_short=="recspn4"){
-MFS_1 <- as.matrix(rbind(block_data$'Marsh Creek'[vars], NA,  
+MFS_1 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,  
                      block_data$'Loon Creek'[vars]))
 
 MFS_2 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
                      block_data$'Big Creek'[vars], NA, 
-                     block_data$'Camas Creek'[vars]))
+                     block_data$'Marsh Creek'[vars]))
 
-UPS_1 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
-                     block_data$'Yankee Fork'[vars], NA, 
-                     block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
-                     block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
+UPS_1 <- as.matrix(rbind(block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
+                     block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
 
-UPS_2 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
+UPS_2 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
                      block_data$'Valley Creek'[vars]))
 
-IMN_1 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
+UPS_3 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
+                     block_data$'Yankee Fork'[vars]))
+
+IMN_1 <- as.matrix(rbind(block_data$'Wenaha River'[vars], NA, 
                      block_data$'Minam River'[vars], NA, 
                      block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars]))
 
 IMN_2 <- as.matrix(rbind(block_data$'Imnaha River'[vars], NA, 
-                     block_data$'Wenaha River'[vars], NA))
+                     block_data$'Catherine Creek'[vars], NA, 
+                     block_data$'Grande Ronde Upper Mainstem'[vars]))
 
-D_1 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA,
-                        block_data$'Valley Creek'[vars]))
-
-D_2 <- as.matrix(rbind(block_data$'Secesh River'[vars], NA,  
-                        block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA,
-                        block_data$'Big Creek'[vars], NA,  
-                        block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
-
-D_3 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA,  
-              block_data$'Catherine Creek'[vars], NA,  
-              block_data$'East Fork Salmon River'[vars], NA,  
-              block_data$'East Fork South Fork'[vars], NA,  
-              block_data$'Imnaha River'[vars], NA,  
-              block_data$'Loon Creek'[vars], NA,  
-              block_data$'Marsh Creek'[vars], NA,  
-              block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
-              block_data$'South Fork Salmon River Mainstem'[vars], NA,  
-              block_data$'Wenaha River'[vars]))
-
-D_4 <- as.matrix(rbind(block_data$'Minam River'[vars], NA,
-                        block_data$'Camas Creek'[vars], NA,  
-                        block_data$'Yankee Fork'[vars]))
-
-D_5 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,   
-                        block_data$'Grande Ronde Upper Mainstem'[vars]))
-                      
-
-if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D4_1, D4_2, D4_3, D4_4, D4_5)
-DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D4_1", "D4_2", "D4_3", "D4_4", "D4_5")
-names(DataClusters) <- DataClusterNames}
-
-if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
-DataClusterNames <- c("MFS", "MFS_1", "MFS_2")
-names(DataClusters) <- DataClusterNames}
-
-if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1, UPS_2)
-DataClusterNames <- c("UPS", "UPS_1", "UPS_2")
-names(DataClusters) <- DataClusterNames}
-
-if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1, IMN_2)
-DataClusterNames <- c("IMN", "IMN_1", "IMN_2")
-names(DataClusters) <- DataClusterNames}
-}
+D_1 <- as.matrix(rbind(block_data$'Camas Creek'[vars], NA,
+                       block_data$'Catherine Creek'[vars], NA,
+                       block_data$'Grande Ronde Upper Mainstem'[vars], NA,
+                       block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
+                       block_data$'South Fork Salmon River Mainstem'[vars]))
   
-  
-  #For recspn5n:
-if(An_short=="recspn5"){
-MFS_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
-           block_data$'Big Creek'[vars], NA, 
-           block_data$'Marsh Creek'[vars]))
+D_2 <- as.matrix(rbind(block_data$'East Fork South Fork'[vars], NA, 
+                       block_data$'Secesh River'[vars], NA,  
+                       block_data$'Wenaha River'[vars], NA,
+                       block_data$'Minam River'[vars]))
 
-MFS_2 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,  
-                         block_data$'Loon Creek'[vars], NA,  
-                     block_data$'Camas Creek'[vars], NA))
+D_3 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA,
+                      block_data$'Valley Creek'[vars], NA,               
+                      block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA,
+                      block_data$'East Fork Salmon River'[vars], NA,  
+                      block_data$'Loon Creek'[vars], NA,  
+                      block_data$'Yankee Fork'[vars], NA,
+                      block_data$'Sulphur Creek'[vars]))
 
-UPS_1 <- as.matrix(rbind(block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,
-                     block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
+D_4 <- as.matrix(rbind(block_data$'Imnaha River'[vars], NA,
+                       block_data$'Big Creek'[vars], NA,
+                       block_data$'Marsh Creek'[vars], NA, 
+                       block_data$'Bear Valley Creek'[vars], NA,  
+                       block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
 
-UPS_2 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
-                     block_data$'Yankee Fork'[vars]))
-
-UPS_3 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
-                     block_data$'Valley Creek'[vars]))
-
-IMN_1 <- as.matrix(rbind(block_data$'Grande Ronde Upper Mainstem'[vars], NA, 
-                     block_data$'Imnaha River'[vars], NA, 
-                     block_data$'Minam River'[vars], NA))
-
-IMN_2 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
-                     block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
-                     block_data$'Wenaha River'[vars], NA))
-
-D_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
-                        block_data$'Sulphur Creek'[vars], NA,   
-                        block_data$'South Fork Salmon River Mainstem'[vars], NA,  
-                        block_data$'Yankee Fork'[vars], NA,  
-                        block_data$'Loon Creek'[vars], NA,  
-                        block_data$'Lemhi River'[vars], NA,
-                        block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
-                        block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
-                        
-D_2 <- as.matrix(rbind(block_data$'Secesh River'[vars], NA,  
-                        block_data$'East Fork Salmon River'[vars], NA,  
-                        block_data$'East Fork South Fork'[vars], NA,  
-                        block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars]))
-                        
-D_3 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA,  
-                        block_data$'Camas Creek'[vars], NA,  
-                        block_data$'Wenaha River'[vars]))
-
-D_4 <- as.matrix(rbind(block_data$'Big Creek'[vars], NA, 
-                        block_data$'Marsh Creek'[vars], NA,  
-                        block_data$'Valley Creek'[vars]))
-
-D_5 <- as.matrix(rbind(block_data$'Imnaha River'[vars], NA,  
-                        block_data$'Minam River'[vars], NA,
-                        block_data$'Grande Ronde Upper Mainstem'[vars]))
-
-if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D4_1, D4_2, D4_3, D4_4, D4_5)
-DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D4_1", "D4_2", "D4_3", "D4_4", "D4_5")
+if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D_1, D_2, D_3, D_4)
+DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D_1", "D_2", "D_3", "D_4")
 names(DataClusters) <- DataClusterNames}
 
 if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
@@ -350,9 +279,219 @@ names(DataClusters) <- DataClusterNames}
 if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1, IMN_2)
 DataClusterNames <- c("IMN", "IMN_1", "IMN_2")
 names(DataClusters) <- DataClusterNames}
+}
+  
+  #For recspn5n:
+if(An_short=="recspn5"){
+MFS_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
+           block_data$'Sulphur Creek'[vars], NA, 
+           block_data$'Marsh Creek'[vars]))
+
+MFS_2 <- as.matrix(rbind(block_data$'Big Creek'[vars], NA,  
+                         block_data$'Loon Creek'[vars], NA,  
+                     block_data$'Camas Creek'[vars], NA))
+
+
+UPS_1 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
+                         block_data$'East Fork Salmon River'[vars], NA, 
+                     block_data$'Valley Creek'[vars]))
+
+UPS_2 <- as.matrix(rbind(block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,
+                     block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
+
+IMN_1 <- as.matrix(rbind(block_data$'Wenaha River'[vars], NA, 
+                     block_data$'Imnaha River'[vars], NA, 
+                     block_data$'Minam River'[vars], NA))
+
+IMN_2 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
+                     block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
+                     block_data$'Grande Ronde Upper Mainstem'[vars], NA))
+
+D_1 <- as.matrix(rbind(block_data$'Big Creek'[vars], NA, 
+                       block_data$'Yankee Fork'[vars], NA,  
+                       block_data$'Bear Valley Creek'[vars], NA, 
+                       block_data$'Marsh Creek'[vars], NA,  
+                       block_data$'Grande Ronde Upper Mainstem'[vars], NA,
+                       block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
+                       block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
+                        
+D_2 <- as.matrix(rbind(block_data$'Valley Creek'[vars], NA,
+                       block_data$'East Fork Salmon River'[vars], NA,  
+                       block_data$'Lemhi River'[vars], NA,
+                       block_data$'Catherine Creek'[vars], NA,  
+                       block_data$'Camas Creek'[vars], NA,  
+                       block_data$'Sulphur Creek'[vars], NA,   
+                       block_data$'South Fork Salmon River Mainstem'[vars], NA,
+                       block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars]))
+                        
+D_3 <- as.matrix(rbind(block_data$'Minam River'[vars], NA,
+                       block_data$'Secesh River'[vars], NA, 
+                       block_data$'Wenaha River'[vars]))
+
+D_4 <- as.matrix(rbind(block_data$'Loon Creek'[vars], NA,  
+                        block_data$'East Fork South Fork'[vars], NA,  
+                        block_data$'Imnaha River'[vars]))
+
+if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D_1, D_2, D_3, D_4)
+DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D_1", "D_2", "D_3", "D_4")
+names(DataClusters) <- DataClusterNames}
+
+if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
+DataClusterNames <- c("MFS", "MFS_1", "MFS_2")
+names(DataClusters) <- DataClusterNames}
+
+if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1, UPS_2)
+DataClusterNames <- c("UPS", "UPS_1", "UPS_2")
+names(DataClusters) <- DataClusterNames}
+
+if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1, IMN_2)
+DataClusterNames <- c("IMN", "IMN_1", "IMN_2")
+names(DataClusters) <- DataClusterNames}
 
 }
-
+ 
+  
+  
+#   #Groups based on clustering from Simplex analysis
+#   #For recspn4n:
+# if(An_short=="recspn4"){
+# MFS_1 <- as.matrix(rbind(block_data$'Marsh Creek'[vars], NA,  
+#                      block_data$'Loon Creek'[vars]))
+# 
+# MFS_2 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
+#                      block_data$'Big Creek'[vars], NA, 
+#                      block_data$'Camas Creek'[vars]))
+# 
+# UPS_1 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
+#                      block_data$'Yankee Fork'[vars], NA, 
+#                      block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA, 
+#                      block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
+# 
+# UPS_2 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
+#                      block_data$'Valley Creek'[vars]))
+# 
+# IMN_1 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
+#                      block_data$'Minam River'[vars], NA, 
+#                      block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars]))
+# 
+# IMN_2 <- as.matrix(rbind(block_data$'Imnaha River'[vars], NA, 
+#                      block_data$'Wenaha River'[vars], NA))
+# 
+# D_1 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA,
+#                         block_data$'Valley Creek'[vars]))
+# 
+# D_2 <- as.matrix(rbind(block_data$'Secesh River'[vars], NA,  
+#                         block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA,
+#                         block_data$'Big Creek'[vars], NA,  
+#                         block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
+# 
+# D_3 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA,  
+#               block_data$'Catherine Creek'[vars], NA,  
+#               block_data$'East Fork Salmon River'[vars], NA,  
+#               block_data$'East Fork South Fork'[vars], NA,  
+#               block_data$'Imnaha River'[vars], NA,  
+#               block_data$'Loon Creek'[vars], NA,  
+#               block_data$'Marsh Creek'[vars], NA,  
+#               block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
+#               block_data$'South Fork Salmon River Mainstem'[vars], NA,  
+#               block_data$'Wenaha River'[vars]))
+# 
+# D_4 <- as.matrix(rbind(block_data$'Minam River'[vars], NA,
+#                         block_data$'Camas Creek'[vars], NA,  
+#                         block_data$'Yankee Fork'[vars]))
+# 
+# D_5 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,   
+#                         block_data$'Grande Ronde Upper Mainstem'[vars]))
+#                       
+# 
+# if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D4_1, D4_2, D4_3, D4_4, D4_5)
+# DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D4_1", "D4_2", "D4_3", "D4_4", "D4_5")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
+# DataClusterNames <- c("MFS", "MFS_1", "MFS_2")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1, UPS_2)
+# DataClusterNames <- c("UPS", "UPS_1", "UPS_2")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1, IMN_2)
+# DataClusterNames <- c("IMN", "IMN_1", "IMN_2")
+# names(DataClusters) <- DataClusterNames}
+# }
+#   
+#   #For recspn5n:
+# if(An_short=="recspn5"){
+# MFS_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
+#            block_data$'Big Creek'[vars], NA, 
+#            block_data$'Marsh Creek'[vars]))
+# 
+# MFS_2 <- as.matrix(rbind(block_data$'Sulphur Creek'[vars], NA,  
+#                          block_data$'Loon Creek'[vars], NA,  
+#                      block_data$'Camas Creek'[vars], NA))
+# 
+# UPS_1 <- as.matrix(rbind(block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,
+#                      block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars], NA))
+# 
+# UPS_2 <- as.matrix(rbind(block_data$'Lemhi River'[vars], NA, 
+#                      block_data$'Yankee Fork'[vars]))
+# 
+# UPS_3 <- as.matrix(rbind(block_data$'East Fork Salmon River'[vars], NA, 
+#                      block_data$'Valley Creek'[vars]))
+# 
+# IMN_1 <- as.matrix(rbind(block_data$'Grande Ronde Upper Mainstem'[vars], NA, 
+#                      block_data$'Imnaha River'[vars], NA, 
+#                      block_data$'Minam River'[vars], NA))
+# 
+# IMN_2 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA, 
+#                      block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars], NA, 
+#                      block_data$'Wenaha River'[vars], NA))
+# 
+# D_1 <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA, 
+#                         block_data$'Sulphur Creek'[vars], NA,   
+#                         block_data$'South Fork Salmon River Mainstem'[vars], NA,  
+#                         block_data$'Yankee Fork'[vars], NA,  
+#                         block_data$'Loon Creek'[vars], NA,  
+#                         block_data$'Lemhi River'[vars], NA,
+#                         block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars], NA,  
+#                         block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars]))
+#                         
+# D_2 <- as.matrix(rbind(block_data$'Secesh River'[vars], NA,  
+#                         block_data$'East Fork Salmon River'[vars], NA,  
+#                         block_data$'East Fork South Fork'[vars], NA,  
+#                         block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars]))
+#                         
+# D_3 <- as.matrix(rbind(block_data$'Catherine Creek'[vars], NA,  
+#                         block_data$'Camas Creek'[vars], NA,  
+#                         block_data$'Wenaha River'[vars]))
+# 
+# D_4 <- as.matrix(rbind(block_data$'Big Creek'[vars], NA, 
+#                         block_data$'Marsh Creek'[vars], NA,  
+#                         block_data$'Valley Creek'[vars]))
+# 
+# D_5 <- as.matrix(rbind(block_data$'Imnaha River'[vars], NA,  
+#                         block_data$'Minam River'[vars], NA,
+#                         block_data$'Grande Ronde Upper Mainstem'[vars]))
+# 
+# if(level=="ESU"){DataClusters <- list(D_ESU, D_MFS, D_IMN, D_UPS, D4_1, D4_2, D4_3, D4_4, D4_5)
+# DataClusterNames <- c("ESU", "MFS", "IMN", "UPS", "D4_1", "D4_2", "D4_3", "D4_4", "D4_5")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="MFS"){DataClusters <- list(D_MFS, MFS_1, MFS_2)
+# DataClusterNames <- c("MFS", "MFS_1", "MFS_2")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="UPS"){DataClusters <- list(D_UPS, UPS_1, UPS_2, UPS_3)
+# DataClusterNames <- c("UPS", "UPS_1", "UPS_2", "UPS_3")
+# names(DataClusters) <- DataClusterNames}
+# 
+# if(level=="IMN"){DataClusters <- list(D_IMN, IMN_1, IMN_2)
+# DataClusterNames <- c("IMN", "IMN_1", "IMN_2")
+# names(DataClusters) <- DataClusterNames}
+# 
+# }
+# 
 
 
 CCM_summary <- matrix(data=NA, nrow=1, ncol=17); colnames(CCM_summary) <- c("Lobs", "rho", "sdevrho", "lower", "upper", "model", "response_var", "causal_var", "pval", "E", "tau", "slope", "Lib", "level", "cat", "subcat", "offset")      
@@ -418,7 +557,7 @@ toc()
 }
 
 
-save(CCM_summary, file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level, "_and_smaller_clusters_", An_short, ".Rdata", sep=""))
+save(CCM_summary, file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level, "_and_clusters_based_on_stock_CCM_", An_short, ".Rdata", sep=""))
 
 
 }#level loop
@@ -452,18 +591,21 @@ block <- list(block_data$'Bear Valley Creek'[vars],
               block_data$'Wenaha River'[vars],
               block_data$'Yankee Fork'[vars])
 
-a <- 1;v <- 1;j <- 1;tau <- 1
+a <- 2;v <- 1;j <- 1;tau <- 1
 #Choose the focal variable to run the analysis for
 An_list <-  c("salm.recspn4n.0", "salm.recspn5n.0")
 An_short_list <- c("recspn4", "recspn5")
-for(a in (1:2)){
+    tic()
+    
+for(a in (2:2)){
   An <- An_list[a]
   An_short <- An_short_list[a]
   
   #Empty matrix to store results
   stock_CCM_summary<- matrix(data=NA, nrow=1, ncol=10); colnames(stock_CCM_summary) <- c("stock", "response_var", "causal_var", "cat", "subcat", "offset", "E", "tau", "rho", "pval")     
   
-  for (v in 1:length(var_list)){ #for each putative causal variable
+  for (v in 1:nrow(var_list)){ #for each putative causal variable
+
     Bn <- var_list[v,1]
 
     #find optimal E for putative causal variable
@@ -486,22 +628,25 @@ for(a in (1:2)){
         #run the multispatial CCM for each stock separately
         for(j in 1:length(block)){ #for each stock
             for(tau in 1:3){ #for each tau
-            data <- block[[j]] 
-            data <- data[,c("year", An, Bn)]
-            data <- data[complete.cases(data),]
-            CCMboot <- CCM_boot(A=data[,3], B=data[,2], E=EB, tau=tau)
-            CCM_sig_test<-ccmtest_oneway(CCMboot)
-            out <- c(block[[j]]$stk[1],An,Bn,var_list[v,2],var_list[v,3],var_list[v,4],EB,tau,CCMboot$rho[length(CCMboot$rho)],CCM_sig_test)
-            stock_CCM_summary <- rbind(stock_CCM_summary, out)
+              tryCatch({
+              data <- block[[j]] 
+              data <- data[,c("year", An, Bn)]
+              data <- data[complete.cases(data),]
+              CCMboot <- CCM_boot(A=data[,3], B=data[,2], E=EB, tau=tau)
+              CCM_sig_test<-ccmtest_oneway(CCMboot)
+              out <- c(block[[j]]$stk[1],An,Bn,var_list[v,2],var_list[v,3],var_list[v,4],EB,tau,CCMboot$rho[length(CCMboot$rho)],CCM_sig_test)
+              stock_CCM_summary <- rbind(stock_CCM_summary, out)
+              }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
             }
         }
-
+    
+print(Bn)
+   
   }
-  
+ toc()  
 save(stock_CCM_summary, file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_", An_short, ".Rdata", sep=""))
 }
 ```
-
 
 
 
@@ -584,36 +729,50 @@ ggsave(filename = paste("Output/Figures/3_CCM/Multispatial/", level, "_and_small
 ```{R}
 rm(list=ls()) 
 level="ESU"
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
 CCM_4 <- CCM_summary[-1,]
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
 CCM_5 <- CCM_summary[-1,]
 ESU <- rbind(CCM_4, CCM_5)
 ESU <- ESU[ESU$level!="MFS" & ESU$level!="UPS" & ESU$level!="IMN",]
 
 level="MFS"
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
 CCM_4 <- CCM_summary[-1,]
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
 CCM_5 <- CCM_summary[-1,]
 MFS <- rbind(CCM_4, CCM_5)
 
 level="IMN"
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
 CCM_4 <- CCM_summary[-1,]
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
 CCM_5 <- CCM_summary[-1,]
 IMN <- rbind(CCM_4, CCM_5)
 
 level="UPS"
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
 CCM_4 <- CCM_summary[-1,]
-load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
 CCM_5 <- CCM_summary[-1,]
 UPS <- rbind(CCM_4, CCM_5)
 
+level="stock"
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn4.Rdata", sep=""))
+CCM_4 <- stock_CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn5.Rdata", sep=""))
+CCM_5 <- stock_CCM_summary[-1,]
+Stock <- rbind(CCM_4, CCM_5)
+row.names(Stock) <- NULL
+colnames(Stock)[colnames(Stock) == 'stock'] <- 'level'
+
 CCM <- rbind(ESU,MFS,IMN,UPS)
-rm(CCM_4, CCM_5, CCM_summary, ESU, MFS, IMN, UPS, level)
+CCM <- CCM[,c(-1, -3, -4, -5, -6, -12, -13)]
+row.names(CCM) <- NULL
+CCM <- CCM[c("level", "response_var", "causal_var", "cat", "subcat", "offset", "E", "tau", "rho", "pval")]
+CCM <- rbind(Stock,CCM)
+
+rm(CCM_4, CCM_5, CCM_summary, ESU, MFS, IMN, UPS, level, Stock, stock_CCM_summary)
 
 CCM$rec <- NA
 CCM$rec[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
@@ -621,18 +780,33 @@ CCM$rec[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
 
 CCM <- CCM[CCM$pval<=0.1,]
 
-CCM$leveltype <- NA
+CCM$rho <- as.numeric(CCM$rho)
+CCM$pval <- as.numeric(CCM$pval)
+
+CCM$leveltype <- "Stock"
 CCM$leveltype[CCM$level =="MFS" |CCM$level =="UPS" | CCM$level =="IMN"] <- "MPGs"
 CCM$leveltype[CCM$level =="D4_1" |CCM$level =="D4_2" | CCM$level =="D4_3"| CCM$level =="D4_4"| CCM$level =="D4_5"] <- "ESU heirarchical"
 CCM$leveltype[CCM$level =="MFS_1" |CCM$level =="MFS_2" | CCM$level =="IMN_1"| CCM$level =="IMN_2" | CCM$level =="UPS_1"| CCM$level =="UPS_2"| CCM$level =="UPS_3"] <- "MPGs heirarchical"
 CCM$leveltype[CCM$level =="ESU"] <- "ESU"
 
+#only include the tau for each variable that optimizes rho
+CCM <- CCM %>%
+  group_by(level, leveltype, response_var, rec, causal_var, cat, subcat, offset, E) %>%
+  summarize(max_rho = max(rho, na.rm = TRUE))
+
+#only include the offset for each variable that optimizes rho
+CCM <- CCM %>%
+  group_by(level, leveltype, response_var, rec, cat, subcat, E) %>%
+  summarize(max_rho = max(max_rho, na.rm = TRUE))
+
+
 #plot as treemaps
 
-#Whole CCM
-          rec <- CCM$rec
-          leveltype <- CCM$leveltype
-          value <- CCM$rho
+#Whole ESU and MPG
+CCMt <- CCM[CCM$leveltype!="Stock",]
+          rec <- CCMt$rec
+          leveltype <- CCMt$leveltype
+          value <- as.numeric(CCMt$max_rho)
     data <- data.frame(rec,leveltype,value)
     
     p <- treemap(data,
@@ -648,9 +822,137 @@ CCM$leveltype[CCM$level =="ESU"] <- "ESU"
                 )  
               )     
 
+    
+    
+    
+    
+#Only MPG grouping of stocks for 5 and 4 year old separately
+    
+    MPGh4 <- CCM[CCM$leveltype=="MPGs" & CCM$rec=="4yo",]
+          level <- MPGh4$level
+          cat <- MPGh4$cat
+          subcat <- MPGh4$subcat
+          value <- MPGh4$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    p <- treemap(data,
+                index=c("level","cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG  grouping of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    MPGh5 <- CCM[CCM$leveltype=="MPGs" & CCM$rec=="5yo",]
+          level <- MPGh5$level
+          cat <- MPGh5$cat
+          subcat <- MPGh5$subcat
+          value <- MPGh5$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    p <- treemap(data,
+                index=c("level","cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG grouping of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+  
+     
+ #cats and subcats for each level of each MPG
+    levels <- c("MFS", "IMN", "UPS")
+    recs <- c("4yo", "5yo")
+
+    for(l in 1:length(levels)){
+          level <- levels[l]      
+          
+          for(k in 1:2){
+            rec <- recs[k]
+            
+            D <- CCM[CCM$level==level,]
+            D <- D[D$rec==rec,]
+            
+              if (nrow(D) == 0){
+              next
+              }
+            
+                cat <- D$cat
+                subcat <- D$causal_var
+                value <- D$max_rho
+                data <- data.frame(cat,subcat,value)
+                
+              
+                treemap(data,
+                            index=c("cat","subcat"),
+                            vSize="value",
+                            type="index",
+                            palette = "-RdYlBu",
+                            title=paste("Significant causal variables in ", level, " for ", rec, sep=""),
+                            align.labels=list(
+                              c("center", "top"), 
+                              c("left", "bottom")
+                            )  
+                          )  
+                
+          }
+    }
+     
+#Only for individual stocks
+    Stock4 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="4yo",]
+          level <- Stock4$level
+          cat <- Stock4$cat
+          subcat <- Stock4$subcat
+          value <- Stock4$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title="Stock level CCM of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    
+    Stock5 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="5yo",]
+          level <- Stock5$level
+          cat <- Stock5$cat
+          subcat <- Stock5$subcat
+          value <- Stock5$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title="Stock level CCM of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+     
+```
+
+
+
+
+```{R}
+    
 #Only MPG heirarchical grouping of stocks for 5 and 4 year old separately
-#sunburst plot
-library(sunburstR)
     
     MPGh4 <- CCM[CCM$leveltype=="MPGs heirarchical" & CCM$rec=="4yo",]
           level <- MPGh4$level
@@ -671,13 +973,6 @@ library(sunburstR)
                   c("left", "bottom")
                 )  
               )     
-
-    # # Reformat data for the sunburstR package
-    # data <- data %>%
-    #     filter(level != "") %>%
-    #     mutate(path = paste(level,cat,subcat, sep="-")) %>%
-    #     dplyr::select(path, value)
-    # sunburst(data, legend=FALSE)
     
     MPGh5 <- CCM[CCM$leveltype=="MPGs heirarchical" & CCM$rec=="5yo",]
           level <- MPGh5$level
@@ -699,7 +994,7 @@ library(sunburstR)
                 )  
               )     
   
-      
+     
  #cats and subcats for each level of each MPG
     levels <- c("MFS_1", "MFS_2", "IMN_1", "IMN_2", "UPS_1", "UPS_2", "UPS_3")
     recs <- c("4yo", "5yo")
@@ -737,9 +1032,50 @@ library(sunburstR)
                 
           }
       }
+        
     
+#Only for individual stocks
+    Stock4 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="4yo",]
+          level <- Stock4$level
+          cat <- Stock4$cat
+          subcat <- Stock4$subcat
+          value <- Stock4$rho
+    data <- data.frame(level,cat,subcat,value)
     
-
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="Stock level grouping of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    
+    Stock5 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="5yo",]
+          level <- Stock5$level
+          cat <- Stock5$cat
+          subcat <- Stock5$subcat
+          value <- Stock5$rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="Stock level grouping of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+  
+      
     
           
 ```
