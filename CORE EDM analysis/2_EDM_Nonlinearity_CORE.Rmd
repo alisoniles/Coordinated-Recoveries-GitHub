@@ -14,6 +14,7 @@ library(tseriesChaos)
 library(multispatialCCM)
 library(tidyr)
 library(stringr)
+library(zoo)
 
 library(ggplot2)
 library(ggforce)
@@ -346,52 +347,294 @@ saveRDS(results, file = "Output/Rdata/2_Nonlinearity/Diagnostic_results.RDS")
 
 
 
+# Run diagnostics for each stock separately
 
 
 
 ```{R}
-# Find the optimal tau for each stock
 
 rm(list=ls()) 
 load("Data/Rdata/stock_data_no_lags.Rdata")  
 
-tarvars <- c("salm.recspn4n", "salm.recspn5n") 
+results<-matrix(nrow=27, ncol=10); colnames(results)<-c("stock", "MPG",  "n4", "tau4", "E4", "rho4", "n5", "tau5", "E5", "rho5") #Storing output
 
-Tau_df<-matrix(nrow=28, ncol=6); colnames(Tau_df)<-c("stock", "MPG",  "n", "No. missing years", "rec4n tau", "rec5n tau") #Storing output
-
-i <- 1
-for(i in 1:28){
-par(mfrow = c(1, 2))
-  stock <- names(stock_data)[i]
-    Tau_df[i,1] <- stock
-    Tau_df[i,2] <- stock_data[[i]]$mpg[1]
-    
-  A4 <- stock_data[[i]]$salm.rec4n
-  A5 <- stock_data[[i]]$salm.rec5n
-
-  year <- stock_data[[i]]$year
-  year4 <- year[complete.cases(A4)]
-  year5 <- year[complete.cases(A5)]
+sp <- 0
+  rs4_subplot_list = list(); 
+  rs5_subplot_list = list(); 
+for(i in c(1:4, 6:12, 15, 18:27)){
+  sp <- sp+1
   
-  A4 <- A4[complete.cases(A4)]
-  A5 <- A5[complete.cases(A5)]
+  results[i,1] <- names(stock_data)[i]
+  results[i,2] <- stock_data[[i]]$mpg[1]
   
-  Tau_df[i,3] <- length(A5)
-  Tau_df[i,4] <- sum(diff(year5)!=1)
+  data <- stock_data[[i]]
+  data <- data[c("stk", "year", "salm.recspn4n", "salm.recspn5n")]
+  A4 <- na.trim(data[,c(1,2,3)], sides="both", is.na ="any")
+  A5 <- na.trim(data[,c(1,2,4)], sides="both", is.na ="any") 
   
-ami4 <- mutual(A4, lag.max = 20, plot=TRUE, main=paste(stock, ", rec4n", sep=""))
-  ami4min <-min(which(diff(ami4)>=0))-1
-  Tau_df[i,5] <- ami4min
-  points(ami4min, ami4[ami4min+1][[1]], cex = 1, col = "red")
+  results[i,3] <- nrow(A4)
+  results[i,7] <- nrow(A5)
+ 
+  #---------------------------- time-delay, tau ----------------------------
+  # the 'mutual' function that calculates the average mutual information needs a time series with no NA
+  AMI4 <- mutual(A4[,3], lag.max = 20, plot=FALSE)
+  tau4 <- min(which(diff(AMI4)>=0))-1 #choose the tau with the first local minimum AMI
+  AMI4 <- as.data.frame(as.numeric(AMI4));  
+  AMI4 <- cbind( c(0:(nrow(AMI4)-1)), AMI4); colnames(AMI4) <- c("lag", "AMI")
+  AMI4$chosen <- 0
+  AMI4$chosen [ AMI4$lag==results[i,6]] <- 1
+  pAMI4 <- ggplot(AMI4, aes(x=lag, y=AMI)) +
+    geom_point() +
+    geom_point(data=AMI4[AMI4$chosen==1,], aes(x=lag, y=AMI), size=3, shape=1) +
+    theme_bw(base_size = 7) +
+    theme(legend.position = "none") +
+    labs(title = paste(results[i,1], ", tau = ", tau4, sep="")) 
 
-ami5 <- mutual(A5, lag.max = 20, plot=TRUE, main=paste(stock, ", rec5n", sep=""))
-  ami5min <-min(which(diff(ami5)>=0))-1
-  Tau_df[i,6] <- ami5min
-  points(ami5min, ami5[ami5min+1][[1]], cex = 1, col = "red")
+  rs4_subplot_list[[((sp-1)*4 + 1)]] = pAMI4 
+  
+  
+  AMI5 <- mutual(A5[,3], lag.max = 20, plot=FALSE)
+  tau5 <- min(which(diff(AMI5)>=0))-1 #choose the tau with the first local minimum AMI
+  AMI5 <- as.data.frame(as.numeric(AMI5));    
+  AMI5 <- cbind( c(0:(nrow(AMI5)-1)), AMI5); colnames(AMI5) <- c("lag", "AMI")
+  AMI5$chosen <- 0
+  AMI5$chosen [ AMI5$lag==results[i,6]] <- 1
+  pAMI5 <- ggplot(AMI5, aes(x=lag, y=AMI)) +
+    geom_point() +
+    geom_point(data=AMI5[AMI5$chosen==1,], aes(x=lag, y=AMI), size=3, shape=1) +
+    theme_bw(base_size = 7) +
+    theme(legend.position = "none") +
+    labs(title = paste(results[i,1], ", tau = ", tau5, sep="")) 
+
+  rs5_subplot_list[[((sp-1)*4 + 1)]] = pAMI5 
+
+
+  
+#---------------------------- lagged population plot ----------------------------
+
+NAmat <- matrix(NA, ncol = 3, nrow=tau4)
+colnames(NAmat) <- colnames(A4)
+Lagblock <- cbind(rbind(NAmat, A4), rbind(A4, NAmat))
+removerows <- Lagblock[,1]!=Lagblock[,4] | is.na(Lagblock[,1]) | is.na(Lagblock[,4])
+Lagblock[removerows,] <- NA 
+Lagblock <- Lagblock[complete.cases(Lagblock[,1]),]
+
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+ 
+pLag4 <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     geom_point(shape=1)+
+     geom_hline(aes(yintercept=0), colour='#999999') +
+     theme_bw(base_size = 10) + # big text
+     theme(legend.position = "none") 
+ 
+rs4_subplot_list[[((sp-1)*4 + 2)]] = pLag4
+
+NAmat <- matrix(NA, ncol = 3, nrow=tau4)
+colnames(NAmat) <- colnames(A5)
+Lagblock <- cbind(rbind(NAmat, A5), rbind(A5, NAmat))
+removerows <- Lagblock[,1]!=Lagblock[,4] | is.na(Lagblock[,1]) | is.na(Lagblock[,4])
+Lagblock[removerows,] <- NA 
+Lagblock <- Lagblock[complete.cases(Lagblock[,1]),]
+
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+ 
+pLag5 <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     geom_point(shape=1)+
+     geom_hline(aes(yintercept=0), colour='#999999') +
+     theme_bw(base_size = 10) + # big text
+     theme(legend.position = "none") 
+
+rs5_subplot_list[[((sp-1)*4 + 2)]] = pLag5
+
+
+
+
+#---------------------------- Embedding dimension, E ----------------------------
+
+#for recspn4:
+tau <- min(5, tau4)
+A <- as.numeric(A4[,3])
+#set optimal E for each MPG and the ESU levels
+maxE<-min(floor(sqrt(sum(complete.cases(A)))),15) #Maximum E to test based on the square root of the number of samples, also depends on tau
+
+ Emat<-matrix(nrow=maxE-1, ncol=6); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+#Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
+
+
+for(E in 2:maxE) {
+  #Uses defaults of looking forward one prediction step (predstep)
+  Emat[E-1,"E"] <- E
+  Emat[E-1,"Tau1"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=1)$rho
+  Emat[E-1,"Tau2"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=2)$rho
+  Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
+  Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
+  Emat[E-1,"Tau5"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=5)$rho
+}
+
+#We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+#n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+optE <- cbind(c(1:5), matrix(nrow=5, ncol=2)); colnames(optE)<-c("Tau", "optE", "rho")
+for(t in 2:6) {
+maxrho <- max(Emat[,t], na.rm=TRUE)
+optE[t-1,3] <-  maxrho
+    if(maxrho>0){
+    optE[t-1, 2] <- min(Emat[(Emat[,t]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+    }
+}
+results[i,4:6] <- round(optE[optE[,3]==max(optE[,3], na.rm=TRUE),],2)
+            
+Edf <- as.data.frame(Emat)
+Edf <- pivot_longer(Edf, cols=c(2:6))
+Edf$chosen <- 0
+Edf$chosen [Edf$E==results[i,5] & Edf$name==paste("Tau", results[i,4], sep="")] <- 1
+
+#manual color codes for plot
+pE4 <- ggplot(Edf, aes(x=E, y=value, color=name)) +
+     geom_line() +
+     geom_point(data=Edf[Edf$chosen==1,], aes(x=E, y=value, color=name), size=2, shape=1) +
+     labs(x = "E", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+rs4_subplot_list[[((sp-1)*4 + 3)]] = pE4
+
+
+# Time to prediction, TP recspn4
+##Check data for nonlinear signal that is not dominated by noise
+#Checks whether predictive ability of processes declines with increasing time distance
+#Loop over the number of time steps into the future to make predictions from past observations. 
+#Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
+maxTP <- 10 #Maximum TP to test
+
+TPdf <- matrix(nrow=maxTP, ncol=6); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+TPdf[,"TP"] <- c(1:maxTP) 
+for(t in 2:6) {
+  if(is.na(optE[t-1,2])==FALSE ){
+TPdf[,t]<-SSR_check_signal(A=as.matrix(A), E=optE[t-1,2], tau=t-1, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho}
+}
+
+TPdf <- as.data.frame(TPdf) 
+TPdf <- pivot_longer(TPdf, cols=c(2:6))
+pTP4 <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
+     geom_line() +
+     labs(x = "time steps to prediction", y = expression(rho)) +
+     theme_bw() +
+     theme( legend.position = c(.99, .99),
+              legend.justification = c("right", "top"),
+              legend.box.just = "left",
+              legend.margin=margin(0,0,0,0),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 8),
+              legend.background = element_blank(),
+              legend.key.size = unit(0.3, "cm"))
+
+rs4_subplot_list[[((sp-1)*4 + 4)]] = pTP4
+
+
+
+#------------------------------------------------------------------------------------
+#for recspn5:
+tau <- min(5, tau5)
+A <- as.numeric(A5[,3])
+
+#set optimal E for each MPG and the ESU levels
+maxE<-min(floor(sqrt(sum(complete.cases(A)))),15) #Maximum E to test based on the square root of the number of samples, also depends on tau
+
+ Emat<-matrix(nrow=maxE-1, ncol=6); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+#Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
+
+
+for(E in 2:maxE) {
+  #Uses defaults of looking forward one prediction step (predstep)
+  Emat[E-1,"E"] <- E
+  Emat[E-1,"Tau1"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=1)$rho
+  Emat[E-1,"Tau2"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=2)$rho
+  Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
+  Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
+  Emat[E-1,"Tau5"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=5)$rho
+}
+
+#We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+#n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+optE <- cbind(c(1:5), matrix(nrow=5, ncol=2)); colnames(optE)<-c("Tau", "optE", "rho")
+for(t in 2:6) {
+maxrho <- max(Emat[,t], na.rm=TRUE)
+optE[t-1,3] <-  maxrho
+    if(maxrho>0){
+    optE[t-1, 2] <- min(Emat[(Emat[,t]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+    }
+}
+results[i,8:10] <- round(optE[optE[,3]==max(optE[,3], na.rm=TRUE),],2)
+            
+Edf <- as.data.frame(Emat)
+Edf <- pivot_longer(Edf, cols=c(2:6))
+Edf$chosen <- 0
+Edf$chosen [Edf$E==results[i,9] & Edf$name==paste("Tau", results[i,8], sep="")] <- 1
+
+#manual color codes for plot
+pE5 <- ggplot(Edf, aes(x=E, y=value, color=name)) +
+     geom_line() +
+     geom_point(data=Edf[Edf$chosen==1,], aes(x=E, y=value, color=name), size=2, shape=1) +
+     labs(x = "E", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+rs5_subplot_list[[((sp-1)*4 + 3)]] = pE5 
+
+
+#Time to prediction, TP recspn 5
+##Check data for nonlinear signal that is not dominated by noise
+#Checks whether predictive ability of processes declines with increasing time distance
+#Loop over the number of time steps into the future to make predictions from past observations. 
+#Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
+
+maxTP <- 10 #Maximum TP to test
+
+TPdf <- matrix(nrow=maxTP, ncol=6); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+TPdf[,"TP"] <- c(1:maxTP) 
+for(t in 2:6) {
+  if(is.na(optE[t-1,2])==FALSE ){
+        #ERROR HANDLING
+        possibleError <- tryCatch(
+            SSR_check_signal(A=as.matrix(A), E=optE[t-1,2], tau=t-1, predsteplist=1:maxTP, matchSugi = 0),
+            error=function(e) e)
+        if(inherits(possibleError, "error")) next
+  
+        #REAL WORK IF NO ERROR 
+        TPdf[,t]<-SSR_check_signal(A=as.matrix(A), E=optE[t-1,2], tau=t-1, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho}
+  }
+
+TPdf <- as.data.frame(TPdf) 
+TPdf <- pivot_longer(TPdf, cols=c(2:6))
+pTP5 <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
+     geom_line() +
+     labs(x = "time steps to prediction", y = expression(rho)) +
+     theme_bw() +
+     theme( legend.position = c(.99, .99),
+              legend.justification = c("right", "top"),
+              legend.box.just = "left",
+              legend.margin=margin(0,0,0,0),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 8),
+              legend.background = element_blank(),
+              legend.key.size = unit(0.3, "cm"))
+
+rs5_subplot_list[[((sp-1)*4 + 4)]] = pTP5
 
 }
 
-rm()
+
+p4 <- marrangeGrob(rs4_subplot_list, nrow=4, ncol=4)
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn4_stock_level_diagnostic_plots.pdf", sep = ""), plot = p4, width = 9, height = 9, units = "in")
+
+p5 <- marrangeGrob(rs5_subplot_list, nrow=4, ncol=4)
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn5_stock_level_diagnostic_plots.pdf", sep = ""), plot = p5, width = 9, height = 9, units = "in")
 
 ```
 
@@ -635,13 +878,11 @@ subplot_list[[(4+((-tau-1)*4))]] = pTP
 
 }  #tau loop
 
+p4 <- marrangeGrob(rs4_subplot_list, nrow=4, ncol=4)
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn4_stock_level_diagnostic_plots.pdf", sep = ""), plot = p4, width = 9, height = 9, units = "in")
 
-
-
- n <- length(subplot_list)
- nCol <- 4 #floor(sqrt(n))
- pDIAGNOSTICS <- do.call("grid.arrange", c(subplot_list, ncol=nCol, top=paste("lag plots for ", level[l], sep = "")))
-ggsave(filename = paste("Output/Figures/2_Nonlinearity/",level[l],"_diagnostic_plots_recspn45.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
+p5 <- marrangeGrob(rs5_subplot_list, nrow=4, ncol=4)
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn5_stock_level_diagnostic_plots.pdf", sep = ""), plot = p5, width = 9, height = 9, units = "in")
 
 }  #ESU and MPG levels loop
  
