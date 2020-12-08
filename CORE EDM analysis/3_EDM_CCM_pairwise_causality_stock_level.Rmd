@@ -642,9 +642,13 @@ save(CCM, file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recsp
 
 #Data explorations
 ```{R}
-rm(list=ls()) 
+
 
 load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45.Rdata", sep=""))
+#add shortened response process name
+CCM$RP <- NA
+CCM$RP[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
+CCM$RP[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
 
 #Narrow results to those with terminal rho greater than the 95% CI of the twin surrogates
     CCM <- CCM[CCM$u_rho>0,]
@@ -674,18 +678,22 @@ load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45.R
     Stock5Spr$value <- as.numeric(Stock5Spr$value)
     
     Stock4Sum <- CCM[CCM$RP=="4yo" & (CCM$runtype=="Summer" | CCM$runtype=="Spring/Summer" ),]
-    Stock4Spr <- data.frame(cbind(Stock4Spr$stock, Stock4Spr$cat, Stock4Spr$subcat, Stock4Spr$ter_rho))
-    colnames(Stock4Spr) <-  c("stock", "cat", "subcat", "value")
-    Stock4Spr$value <- as.numeric(Stock4Spr$value)
+    Stock4Sum <- data.frame(cbind(Stock4Sum$stock, Stock4Sum$cat, Stock4Sum$subcat, Stock4Sum$ter_rho))
+    colnames(Stock4Sum) <-  c("stock", "cat", "subcat", "value")
+    Stock4Sum$value <- as.numeric(Stock4Sum$value)
     
-    Stock5Spr <- CCM[CCM$RP=="5yo" & CCM$runtype=="Spring",]
-    Stock5Spr <- data.frame(cbind(Stock5Spr$stock, Stock5Spr$cat, Stock5Spr$subcat, Stock5Spr$ter_rho))
-    colnames(Stock5Spr) <-  c("stock", "cat", "subcat", "value")
-    Stock5Spr$value <- as.numeric(Stock5Spr$value)
+    Stock5Sum <- CCM[CCM$RP=="5yo" & (CCM$runtype=="Summer" | CCM$runtype=="Spring/Summer" ),]
+    Stock5Sum <- data.frame(cbind(Stock5Sum$stock, Stock5Sum$cat, Stock5Sum$subcat, Stock5Sum$ter_rho))
+    colnames(Stock5Sum) <-  c("stock", "cat", "subcat", "value")
+    Stock5Sum$value <- as.numeric(Stock5Sum$value)
     
     
-  dflist <- list(Stock4Spr, Stock5Spr)
-    for (i in 1:2){
+  dflist <- list(Stock4Spr, Stock5Spr, Stock4Sum, Stock5Sum)
+  Titlelist <- list("Stock level CCM of 4yo Spring run recruits per spawner: terminal rho",
+                    "Stock level CCM of 5yo Spring run recruits per spawner: terminal rho",
+                    "Stock level CCM of 4yo Spring/Summer run recruits per spawner: terminal rho",
+                    "Stock level CCM of 5yo Spring/Summer run recruits per spawner: terminal rho")
+    for (i in 1:4){
       data <- dflist[[i]]
     p <- treemap(data,
                 index=c("cat", "subcat"),
@@ -693,53 +701,14 @@ load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45.R
                 type="index",
                 palette = "-RdYlBu",
                 bg.labels=c("white"),
-                title="Stock level CCM of 4yo recruits per spawner: terminal rho",
+                title=Titlelist[i],
                 align.labels=list(
                   c("center", "top"), 
                   c("left", "bottom")
                 )  
               )     
     }
-        Stock5Spr <- CCM[CCM$RP=="4yo" & CCM$runtype=="Spring",]
-          stock <- Stock5Spr$stock
-          cat <- Stock5Spr$cat
-          subcat <- Stock5Spr$subcat
-          value <- Stock5Spr$ter_rho
-    data <- data.frame(stock,cat,subcat,value)
-    
-    p <- treemap(data,
-                index=c("cat", "subcat"),
-                vSize="value",
-                type="index",
-                palette = "-RdYlBu",
-                bg.labels=c("white"),
-                title="Stock level CCM of 5yo recruits per spawner: terminal rho",
-                align.labels=list(
-                  c("center", "top"), 
-                  c("left", "bottom")
-                )  
-              )   
-       
-    Stock5 <- CCM[CCM$RP=="5yo",]
-          stock <- Stock5$stock
-          cat <- Stock5$cat
-          subcat <- Stock5$subcat
-          value <- Stock5$rho
-    data <- data.frame(stock,cat,subcat,value)
-    
-    p <- treemap(data,
-                index=c("stock","cat"),
-                vSize="value",
-                type="index",
-                palette = "-RdYlBu",
-                bg.labels=c("white"),
-                title="Stock level CCM of 5yo recruits per spawner",
-                align.labels=list(
-                  c("center", "top"), 
-                  c("left", "bottom")
-                )  
-              )     
-    
+ 
 
 ```
 
