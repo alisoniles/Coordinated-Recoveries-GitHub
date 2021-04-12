@@ -29,7 +29,7 @@ data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
 #normalize
 
 ```{R}
- # To focus on one stock to figure out what's going on use
+ # To focus on one stock to trouble shoot the code
  #stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
  
 

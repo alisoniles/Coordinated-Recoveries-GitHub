@@ -19,6 +19,74 @@ library(zoo)
 library(ggplot2)
 library(ggforce)
 library(gridExtra)
+library(parallel)
+library(doParallel)
+
+#create list of beginning and end points for chunks of time series combined in the same embedding. Year must be in the first column of the time series. Complete cases only. Removes sections that are not continuous for at least cont_tp time points. Returns lib and the narrowed data block. 
+    create_lib <- function(d, cont_tp)
+{
+         lib <- matrix(NA, nrow = length(which(diff(d[,1])!=1))+1, ncol = 2) 
+             lib[,1] <- c(1, which(diff(d[,1])!=1)+1)
+             lib[,2] <- c(which(diff(d[,1])!=1), nrow(d))
+        
+         minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 'cont_tp' time points. 
+         lib <- lib[minlib>=cont_tp,] 
+             
+    return(lib)
+    }
+    
+
+#' Randomization test for nonlinearity using S-maps and surrogate data
+#' 
+#' tests for nonlinearity using S-maps by 
+#' comparing improvements in forecast skill (delta rho and delta mae) between 
+#' linear and nonlinear models with a null distribution from surrogate data.
+#' 
+#' ts the original time series
+#' method which algorithm to use to generate surrogate data
+#' num_surr the number of null surrogates to generate
+#' T_period the period of seasonality for seasonal surrogates 
+#'   (ignored for other methods)
+#' E the embedding dimension for s_map
+#'  ... optional arguments to s_map
+
+#ts <- Dt; method <-  "ebisuzaki"; num_surr <-  200; E <-  optEtau[i,1]; tau <-  optEtau[i,2]
+test_nonlin <- function(ts, method = "ebisuzaki", num_surr = 200, 
+                        theta = c(0, 1e-04, 3e-04, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32),
+                        tau = tau, tp = 1, E = E, ...)
+{
+    compute_test_stat <- function(ts, ...)
+    {
+        results <- s_map(ts, tau = tau, tp = 1, E = E, ...)
+        delta_rho <- max(as.numeric(results$rho))-results$rho[[1]]
+        opt_theta <- results$theta[results$rho==max(as.numeric(results$rho))]
+        return(list( 
+             theta = as.numeric(results$theta), 
+             rho = as.numeric(results$rho),
+             opt_theta = opt_theta,
+             delta_rho = delta_rho))
+    }
+    
+    actual_stats <- compute_test_stat(ts, ...)
+         delta_rho <- actual_stats$delta_rho; names(delta_rho) <- NULL
+         theta <- actual_stats$theta
+         rho <- actual_stats$rho
+         opt_theta <- actual_stats$opt_theta
+    
+    surrogate_data <- make_surrogate_data(ts[,2], method = method, num_surr = num_surr) #generate surrogate data 
+    null_stats <- data.frame(t(apply(surrogate_data, 2, compute_test_stat, ...)))
+    null_stats_delta_rho <- lapply(null_stats, function(x) tail(as.numeric(unlist(x)), n=1))
+    
+    return(list(
+        E = E,
+        theta = theta,
+        rho = rho,
+        opt_theta = opt_theta,
+        num_surr = num_surr,
+        delta_rho = delta_rho, 
+        delta_rho_p_value = (sum(null_stats_delta_rho>delta_rho) + 1) / (num_surr + 1)))
+}        
+    
 ```
 # This code runs several optimizations of parameters for nonlinear time series analysis
 
@@ -42,10 +110,11 @@ Thus, nonlinearity complicates the identification of causal drivers. Here we tes
 ```{R}
 # Final diagnostic analyses for rec4n, rec5n, recspn4n, and recspn5n for each MPG and ESU
 
-rm(list=ls()) 
 load("Data/Rdata/stock_data_no_lags.Rdata")  
 
-vars <- c("stk", "year", "salm.rec4n", "salm.rec5n", "salm.recspn4n", "salm.recspn5n") 
+#run for either normalized or non-normalized data, and change 'variable' and names of files to save        
+#vars <- c("stk", "year", "salm.rec4n", "salm.rec5n", "salm.recspn4n", "salm.recspn5n")
+vars <- c("stk", "year", "rec4", "rec5", "recspn4", "recspn5") 
 
 #concatenate the stock time series together for each MPG and ESU
 D_ESU <- as.matrix(rbind(stock_data$'Bear Valley Creek'[vars], NA,  
@@ -151,12 +220,13 @@ D_UPS_rs5n <- shape_stock_data(D_UPS[,c(1,2,6)], 10)
 
 ## Run diagnostics for each MPG separately and the whole ESU
 level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
-variables <- c("salm.rec4n.0", "salm.rec5n.0", "salm.recspn4n.0", "salm.recspn5n.0")
+#variables <- c("salm.rec4n.0", "salm.rec5n.0", "salm.recspn4n.0", "salm.recspn5n.0")
+variables <- c("rec4.0", "rec5.0", "srecspn4.0", "recspn5.0")
 results <- matrix(nrow=16, ncol=4); colnames(results)<-c("level", "variable", "tau", "E") #Matrix for storing output
 results[,2] <- variables
 
 l <- 2; v <- 2
-for(l in (2:4)){  #loop through each analysis level the ESU and the different MPGs
+for(l in (1:4)){  #loop through each analysis level the ESU and the different MPGs
 
   subplot_list = list(); 
   for(v in 1:4){ #loop through the four different variables
@@ -185,13 +255,13 @@ for(l in (2:4)){  #loop through each analysis level the ESU and the different MP
 #---------------------------- time-delay, tau ----------------------------
 # the 'mutual' function that calculates the average mutual information needs a time series with no NA
 Dt <- as.numeric(D[complete.cases(D[,3]),3])
-AMI <- mutual(Dt, lag.max = 20, plot=FALSE)
+AMI <- mutual(Dt, lag.max = 10, plot=FALSE)
 minAMI <- min(which(diff(AMI)>=0))-1
 
   AMI <- as.data.frame(as.numeric(AMI)); 
   AMI <- cbind( c(0:(nrow(AMI)-1)), AMI); colnames(AMI) <- c("lag", "AMI")
-  tau <- minAMI #choose the tau with the first local minimum AMI
-  #tau <- AMI[AMI[,2]==min(AMI[1:5,2]),1] #choose the tau <=4 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
+  #tau <- minAMI #choose the tau with the first local minimum AMI
+  tau <-  AMI[AMI[,2]==min(AMI[1:6,2]),1] #choose the tau <=5 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
     results[((l-1)*4 + v),3] <- tau
   
   pAMI <- ggplot(AMI, aes(x=lag, y=AMI)) +
@@ -227,7 +297,7 @@ pLag <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
      theme_bw(base_size = 10) + # big text
      theme(legend.position = "none") 
  
-subplot_list[[((v-1)*4 + 2)]] = pLag
+#subplot_list[[((v-1)*4 + 2)]] = pLag
 
 
 
@@ -237,9 +307,9 @@ subplot_list[[((v-1)*4 + 2)]] = pLag
 A <- as.numeric(D[,3])
 
 #set optimal E for each MPG and the ESU levels
-maxE<-min(floor(sqrt(sum(complete.cases(A)))),15) #Maximum E to test based on the square root of the number of samples, also depends on tau
+maxE<-min(floor(sqrt(sum(complete.cases(A)))),10) #Maximum E to test based on the square root of the number of samples, also depends on tau
 
-Emat<-matrix(nrow=maxE-1, ncol=8); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5", "Tau6", "Tau7") #Matrix for storing output
+Emat<-matrix(nrow=maxE-1, ncol=6); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
 #Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
 
 
@@ -251,8 +321,6 @@ for(E in 2:maxE) {
   Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
   Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
   Emat[E-1,"Tau5"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=5)$rho
-  Emat[E-1,"Tau6"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=6)$rho
-  Emat[E-1,"Tau7"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=7)$rho
 }
 
 
@@ -268,18 +336,14 @@ maxrho=max(Emat[,"Tau4"], na.rm=TRUE)
     E4 <- min(Emat[(Emat[,"Tau4"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 maxrho=max(Emat[,"Tau5"], na.rm=TRUE)
     E5 <- min(Emat[(Emat[,"Tau5"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
-maxrho=max(Emat[,"Tau6"], na.rm=TRUE)
-    E6 <- min(Emat[(Emat[,"Tau6"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
-maxrho=max(Emat[,"Tau7"], na.rm=TRUE)
-    E7 <- min(Emat[(Emat[,"Tau7"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
 
 maxrho=max(Emat[,tau+1], na.rm=TRUE)    
 results[((l-1)*4 + v),4] <- min(Emat[(Emat[,(tau+1)]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
             
 Edf <- as.data.frame(Emat)
-Edf <- pivot_longer(Edf, cols=c(2:8))
+Edf <- pivot_longer(Edf, cols=c(2:6))
 Edf$chosen <- 0
-Edf$chosen [(Edf$E==E1 & Edf$name=="Tau1") | (Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4") | (Edf$E==E5 & Edf$name=="Tau5") | (Edf$E==E6 & Edf$name=="Tau6") | (Edf$E==E7 & Edf$name=="Tau7")] <- 1
+Edf$chosen [(Edf$E==E1 & Edf$name=="Tau1") | (Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4") | (Edf$E==E5 & Edf$name=="Tau5") ] <- 1
 
 #manual color codes for plot
 pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
@@ -289,7 +353,7 @@ pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
      theme_bw() +
      theme(legend.position = "none")
 
-subplot_list[[((v-1)*4 + 3)]] = pE 
+subplot_list[[((v-1)*4 + 2)]] = pE 
 
 
 
@@ -301,20 +365,18 @@ subplot_list[[((v-1)*4 + 3)]] = pE
 #Loop over the number of time steps into the future to make predictions from past observations. 
 #Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
 
-maxTP <- 50 #Maximum TP to test
+maxTP <- 20 #Maximum TP to test
 
-TPdf <- matrix(nrow=maxTP, ncol=8); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5", "Tau6", "Tau7") #Matrix for storing output
+TPdf <- matrix(nrow=maxTP, ncol=6); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
 TPdf[,"TP"] <- c(1:maxTP) 
 TPdf[,"Tau1"]<-SSR_check_signal(A=as.matrix(A), E=E1, tau=1, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau2"]<-SSR_check_signal(A=as.matrix(A), E=E2, tau=2, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau3"]<-SSR_check_signal(A=as.matrix(A), E=E3, tau=3, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau4"]<-SSR_check_signal(A=as.matrix(A), E=E4, tau=4, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 TPdf[,"Tau5"]<-SSR_check_signal(A=as.matrix(A), E=E5, tau=5, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
-TPdf[,"Tau6"]<-SSR_check_signal(A=as.matrix(A), E=E6, tau=6, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
-TPdf[,"Tau7"]<-SSR_check_signal(A=as.matrix(A), E=E7, tau=7, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
 
 TPdf <- as.data.frame(TPdf) 
-TPdf <- pivot_longer(TPdf, cols=c(2:8))
+TPdf <- pivot_longer(TPdf, cols=c(2:6))
 pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
      geom_line() +
      labs(x = "time steps to prediction", y = expression(rho)) +
@@ -328,7 +390,69 @@ pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
               legend.background = element_blank(),
               legend.key.size = unit(0.3, "cm"))
 
-subplot_list[[((v-1)*4 + 4)]] = pTP
+subplot_list[[((v-1)*4 + 3)]] = pTP
+
+
+
+#----------------------------------- Theta, T -----------------------------------
+#Determine the optimal theta for each tau*E combination and test that it is significantly different from zero 
+#This function doesn't work with NAs
+
+Dt <- cbind(as.numeric(D[,2]), as.numeric(D[,3]))
+Dt <- as.data.frame(Dt[complete.cases(Dt),])
+lib <- create_lib(Dt, 20)
+
+optEtau <- Edf[Edf[,4]==1,1:2]
+optEtau$name[optEtau$name=="Tau1"]<-1
+optEtau$name[optEtau$name=="Tau2"]<-2
+optEtau$name[optEtau$name=="Tau3"]<-3
+optEtau$name[optEtau$name=="Tau4"]<-4
+optEtau$name[optEtau$name=="Tau5"]<-5
+colnames(optEtau) <- NULL
+colnames(optEtau) <- c("E", "tau")
+optEtau$tau <- as.numeric(optEtau$tau)
+
+resultsT <- data.frame()
+### set environment for parallel computing
+### define function environments
+env_lib_ts <- c("tidyverse", "foreach", "rEDM", "glmnet")
+cl <- makeCluster(detectCores(), type="PSOCK")
+registerDoParallel(cl)
+
+system.time({ 
+theta_results <-  foreach(i=1:5, .combine=rbind, .packages=env_lib_ts) %dopar% {
+
+       test_nonlin_out <- test_nonlin(ts = Dt, lib = lib, E = as.numeric(optEtau[i,1]), tau = as.numeric(-optEtau[i,2]))
+       Tdf <- as.data.frame(cbind(test_nonlin_out$theta, test_nonlin_out$rho))
+       colnames(Tdf) <- c("theta", "rho")
+       Tdf$delta_rho <- test_nonlin_out$delta_rho
+       Tdf$delta_rho_p_val <- test_nonlin_out$delta_rho_p_value
+       Tdf$chosen <- 0
+       Tdf$chosen[(Tdf$theta==(test_nonlin_out$opt_theta))] <- 1
+       Tdf$E <- as.numeric(optEtau[i,1])
+       Tdf$tau <- as.numeric(-optEtau[i,2])
+       data.frame(Tdf) 
+       
+       }
+       
+}) #system.time
+stopCluster(cl)
+
+save(theta_results, file = paste("Output/Rdata/2_Nonlinearity/nonlinearity_theta_test.",level[l],"_",vars[v+2],".RData", sep = ""), compress = FALSE)  
+load(paste("Output/Rdata/2_Nonlinearity/nonlinearity_theta_test.",level[l],"_",vars[v+2],".RData", sep = ""))
+theta_results$tau <- -(theta_results$tau)
+theta_results$tau <- as.factor(theta_results$tau)
+pT <- ggplot(theta_results, aes(x=theta, y=rho, color=tau) ) +
+     geom_line() +
+     geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val<=0.05,], aes(x=theta, y=rho, color=tau), size=3) +
+  geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val > 0.05,], aes(x=theta, y=rho, color=tau), size=3, shape=1) +   
+  labs(x = "theta", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+subplot_list[[((v-1)*4 + 4)]] = pT
+
+
 
 }  #variables loop  
 
@@ -340,7 +464,7 @@ ggsave(filename = paste("Output/Figures/2_Nonlinearity/",level[l],"_diagnostics.
 
 } 
 
-saveRDS(results, file = "Output/Rdata/2_Nonlinearity/Diagnostic_results.RDS")
+saveRDS(theta_results, file = "Output/Rdata/2_Nonlinearity/Diagnostic_theta_results.RDS")
 
 ```
 
@@ -348,15 +472,12 @@ saveRDS(results, file = "Output/Rdata/2_Nonlinearity/Diagnostic_results.RDS")
 
 
 # Run diagnostics for each stock separately
-
-
-
 ```{R}
 
 rm(list=ls()) 
 load("Data/Rdata/stock_data_no_lags.Rdata")  
 
-results<-matrix(nrow=27, ncol=10); colnames(results)<-c("stock", "MPG",  "n4", "tau4", "E4", "rho4", "n5", "tau5", "E5", "rho5") #Storing output
+results<-matrix(nrow=27, ncol=11); colnames(results)<-c("stock", "MPG",  "n4", "tau4", "E4", "rho4", "n5", "tau5", "E5", "rho5", "sp_start_no") #Storing output
 
 sp <- 0
   rs4_subplot_list = list(); 
@@ -538,12 +659,12 @@ rs4_subplot_list[[((sp-1)*4 + 4)]] = pTP4
 
 
 
+
 #------------------------------------------------------------------------------------
 #for recspn5:
 tau <- min(5, tau5)
 A <- as.numeric(A5[,3])
 
-#set optimal E for each MPG and the ESU levels
 maxE<-min(floor(sqrt(sum(complete.cases(A)))),15) #Maximum E to test based on the square root of the number of samples, also depends on tau
 
  Emat<-matrix(nrow=maxE-1, ncol=6); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
@@ -627,6 +748,8 @@ pTP5 <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
 
 rs5_subplot_list[[((sp-1)*4 + 4)]] = pTP5
 
+results[i,11] <- ((sp-1)*4 + 1) #record the start number of the subplot (same for recspn4 and 5)
+
 }
 
 
@@ -636,6 +759,11 @@ ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn4_stock_level_diagn
 p5 <- marrangeGrob(rs5_subplot_list, nrow=4, ncol=4)
 ggsave(filename = paste("Output/Figures/2_Nonlinearity/recspn5_stock_level_diagnostic_plots.pdf", sep = ""), plot = p5, width = 9, height = 9, units = "in")
 
+
+#save results of stock-level diagnostic and subplot lists
+save(results, file = paste("Output/Rdata/2_Nonlinearity/recspn45_stock_level_diagnostic_results.Rdata", sep=""))
+save(rs4_subplot_list, file = paste("Output/Rdata/2_Nonlinearity/recspn4_stock_level_diagnostic_subplot_list.Rdata", sep=""))
+save(rs5_subplot_list, file = paste("Output/Rdata/2_Nonlinearity/recspn5_stock_level_diagnostic_subplot_list.Rdata", sep=""))
 ```
 
 ```{R}

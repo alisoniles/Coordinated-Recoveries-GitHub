@@ -142,7 +142,7 @@ load("Data/Rdata/block_data.Rdata")
       var_list$offset <- as.numeric(var_list$offset)
       rm("aa", "bb", "cc")
       
-      vars <- c("stk", "year", "salm.rec4n.0", "salm.rec5n.0", "salm.recspn4n.0", "salm.recspn5n.0", var_list$target) 
+      vars <- c("stk", "year", "salm.recspn4n.0", "salm.recspn5n.0", var_list$target) 
 
 #concatenate the stock time series together for each MPG and ESU to create input data frames for the CCM functions
 D_ESU <- as.matrix(rbind(block_data$'Bear Valley Creek'[vars], NA,  
@@ -352,7 +352,7 @@ names(DataClusters) <- DataClusterNames}
  
   
   
-#   #Groups based on clustering from Simplex analysis
+##   #Groups based on clustering from Simplex analysis
 #   #For recspn4n:
 # if(An_short=="recspn4"){
 # MFS_1 <- as.matrix(rbind(block_data$'Marsh Creek'[vars], NA,  
@@ -493,6 +493,9 @@ names(DataClusters) <- DataClusterNames}
 # }
 # 
 
+
+
+#CCM: MULTISPATIAL Test of convergence for each putative causal variable
 
 CCM_summary <- matrix(data=NA, nrow=1, ncol=17); colnames(CCM_summary) <- c("Lobs", "rho", "sdevrho", "lower", "upper", "model", "response_var", "causal_var", "pval", "E", "tau", "slope", "Lib", "level", "cat", "subcat", "offset")      
 
