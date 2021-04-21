@@ -1,0 +1,602 @@
+---
+title: "3_CORE_CCM_multispatial_surrogate_test"
+author: "Alison Iles"
+date: "4/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())  
+
+# load functions and dependent libraries
+source("0_CORE_prepareR.R")
+
+
+```
+
+
+
+## CCM: MULTISPATIAL Test of convergence for each putative causal variable
+Run multispatial convergent cross-mapping algorithm on two time series, A and B, to determine whether process A is a forcing process for process B based on two criteria: 1. if the terminal rho is significantly different from the rho at the minimum library size, and 2. if the terminal rho is significantly different compared to the rho for the twin surrogates. 
+This version optimizes E and tau for the response process, following Kawatsu 2021
+
+```{R}
+
+
+#add columns to list of putative forcing processes to store results
+FP_list[,5:12] <- matrix(NA, nrow = NROW(FP_list), ncol = 8)
+colnames(FP_list) <- c("FP", "cat", "subcat", "offset", 
+                              "level",
+                              "RP", "E", "tau", 
+                              "N", "termrho", "deltarho", "pval")     
+      
+
+### define function environments
+env_lib_ts <- c("tidyverse", "foreach", "rEDM", "multispatialCCM", "zoo")
+j <- 3; i <- 1
+cl <- makeCluster(detectCores(), type="PSOCK")
+registerDoParallel(cl) 
+system.time({  
+     
+  
+     foreach(j=1:nrow(ETT), .combine=rbind, .packages=env_lib_ts) %dopar% {
+          
+     subplot_list = list()
+     
+#load optimal embedding parameters for the response process
+     level <- ETT$level[j]
+     RP <- ETT$RP[j]
+     E <- ETT$E[j]
+     tau <- ETT$tau[j]     
+     
+     if (level=="ESU"){D_level <- data[,]}
+     if(level!="ESU"){D_level <- data[data$mpg==level,]}
+
+     CCM <- FP_list
+     CCM$level <- level
+     CCM$RP <- RP
+     CCM$E <- E
+     CCM$tau <- tau
+    
+     for(i in 1:nrow(CCM)){  
+     FP <- CCM[i,1] # for each putative causal variable (forcing process) 
+     D <- cbind(D_level$year, D_level[FP],D_level[RP])
+     D <- CCM_shape_block_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+
+          tryCatch({
+               CCMboot <- CCM_boot(D[,2], D[,3], E=E, tau=tau)
+               CCM$N[i] <- length(CCMboot$Aest)-sum(is.na(CCMboot$Aest)) #the number of estimated values of RP from FP using CCM, for the longest library length considered
+               CCM$termrho[i] <- CCMboot$rho[length(CCMboot$rho)] #terminal rho - rho for CCM at largest library size
+               CCM$deltarho[i] <- CCMboot$rho[length(CCMboot$rho)]-CCMboot$rho[1] #delta rho - the change in rho from smallest to largest library size
+               CCM$pval[i] <- ccmtest_oneway(CCMboot)
+          }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")}) #if error in CCM_boot (usually due to to small sample size, then move on to next variable)
+     
+     }#FP loop
+
+     save(CCM, file = paste("Output/Rdata/3_CCM/multispatial_CCM",level,RP,".Rdata", sep="_"))
+}#for each row of ETT
+
+}) #system.time
+stopCluster(cl)
+
+```
+
+
+```{R}
+#shape causal variable list, output data frame and input data frames for the CCM functions
+
+#Choose the focal variable to run the analysis for
+for(a in (1:2)){
+  An_list <-  c("recspn4", "recspn")
+  An <- An_list[a]
+  An_short_list <- c("RS4", "RS5")
+  An_short <- An_short_list[a]
+
+for(l in (1:4)){
+  level_list <- c("MFS", "IMN", "UPS","ESU")
+  level <- level_list[l]
+
+
+
+CCM_summary <- matrix(data=NA, nrow=1, ncol=17); colnames(CCM_summary) <- c("Lobs", "rho", "sdevrho", "lower", "upper", "model", "response_var", "causal_var", "pval", "E", "tau", "slope", "Lib", "level", "cat", "subcat", "offset")      
+
+unique_cat <- unique(FP_list$cat) #for each unique putative causal variable category
+c <- 2; s <- 2; i <- 1; dc <- 2
+#Loop through all the lags of each putative causal variable and test for causality for the four main time series
+for (c in 1:length(unique_cat)){
+    cat_name <- unique_cat[c]    
+    FP_list_cat <- FP_list[FP_list$cat==cat_name,]
+    unique_subcat <- unique(FP_list_cat$subcat)
+    for (s in 1:length(unique_subcat)){  #for each unique subcategory of the causal variable category 
+        FP_list_subcat <- FP_list_cat[FP_list_cat$subcat==unique_subcat[s],]
+        subplot_list = list()
+        for(i in nrow(FP_list_subcat):1){  #for each offset of the causal variable subcategory
+        Bn <- FP_list_subcat[i,1]
+
+tic()
+        #find optimal E for putative causal variable
+        D <- as.matrix(block_data$'Wenaha River'[c("year", Bn)])
+        maxE<-floor(sqrt(sum(complete.cases(D)))) #Maximum E to test: E ≤ sqrt(n)
+        Emat<-matrix(nrow=maxE-1, ncol=2); colnames(Emat)<-c("E", "Bn") #Matrix for storing output
+            #Loop over potential E values and calculate predictive ability of each process for its own dynamics
+            for(E in 2:maxE) {
+              #Uses defaults of looking forward one prediction step (predstep)
+              #And using time lag intervals of one time step (tau)
+              Emat[E-1,"E"] <- E
+              Emat[E-1,"Bn"]<-SSR_pred_boot(A=D, E=E, predstep=1, tau=1)$rho
+            }
+        #We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+        #n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+        maxrho=max(Emat[,"Bn"], na.rm=TRUE)
+        EB <- min(Emat[(Emat[,"Bn"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+
+        
+        #run the multispatial CCM for each variable at each organizational level (ESU, MPGs and clusters) and record results
+        for(dc in 1:length(DataClusters)){
+          data <- DataClusters[[dc]]
+          AB <- shape_block_data(data[,c("year", An, Bn)], min_stock_size = 20)
+          if(is.null(AB)==FALSE){
+                for(tau in 1:3){
+                          CCM <- CCM_boot_df_and_sig_test(A=AB[,2], B=AB[,3], An=An, Bn=Bn, EB=EB, tau=tau)
+                          CCM$Lib <- c("min", "max")
+                          CCM$level <- DataClusterNames[dc]
+                          if(tau==1){ CCM_all_tau <-CCM }
+                          if(tau>1){ CCM_all_tau <- rbind(CCM_all_tau, CCM) }
+                }
+          CCM_all_tau$tau <- as.character(CCM_all_tau$tau)
+          CCM_all_tau <- CCM_all_tau[CCM_all_tau$Lib=="max",]
+          CCM_all_tau$cat <- FP_list_subcat[i,2]
+          CCM_all_tau$subcat <- FP_list_subcat[i,3]
+          CCM_all_tau$offset <- FP_list_subcat[i,4]
+                    CCM_summary <- rbind(CCM_summary, CCM_all_tau)
+          }
+        }
+        
+
+
+}
+print(Bn)          
+toc()         
+}               
+}
+
+
+save(CCM_summary, file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level, "_and_clusters_based_on_stock_CCM_", An_short, ".Rdata", sep=""))
+
+
+}#level loop
+}#An loop
+```
+
+
+
+
+#figures 
+```{R}
+rm(list=ls()) 
+level="ESU"
+load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+CCM_4 <- CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+CCM_5 <- CCM_summary[-1,]
+CCM_summary <- rbind(CCM_4, CCM_5)
+CCM_summary$rec <- NA
+CCM_summary$rec[CCM_summary$response_var=="salm.recspn4n.0"] <- 4
+CCM_summary$rec[CCM_summary$response_var=="salm.recspn5n.0"] <- 5
+
+harv_CCM <- CCM_summary[CCM_summary$cat=="harv",]
+indexCCM <- c(which(harv_CCM$cat=="harv" & harv_CCM$rec==harv_CCM$offset) , 
+                    which(harv_CCM$causal_var=="harv.SPSS.0"))
+harv_CCM <- harv_CCM[indexCCM,]
+harv_CCM$vargroup <- "fisheries harvest"
+
+hatch_CCM <- CCM_summary[CCM_summary$cat=="hatch",]
+hatch_CCM$vargroup <- "hatchery releases"
+
+biotic_CCM <- CCM_summary[CCM_summary$cat=="orca" | CCM_summary$cat=="csl" | CCM_summary$cat=="ssl" | CCM_summary$cat=="hseal",]
+biotic_CCM <- biotic_CCM[c(which(biotic_CCM$rec==biotic_CCM$offset)),]
+biotic_CCM$vargroup <- "predation return year"
+
+abiotic_CCM <- CCM_summary[CCM_summary$cat=="pdo" | CCM_summary$cat=="npgo" | CCM_summary$cat=="upw" | CCM_summary$cat=="arc",]
+abiotic_return_year_CCM <- abiotic_CCM[c(which(abiotic_CCM$rec==abiotic_CCM$offset)),]
+abiotic_return_year_CCM$vargroup <- "return year"
+
+abiotic_first_ocean_year_CCM <- abiotic_CCM[abiotic_CCM$offset==2,]
+abiotic_first_ocean_year_CCM$vargroup <- "first ocean year"
+
+#flow_CCM <- CCM_summary[CCM_summary$cat=="flow",]
+#flow_CCM$vargroup <- "river conditions"
+
+CCM <- rbind(harv_CCM, hatch_CCM, biotic_CCM, abiotic_first_ocean_year_CCM, abiotic_return_year_CCM)
+#CCM <- CCM[CCM$level=="D_ESU" | CCM$level=="D_MFS" | CCM$level=="D_IMN" |CCM$level=="D_UPS",]
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv") #csv file containing the manual color codes and labels for plots 
+     mcc <- manual_color_codes[,1:3]
+    
+unique_cat <- unique(CCM$cat) #for each unique putative causal variable category
+
+for(i in 1:length(unique_cat)){
+cat <- unique_cat[i]
+Dp <- CCM[CCM$cat==cat,]     
+Dp <- Dp[Dp$pval<=0.8,]
+
+p1 <- ggplot(Dp) + 
+    geom_point(aes(x=pval, y=rho, color=subcat, shape=tau)) +
+    #geom_errorbar(aes(x=pval, y=rho, color=subcat, ymin=lower, ymax=upper), width=0.01) +
+    scale_x_continuous(name=expression(paste("p-value terminal ", {rho}, " > starting ", {rho})), limits=c(0, 0.4), breaks=seq(0,0.4,0.1), labels=c("0", "0.1", "0.2", "0.3", "0.4")) +
+    scale_y_continuous(name=expression(paste("Terminal cross-mapping correlation, ", {rho})), limits=c(-0.2, 0.8), breaks=seq(-0.2,0.8,0.2)) +
+    geom_vline(aes(xintercept=0.05), colour='#999999') +
+    theme_bw() + 
+    guides(col = guide_legend(ncol=1)) +
+    labs(title= paste("CCM - ", cat,  Dp$vargroup[1])) + 
+    #scale_color_manual(values = mcc[,1], name="subcat", breaks = mcc[,2], labels = mcc[,3]) +
+    facet_grid(cat*vargroup*rec~level) +
+       theme(strip.background = element_blank(), strip.placement = "outside")
+print(p1)
+ggsave(filename = paste("Output/Figures/3_CCM/Multispatial/", level, "_and_smaller_clusters_", cat, ".pdf", sep=""), plot = p1, width = 10, height = 7, units = "in") 
+}
+
+
+
+
+```
+
+
+
+
+#Data explorations
+```{R}
+rm(list=ls()) 
+level="ESU"
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+CCM_4 <- CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+CCM_5 <- CCM_summary[-1,]
+ESU <- rbind(CCM_4, CCM_5)
+ESU <- ESU[ESU$level!="MFS" & ESU$level!="UPS" & ESU$level!="IMN",]
+
+level="MFS"
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+CCM_4 <- CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+CCM_5 <- CCM_summary[-1,]
+MFS <- rbind(CCM_4, CCM_5)
+
+level="IMN"
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+CCM_4 <- CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+CCM_5 <- CCM_summary[-1,]
+IMN <- rbind(CCM_4, CCM_5)
+
+level="UPS"
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn4.Rdata", sep=""))
+CCM_4 <- CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/multispatial/3_multispatial_results_", level,"_and_smaller_clusters_recspn5.Rdata", sep=""))
+CCM_5 <- CCM_summary[-1,]
+UPS <- rbind(CCM_4, CCM_5)
+
+level="stock"
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn4.Rdata", sep=""))
+CCM_4 <- stock_CCM_summary[-1,]
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn5.Rdata", sep=""))
+CCM_5 <- stock_CCM_summary[-1,]
+Stock <- rbind(CCM_4, CCM_5)
+row.names(Stock) <- NULL
+colnames(Stock)[colnames(Stock) == 'stock'] <- 'level'
+
+CCM <- rbind(ESU,MFS,IMN,UPS)
+CCM <- CCM[,c(-1, -3, -4, -5, -6, -12, -13)]
+row.names(CCM) <- NULL
+CCM <- CCM[c("level", "response_var", "causal_var", "cat", "subcat", "offset", "E", "tau", "rho", "pval")]
+CCM <- rbind(Stock,CCM)
+
+rm(CCM_4, CCM_5, CCM_summary, ESU, MFS, IMN, UPS, level, Stock, stock_CCM_summary)
+
+CCM$rec <- NA
+CCM$rec[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
+CCM$rec[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
+
+CCM <- CCM[CCM$pval<=0.1,]
+
+CCM$rho <- as.numeric(CCM$rho)
+CCM$pval <- as.numeric(CCM$pval)
+
+CCM$leveltype <- "Stock"
+CCM$leveltype[CCM$level =="MFS" |CCM$level =="UPS" | CCM$level =="IMN"] <- "MPGs"
+CCM$leveltype[CCM$level =="D4_1" |CCM$level =="D4_2" | CCM$level =="D4_3"| CCM$level =="D4_4"| CCM$level =="D4_5"] <- "ESU heirarchical"
+CCM$leveltype[CCM$level =="MFS_1" |CCM$level =="MFS_2" | CCM$level =="IMN_1"| CCM$level =="IMN_2" | CCM$level =="UPS_1"| CCM$level =="UPS_2"| CCM$level =="UPS_3"] <- "MPGs heirarchical"
+CCM$leveltype[CCM$level =="ESU"] <- "ESU"
+
+#only include the tau for each variable that optimizes rho
+CCM <- CCM %>%
+  group_by(level, leveltype, response_var, rec, causal_var, cat, subcat, offset, E) %>%
+  summarize(max_rho = max(rho, na.rm = TRUE))
+
+#only include the offset for each variable that optimizes rho
+CCM <- CCM %>%
+  group_by(level, leveltype, response_var, rec, cat, subcat, E) %>%
+  summarize(max_rho = max(max_rho, na.rm = TRUE))
+
+
+#plot as treemaps
+
+#Whole ESU and MPG
+CCMt <- CCM[CCM$leveltype!="Stock",]
+          rec <- CCMt$rec
+          leveltype <- CCMt$leveltype
+          value <- as.numeric(CCMt$max_rho)
+    data <- data.frame(rec,leveltype,value)
+    
+    p <- treemap(data,
+                index=c("rec","leveltype"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="Comparison of different stock groupings",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+
+    
+    
+    
+    
+#Only MPG grouping of stocks for 5 and 4 year old separately
+    
+    MPGh4 <- CCM[CCM$leveltype=="MPGs" & CCM$rec=="4yo",]
+          level <- MPGh4$level
+          cat <- MPGh4$cat
+          subcat <- MPGh4$subcat
+          value <- MPGh4$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    p <- treemap(data,
+                index=c("level","cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG  grouping of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    MPGh5 <- CCM[CCM$leveltype=="MPGs" & CCM$rec=="5yo",]
+          level <- MPGh5$level
+          cat <- MPGh5$cat
+          subcat <- MPGh5$subcat
+          value <- MPGh5$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    p <- treemap(data,
+                index=c("level","cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG grouping of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+  
+     
+ #cats and subcats for each level of each MPG
+    levels <- c("MFS", "IMN", "UPS")
+    recs <- c("4yo", "5yo")
+
+    for(l in 1:length(levels)){
+          level <- levels[l]      
+          
+          for(k in 1:2){
+            rec <- recs[k]
+            
+            D <- CCM[CCM$level==level,]
+            D <- D[D$rec==rec,]
+            
+              if (nrow(D) == 0){
+              next
+              }
+            
+                cat <- D$cat
+                subcat <- D$causal_var
+                value <- D$max_rho
+                data <- data.frame(cat,subcat,value)
+                
+              
+                treemap(data,
+                            index=c("cat","subcat"),
+                            vSize="value",
+                            type="index",
+                            palette = "-RdYlBu",
+                            title=paste("Significant causal variables in ", level, " for ", rec, sep=""),
+                            align.labels=list(
+                              c("center", "top"), 
+                              c("left", "bottom")
+                            )  
+                          )  
+                
+          }
+    }
+     
+#Only for individual stocks
+    Stock4 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="4yo",]
+          level <- Stock4$level
+          cat <- Stock4$cat
+          subcat <- Stock4$subcat
+          value <- Stock4$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title="Stock level CCM of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    
+    Stock5 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="5yo",]
+          level <- Stock5$level
+          cat <- Stock5$cat
+          subcat <- Stock5$subcat
+          value <- Stock5$max_rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title="Stock level CCM of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+     
+```
+
+
+
+
+```{R}
+    
+#Only MPG heirarchical grouping of stocks for 5 and 4 year old separately
+    
+    MPGh4 <- CCM[CCM$leveltype=="MPGs heirarchical" & CCM$rec=="4yo",]
+          level <- MPGh4$level
+          cat <- MPGh4$cat
+          subcat <- MPGh4$subcat
+          value <- MPGh4$rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG heirarchical grouping of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    
+    MPGh5 <- CCM[CCM$leveltype=="MPGs heirarchical" & CCM$rec=="5yo",]
+          level <- MPGh5$level
+          cat <- MPGh5$cat
+          subcat <- MPGh5$subcat
+          value <- MPGh5$rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="MPG heirarchical grouping of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+  
+     
+ #cats and subcats for each level of each MPG
+    levels <- c("MFS_1", "MFS_2", "IMN_1", "IMN_2", "UPS_1", "UPS_2", "UPS_3")
+    recs <- c("4yo", "5yo")
+
+    for(l in 1:length(levels)){
+          level <- levels[l]      
+          
+          for(k in 1:2){
+            rec <- recs[k]
+            
+            D <- CCM[CCM$level==level,]
+            D <- D[D$rec==rec,]
+            
+              if (nrow(D) == 0){
+              next
+              }
+            
+                cat <- D$cat
+                subcat <- D$subcat
+                value <- D$rho
+                data <- data.frame(cat,subcat,value)
+                
+              
+                treemap(data,
+                            index=c("cat","subcat"),
+                            vSize="value",
+                            type="index",
+                            palette = "Set2",
+                            title=paste("Significant causal variables in ", level, " for ", rec, sep=""),
+                            align.labels=list(
+                              c("center", "top"), 
+                              c("left", "bottom")
+                            )  
+                          )  
+                
+          }
+      }
+        
+    
+#Only for individual stocks
+    Stock4 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="4yo",]
+          level <- Stock4$level
+          cat <- Stock4$cat
+          subcat <- Stock4$subcat
+          value <- Stock4$rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="Stock level grouping of 4yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    
+    Stock5 <- CCM[CCM$leveltype=="Stock" & CCM$rec=="5yo",]
+          level <- Stock5$level
+          cat <- Stock5$cat
+          subcat <- Stock5$subcat
+          value <- Stock5$rho
+    data <- data.frame(level,cat,subcat,value)
+    
+    p <- treemap(data,
+                index=c("level","cat"),
+                vSize="value",
+                type="index",
+                palette = "Set2",
+                bg.labels=c("white"),
+                title="Stock level grouping of 5yo recruits per spawner",
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+  
+      
+    
+          
+```

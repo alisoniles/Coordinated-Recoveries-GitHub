@@ -1,0 +1,227 @@
+---
+title: "1_EDM_Preprocess_data"
+author: "Alison Iles"
+date: "4/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+#load data 
+```{R}
+rm(list=ls())  
+#load Chinook stock data
+data <- read.csv("Data/csv_data/CORE_2020_data_stock.csv")
+    data <- data[,c(1:4,7:8,11)]
+    stock_data <- split(data, data$stk)  
+
+env_data <- read.csv("Data/csv_data/SRSS_env_seasonal.csv") 
+esu_data <- read.csv("Data/csv_data/CORE_2020_data_ESU.csv") 
+mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
+    # Change the peak flow date to day of year
+    startyrdate <- as.Date(paste(as.character(mpg_data$year),"-01-01",sep=""))
+    peakflowdate <- as.Date(mpg_data$flow.peakdate)
+    mpg_data$flow.peakday <- as.numeric(peakflowdate - startyrdate)
+    mpg_data$flow.peakdate <- NULL
+
+# load functions
+source("0_CORE_functions.R")
+```
+
+```{R}
+# To focus on one stock to trouble shoot the code
+#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+
+#This function normalizes each stock's time series BEFORE joining together which puts them on the same scale. This preserves the quasicyclic
+#behavior of each stock, but corrects for the relative magnitude across different stocks. 
+
+normalize_stock <- function(stock_df) {
+  stock_df$spwnn <- normalize(stock_df$spawn_tot)
+  stock_df$rec4n <- normalize(stock_df$rec4)
+  stock_df$rec5n <- normalize(stock_df$rec5)
+  stock_df$harv.stock.0 <- normalize(stock_df$harvest)
+  return(stock_df)
+}
+
+stock_data <- lapply(stock_data, normalize_stock)
+
+
+
+# #This function lags the response variables for lagged embeddings
+# make_lagged_resp_var <- function(stock_df, maxlag=10)
+# {
+#   r4 <- stock_df$rec4
+#   for(i in c(1:maxlag)){
+#      df <- c(matrix(NA, nrow=1, ncol=i), r4[1:(length(r4)-i)])
+#      df.name <- paste("rec4_-",i, sep="")
+#      stock_df[, df.name] <- df
+#   }
+#   r5 <- stock_df$rec5
+#   for(i in c(1:maxlag)){
+#      df <- c(matrix(NA, nrow=1, ncol=i), r5[1:(length(r5)-i)])
+#      df.name <- paste("rec5_-",i, sep="")
+#      stock_df[, df.name] <- df
+#   }
+#   r4n <- stock_df$rec4n
+#   for(i in c(1:maxlag)){
+#      df <- c(matrix(NA, nrow=1, ncol=i), r4[1:(length(r4n)-i)])
+#      df.name <- paste("rec4n_-",i, sep="")
+#      stock_df[, df.name] <- df
+#   }
+#   r5n <- stock_df$rec5n
+#   for(i in c(1:maxlag)){
+#      df <- c(matrix(NA, nrow=1, ncol=i), r5[1:(length(r5n)-i)])
+#      df.name <- paste("rec5n_-",i, sep="")
+#      stock_df[, df.name] <- df
+#   }
+#    return(stock_df)
+# }
+# stock_data <- lapply(stock_data, function(stock_df) {make_lagged_resp_var(stock_df, maxlag=25)})
+
+#This function lines up all the putative causal variable time series with the brood year offset by the chosen number of years
+make_block <- function(stock_df, env_data, esu_data)
+    {
+        # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
+        hatch_names <- c("hatch.spring", "hatch.summer", "hatch.total", "hatch.SNAK", "hatch.COL", "hatch.CAOR", "hatch.WA", "hatch.SAL", "hatch.BC", "hatch.SEAK", "hatch.WAK", "hatch.sum", "hatch.all")
+        hatch_data <- esu_data[, hatch_names]
+        for(i in c(1:3)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(hatch_data)))
+              df[index_in_stock_df,] <- hatch_data[index_in_spp_data, ]
+              df.colnames <- paste(hatch_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+              
+        }
+        
+        # offset harvest data from 4 to 5 years after brood year
+        harv_names <- c("harv.PACtot", "harv.CRsport", "harv.COL", "harv.ORWAsport", "harv.ORWA", "harv.SEAK", "harv.NBC", "harv.WCVI")
+        harv_data <- esu_data[, harv_names]
+        for(i in c(4:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(harv_data)))
+              df[index_in_stock_df,] <- harv_data[index_in_spp_data, ]
+              df.colnames <- paste(harv_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+              
+        }
+        
+        # offset pinniped data from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns
+        csl_names <- c("csl.haulout", "csl.males", "csl.males6", "csl.bonn", "csl.COL", "csl.WA", "csl.SalishSea") 
+        csl_data <- esu_data[, csl_names]
+        for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(csl_data)))
+              df[index_in_stock_df,] <- csl_data[index_in_spp_data, ]
+              df.colnames <- paste(csl_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+        
+        ssl_names <- c("ssl.WA", "ssl.SalishSea", "ssl.WCVIBC", "ssl.SEAK", "ssl.WAK", "ssl.rookORraw", "ssl.bonn")          
+        ssl_data <- esu_data[, ssl_names]
+            for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(ssl_data)))
+              df[index_in_stock_df,] <- ssl_data[index_in_spp_data, ]
+              df.colnames <- paste(ssl_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+            }
+        
+        hseal_names <- c("hseal.COL", "hseal.WA", "hseal.SalishSea", "hseal.WCVIBC")
+        hseal_data <- esu_data[, hseal_names]
+            for(i in c(2:5)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(hseal_data)))
+              df[index_in_stock_df,] <- hseal_data[index_in_spp_data, ]
+              df.colnames <- paste(hseal_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+            }
+
+        # offset CSL pup data from 2 to 5 years after brood year. Add 6 years as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
+        CSL_pups_data <- esu_data[, "csl.pups"]
+        for(i in c(8:11)) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(CSL_pups_data)))
+              df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data ]
+              df.colnames <- paste("csl.pups", (i-6), sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+        
+        # offset orca data from 4 to 5 years after brood year - assuming orcas just eat the returning fish
+        orca_names <- c( "orca.SRKWpodJ", "orca.SRKWpodK", "orca.SRKWpodL", "orca.SRKWpodKL", "orca.SRKWpodJKL", "orca.SRKWdeathsJKL", "orca.SRKWbirthsJKL", "orca.NRKW", "orca.SEAK", "orca.WAK")
+        orca_data <- esu_data[, orca_names]
+        for(i in 4:5) { 
+              desired_years <- stock_df$year + i
+              index_in_spp_data <- match(desired_years, esu_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+                     
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(orca_data)))
+              df[index_in_stock_df,] <- orca_data[index_in_spp_data, ]
+              df.colnames <- paste(orca_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+
+        # line up ocean environmental data at ESU level
+        # offset environmental data from 2 to 5 years after brood year as these are the ocean years
+        env_names <- names(env_data)[2:length(names(env_data))]  
+        for(i in 2:5) { 
+              desired_years <- stock_df$year + i
+              index_in_env_data <- match(desired_years, env_data$year)
+              index_in_stock_df <- 1:length(desired_years)
+        
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(env_data)-1))
+              df[index_in_stock_df,] <- env_data[index_in_env_data, 2:NCOL(env_data)]
+              df.colnames <- paste(env_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+        
+
+        # line up river flow data at MPG level
+        desired_mpg <- as.character(stock_df$mpg[[1]])
+        mpg_tempdata <- mpg_data[mpg_data$mpg==desired_mpg,]
+        mpg_tempdata$mpg <- NULL
+        mpgdata_names <- c("flow.mean", "flow.peak", "flow.gageht", "flow.peakday")
+
+        for (i in 0:5) {
+              desired_years <- stock_df$year + i
+              index_in_mpg_data <- match(desired_years, mpg_tempdata$year)
+              index_in_stock_df <- 1:length(desired_years)
+              
+              df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(mpg_tempdata)-1))
+              df[index_in_stock_df,] <- mpg_tempdata[index_in_mpg_data, 2:NCOL(mpg_tempdata)]
+              df.colnames <- paste(mpgdata_names, i, sep = ".")
+              stock_df[, df.colnames] <- df
+        }
+        
+        return(stock_df)
+    }
+
+block_data <- lapply(stock_data, function(stock_df) {make_block(stock_df, env_data, esu_data)})
+
+# unsplit the different stock to make one large data table and normalize    
+block <- unsplit(block_data, data$stk)
+
+#normalize the original data AFTER joining (not the already normalized ts), which doesn't put each stock on the same scale as every other stock
+norm_block_data <- cbind(block[,1:3], normalize(block[,4:7]), block[,8:11], normalize(block[,12:NCOL(block)]))
+
+# save and return
+    save(block, file = "Data/Rdata/block_data.Rdata")
+    save(norm_block_data, file = "Data/Rdata/norm_block_data.Rdata")
+
+```
+
