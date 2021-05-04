@@ -16,6 +16,7 @@ library(zoo)
 library(ggplot2)
 library(ggforce)
 library(gridExtra)
+library(foreach)
 library(parallel)
 library(doParallel)
 
@@ -38,7 +39,7 @@ normalize <- function(block)
 
 
 #Function to remove to extra NAs, but leave one NA between each stock's data in an MPG
-shape_stock_data <- function(D, min_stock_size = 20) {
+shape_stock_data <- function(D, min_stock_size = 10) {
   Dcc <- D[complete.cases(D[,3]),] 
   
   #get library of beginning and end points of each chunk of data
@@ -59,14 +60,14 @@ shape_stock_data <- function(D, min_stock_size = 20) {
 
 
 #Create library list for EDM that identifies the beginning and end points of each chunk of data combined into the same embedding. Year must be in the first column of the time series. Complete cases only. Removes sections that are not continuous for at least 'cont_tp' time points.
-create_lib <- function(D, min_stock_size)
+create_lib <- function(D, min_cont_tp)
 {
   lib <- matrix(NA, nrow = length(which(diff(D$year)!=1))+1, ncol = 2) 
   lib[,1] <- c(1, which(diff(D$year)!=1)+1)
   lib[,2] <- c(which(diff(D$year)!=1), nrow(D))
   
   minlib <- lib[,2]-lib[,1] #only include in the library the sections of data that are continuous for at least 'cont_tp' time points. 
-  lib <- lib[minlib>=min_stock_size,] 
+  lib <- lib[minlib>=min_cont_tp,] 
   
   return(lib)
 }
@@ -186,42 +187,38 @@ find_opt_theta  <- function(block, columns_names=columns_names, lib=t(c(1,nrow(b
 
 #Function to remove to extra NAs, but leave one NA between each stock's data in an MPG
 #'data' with columns: year, forcing process and response process
-CCM_shape_block_data <- function(data, min_stock_size = 10) {
+CCM_shape_block_data <- function(data, min_cont_ts = 10) {
+
+  data <- rbind(rep(NA, ncol(data)),data) #add an initial row of NA so the difference function works for the first row
   
-  data <- rbind(c(NA,NA,NA),data) #add an initial row of NA so the difference function works for the first row
-  
-  dataNA <- (is.na(data[,3]) | is.na(data[,2])) # locate NA
-  data[dataNA,1:3] <- NA
+  dataNA <- !complete.cases(data) # locate NA
+  data[dataNA,] <- NA
   rownames(data) <- NULL
   
   #record the beginning and endpoints of each data chunk
-  CC <- complete.cases(data[,2])  
+  CC <- complete.cases(data[,1])  
   lib <- matrix(NA, nrow = length(which(diff(CC)==1)), ncol = 2)
   lib[,1] <- which(diff(CC)==1)+1
   lib[,2] <- which(diff(CC)==-1)
   colnames(lib) <- c("lower", "upper")
   
-  #only include in the library the sections of data that are continuous for at least 20 time points. 
+  #only include in the library the sections of data that are continuous for at least min_cont_ts time points. 
   minlib <- lib[,2]-lib[,1]+1
   #if there are no library chunks long enough, then return error
-  if(sum(minlib>=min_stock_size)<=1){
+  if(sum(minlib>=min_cont_ts)<=1){
     print("Error - data chunks are too small for the given E and tau")
     return()
   }
-  lib <- as.matrix(lib[(minlib>=min_stock_size),])
+  lib <- as.matrix(lib[(minlib>=min_cont_ts),])
   
-  x <- c(NA, NA, NA)
+  x <- rep(NA, ncol(data))
   for (r in 1:nrow(lib)){
     xtmp <- data[lib[r,1]:lib[r,2],]
-    x <- rbind(x,c(NA, NA, NA),xtmp)}
+    x <- rbind(x,rep(NA, ncol(data)),xtmp)}
   data <- (x[3:nrow(x),])
   data <- as.data.frame(data)
   rownames(data) <- NULL
   
-  datacolnames <- colnames(data)
-  data <- as.matrix(data)
-  data <- cbind(as.numeric(data[,1]), as.numeric(data[,2]), as.numeric(data[,3]))
-  colnames(data) <- datacolnames
   return(data)
 }
 

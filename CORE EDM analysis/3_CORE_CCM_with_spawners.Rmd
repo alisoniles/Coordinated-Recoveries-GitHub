@@ -1,0 +1,227 @@
+---
+title: "3_CORE_CCM_with_spawners"
+author: "Alison Iles"
+date: "4/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())  
+
+# load functions and dependent libraries
+source("0_CORE_prepareR.R")
+
+
+```
+
+
+## CCM using the functions from the sockeye paper
+This function performs ccm at the STOCK level only using only the number of recruits (no lags) and the number of spawners in the embedding to forecast each putative causal variable, so it does not optimize the embedding dimension to the recruit data. This function does not evaluate CCM based on convergence or significant difference from surrogate time series. It just considers whether terminal rho is significantly different from zero. 
+
+Switch all 'rec4' to 'rec5' to analyze the other aged recruits 
+```{R}
+#stock_df <- block_data[[15]]
+#env_var <- env_names[2]
+compute_ccm <- function(block_data)
+{
+     env_names <- FP_list$FP
+     
+     ccm_table <- do.call(rbind, lapply(block_data, function(stock_df) {
+          valid <- is.finite(stock_df$rec5n) & is.finite(stock_df$spwnn)
+          print(stock_df$stk[1])
+          block <- stock_df[valid,]
+          
+              ccm_rhos <- do.call(cbind, lapply(env_names, function(env_var) {
+                   tmpblock <- cbind(block$year, block$rec5n, block$spwnn, block[env_var])
+                   colnames(tmpblock) <- c("year","rec5n", "spwnn", env_var)
+                   tmpblock <- tmpblock[complete.cases(tmpblock),]
+                   output <- block_lnlp(tmpblock, tp = 0, target_column = env_var, 
+                                        columns = c("rec5n", "spwnn"), silent = TRUE)
+                   return(output$rho)
+              }))
+              
+          colnames(ccm_rhos) <- env_names
+          ccm_rhos <- as.data.frame(ccm_rhos)
+          ccm_rhos <- cbind(N = sum(valid), ccm_rhos)
+          return(ccm_rhos)
+     }))
+     
+     rownames(ccm_table) <- names(block_data)
+     save(ccm_table, file = "results_rec5_ccm.Rdata")
+     return()
+}
+
+print_ccm_table <- function()
+{
+     load("results_rec5_ccm.Rdata")
+     ccm_table <- cbind("N" = ccm_table$N,
+                        "95% p" = tanh(qnorm(0.95, sd = 1/sqrt(ccm_table$N - 3))), 
+                        ccm_table[,2:NCOL(ccm_table)])
+     my_table <- xtable(ccm_table, digits = 3)
+     print(my_table, type = "html", file = "ccm_rec5_table.html")
+     return()
+}
+
+
+block_data <- split(data, data$stk)  
+block_data[[5]] <- NULL #remove Chamberlain Creek
+block_data[[15]] <- NULL #remove North Fork Salmon River
+compute_ccm(block_data)
+print_ccm_table(
+)
+```
+
+
+
+
+
+## CCM using block_lnlp, optimal E for RP including the number of effective spawners in the embedding of the CCM
+
+Optimizes E and tau for the response process, following Kawatsu 2021
+
+```{R}
+library(rstatix)
+
+#add columns to list of putative forcing processes to store results
+FP_list[,5:12] <- matrix(NA, nrow = NROW(FP_list), ncol = 8)
+colnames(FP_list) <- c("FP", "cat", "subcat", "offset", 
+                              "level",
+                              "RP", "E", "tau", 
+                              "N", "termrho", "deltarho", "pval")     
+
+j <- 5; i <- 259
+
+ for(j in 1:2){   #1:NROW(ETT) load optimal embedding parameters for the response process
+     level <- ETT$level[j]
+     RP <- ETT$RP[j]
+     E <- ETT$E[j]
+     tau <- ETT$tau[j]     
+     
+     #get data block
+     if(level=="ESU"){D_level <- data[,]}
+     if(level!="ESU"){D_level <- data[data$mpg==level,]}
+
+### define function environments to run in parallel
+registerDoParallel(8)  # use multicore, set to the number of our cores
+     system.time({  
+     R <- foreach(i=1:nrow(FP_list), .combine=rbind) %dopar% {    #FP loop nrow(FP_list)
+
+#Set up data block and library
+           FP <- FP_list$FP[i] #forcing process to be tested
+           D <- cbind(D_level$year, D_level[FP], D_level$spwnn, D_level[RP])
+           colnames(D) <- c("year","FP","spwnn", "RP")
+           D_RP_lag <- make_block(D, columns="RP", max_lag=E-1, tau=-abs(tau))
+           D <- cbind(D[(E-1):nrow(D),1:3], D_RP_lag)
+           D <- CCM_shape_block_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+           
+           tryCatch({
+                   embedlibrarynames <- c(colnames(D)[4:ncol(D)], colnames(D)[3])
+         #Run regular CCM ignoring breaks between stocks! Does include spawners in the embedding though  
+                   DCCM <- D[complete.cases(D),] 
+             cmap <- CCM(dataFrame = DCCM, E=E, tau=-abs(tau), columns=paste(embedlibrarynames), target= "FP", libSizes = paste((tau*(E-1)+(E+1)), (nrow(DCCM)-E+2) , ((nrow(DCCM)-E+2)-(tau*(E-1)+(E*2))), sep=" "), sample = 100, includeData=TRUE)
+             print(i)
+                   N <- nrow(cmap$CCM1_Predictions[[1]])
+                   termrho <- last(cmap$LibMeans$`RP(t-0):FP`)
+                   deltarho <- last(cmap$LibMeans$`RP(t-0):FP`)-cmap$LibMeans$`RP(t-0):FP`[1]
+                   #Test for significant causal signal based on t-test between rho from shortest library to longest library
+                        out <- cbind(cmap$CCM1_PredictStat$rho, cmap$CCM1_PredictStat$LibSize)
+                        out <- out[out[,2]==min(out[,2]) | out[,2]==max(out[,2]),]
+                        colnames(out) <- c("rho", "N")
+                        out <- data.frame(out)
+                        out$N <- as.factor(out$N)
+                   pval <- t_test(out, rho ~ N)$p
+        
+                   data.frame(cbind(i, level, RP, E, tau, FP, N, termrho, deltarho, pval))
+            }, error=function(e){cat("Error ",conditionMessage(e), "\n")}) #if error in CCM_boot (usually due to to small sample size, then move on to next variable)
+          }#FP loop
+    }) #system.time
+
+save(R, file = paste("Output/Rdata/3_CCM_with_spawners_in_embedding/CCM",level,RP,".Rdata", sep="_"))
+}#for each ETT
+
+```
+
+
+
+
+#--------------------Twin surrogate significance test--------------------
+Run surrogate analysis for each interaction in the CCM output table that showed significant convergence
+This takes a super long time to run... only run after the CCM tests that include the number of spawners in the embedding as that is what we're likely to go with in the end.
+```{R}
+j <- 8
+for(j in 8:nrow(ETT)){  #for each response process E/tau/theta combination
+     level <- ETT$level[j]
+     RP  <- ETT$RP[j]
+     E <- ETT$E[j]
+     tau <- ETT$tau[j]
+     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM",level,RP,".Rdata", sep="_"))
+     CCM <- R
+
+      #only move ahead with those interactions demonstrating significant convergence at p<0.05
+      row.names(CCM) <- NULL
+      CCM <- CCM[CCM$pval<=0.05,] 
+      CCM <- CCM[!is.na(CCM[,1]),] #Remove NAs
+    
+      #get data block
+      if(level=="ESU"){D_level <- data[,]}
+      if(level!="ESU"){D_level <- data[data$mpg==level,]}
+
+i <- 1
+### define function environments
+env_lib_ts <- c("foreach", "rEDM", "multispatialCCM", "zoo")
+cl <- makeCluster(detectCores(), type="PSOCK")
+registerDoParallel(cl) 
+system.time({  
+res <- foreach(i=1:10, .combine=rbind, .packages=env_lib_ts) %dopar% { #nrow(CCM) for each of the interactions with significant convergence
+     
+    #shape the data for the interaction test        
+     FP <- CCM$FP[i] # select the putative causal variable (forcing process) 
+     
+      D <- cbind(D_level$year, D_level[CCM$FP[i]], D_level[RP])
+      colnames(D) <- c("year", "FP", "RP")
+      row.names(D) <- NULL
+      D <- CCM_shape_block_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+      D <- D[complete.cases(D),]
+      D <- as.data.frame(D)
+      lib <- create_lib(D, 10)
+     
+      #Calculate twin surrogates for the response variable (original, dim, num.iter, tau = 1,..)
+      #Done separately for each stock then joined together with NAs separating each stock
+      #Use tau=1 to create the surrogate data, even if the optimal tau is >1
+      iter <- 100
+      D_sur <- data.frame()
+      for(k in 1:NROW(lib)){
+        D_RP_stock <- D[lib[k,1]:lib[k,2],]
+        stock.sur <- make_surrogate_data(D_RP_stock[,3], method="random_shuffle", num_surr=iter)
+        D_sur <- rbind(D_sur, stock.sur)
+      }
+      
+      #for each surrogate RP time series, evaluate causality using CCMboot and record the rho of each
+      sur_rhos <- matrix(data=NA, nrow=iter, ncol=1)
+      for(s in c(1:iter)){
+           x <- cbind(D[,1:2],D_sur[s]); colnames(x) <- c( "year","FP","RP.sur")
+           x <- shape_stock_data(x, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+                tryCatch({
+                    CCMboot <- CCM_boot(x[,2], x[,3], E=E, tau=abs(tau))
+                    sur_rhos[s] <- tail(CCMboot$rho, n=1)
+                }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")}) #if error in CCM_boot (usually due to to small sample size, then move on to next variable)
+      }
+       
+                #save the 95% CI for rho based on the surrogate data
+                data.frame(CCM[i,],
+                            upper95 = quantile(sur_rhos,0.975, na.rm = TRUE),
+                            lower95 = quantile(sur_rhos,0.025, na.rm = TRUE), 
+                            upper99 = quantile(sur_rhos,0.995, na.rm = TRUE),
+                            lower99 = quantile(sur_rhos,0.005, na.rm = TRUE))
+      
+}
+}) #system.time
+stopCluster(cl)     
+
+res$u_rho <-  res$termrho-res$upper95 #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
+save(res, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/twinsurr_CCM",level,RP,".Rdata", sep="_"))
+
+}
+```

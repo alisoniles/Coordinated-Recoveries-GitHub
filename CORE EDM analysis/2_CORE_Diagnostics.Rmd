@@ -316,4 +316,45 @@ print(pT)
 ggsave(filename = paste("Output/Figures/2_Diagnostics/stock_level_nonlinearity_diagnostics.pdf", sep = ""), plot = pT, width = 9, height = 9, units = "in")  # saves the last plot
 ```
 
+## plot all the putative causal variables
+```{R}
+# load functions and dependent libraries
+rm(list=ls())  
+source("0_CORE_prepareR.R")
 
+data <- split(data, data$stk)  
+#Imnaha is one of the longest data sets, use that to extract juct the causal variables
+data <- data[["Imnaha River"]]
+data[,c(1:2,4:11)] <- NULL
+FP_list <- FP_list[2:nrow(FP_list),] #remove stock level harvest from the list
+FP <- FP_list[!duplicated(FP_list[,2:3]),1:3] #remove offsets
+D <- cbind(data$year, data[,FP$FP])
+
+varcat <- unique(FP_list$cat)
+subplot_list <- list()
+for(c in c(1:11)) {
+     vars <-   FP$FP[FP$cat==varcat[c]]
+     D_plot <- cbind("year"=D[,1], D[,vars]) 
+     D_plot <- pivot_longer(D_plot, cols=vars)
+     p1 <- ggplot(D_plot, aes(x=year, y=value) )+
+         geom_line(aes(col=name)) +
+         geom_point(aes(col=name)) +
+         geom_hline(aes(yintercept=0), colour='#999999') +
+         theme_bw() + 
+         guides(col = guide_legend(ncol=1)) +
+         labs(title= varcat[c], subtitle = "", x="year", y="normalized value") 
+     subplot_list[[c]] = p1
+}
+ pFP <- do.call("grid.arrange", c(subplot_list[1:2], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/harv_hatch_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[3:4], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/sea_lion_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[5:6], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/seal_orca_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[7:8], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/PDO_NPGO_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[9:10], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/UPW_ARC_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[11], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/flow_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+```

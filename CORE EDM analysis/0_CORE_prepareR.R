@@ -12,6 +12,7 @@ data <- norm_block_data
 
 # load the optimal E, tau and theta for the response processes
 ETT <- read.csv("Data/csv_data/CORE_opt_E_tau_theta.csv")
+ETT$level <- str_replace_all(ETT$level, "\xca", " ")
 
 #Create list of putative causal variables (forcing processes)
      aa <- colnames(data)
