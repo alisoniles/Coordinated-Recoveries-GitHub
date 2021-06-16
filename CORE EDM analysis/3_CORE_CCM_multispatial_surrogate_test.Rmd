@@ -33,7 +33,7 @@ colnames(FP_list) <- c("FP", "cat", "subcat", "offset",
                               "RP", "E", "tau", 
                               "N", "termrho", "deltarho", "pval")     
 j <- 1; i <- 1
- for(j in 1:2){    
+ for(j in 1:8){    
  #load optimal embedding parameters for the response process
      level <- ETT$level[j]
      RP <- ETT$RP[j]
@@ -78,7 +78,7 @@ registerDoParallel(8)  # use multicore, set to the number of our cores
         }#FP loop
     }) #system.time
 
-save(R, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM",level,RP,".Rdata", sep="_"))
+save(R, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM_reduced_E_",level,RP,".Rdata", sep="_"))
 }#for each ETT
 
 ```
@@ -94,7 +94,7 @@ This takes a super long time to run... only run after the CCM tests that include
 for(j in 1:8){  #for each response process E/tau/theta combination
      level <- ETT$level[j]
      RP  <- ETT$RP[j]
-     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM",level,RP,".Rdata", sep="_"))
+     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM_reduced_E_",level,RP,".Rdata", sep="_"))
      if(j==1){CCM <- R[,1:10]}
      if(j>1){CCM <- rbind(CCM, R[,1:10])}
 }     
@@ -116,7 +116,7 @@ for(j in 1:8){  #for each response process E/tau/theta combination
 
       #run in sections
       CCMsec <- c(seq(1, nrow(CCM), 100), nrow(CCM))
-      for(j in 17:(length(CCMsec)-1)){
+      for(j in 1:(length(CCMsec)-1)){
             
 env_lib_ts <- c("foreach", "rEDM", "multispatialCCM", "zoo")
 cl <- makeCluster(detectCores(), type="PSOCK")
@@ -169,23 +169,24 @@ res <- foreach(i=CCMsec[j]:(CCMsec[j+1]-1), .combine=rbind, .packages=env_lib_ts
        #save the 95% CI for rho based on the surrogate data
        lower95 <-  quantile(sur_rhos,0.025, na.rm = TRUE)
        upper95 <-  quantile(sur_rhos,0.975, na.rm = TRUE)
+              u_rho95 <- CCM$termrho[i]-upper95 #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
        lower99 <-  quantile(sur_rhos,0.005, na.rm = TRUE)
        upper99 <-  quantile(sur_rhos,0.995, na.rm = TRUE)
-       u_rho <- CCM$termrho[i]-upper95 #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
+              u_rho99 <- CCM$termrho[i]-upper99 #difference between terminal rho and the top of the 99% CI of rho for the surrogate data
         
 #res <- rbind(res, )
-data.frame(cbind(i, level, RP, E, tau, FP, N=CCM$N[i], termrho=CCM$termrho[i], deltarho=CCM$deltarho[i], pval=CCM$pval[i], lower95, upper95, lower99, upper99, u_rho))
+data.frame(cbind(i, level, RP, E, tau, FP, N=CCM$N[i], termrho=CCM$termrho[i], deltarho=CCM$deltarho[i], pval=CCM$pval[i], lower95, upper95, u_rho95, lower99, upper99, u_rho99))
       
 } #do par
 }) #system.time
 stopCluster(cl)     
 
-save(res, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_",CCMsec[j],".Rdata", sep="_"))
+save(res, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_reduced_E_",CCMsec[j],".Rdata", sep="_"))
       }
 
 #Summarize the twin surrogate results into one file
 for(j in 1:(length(CCMsec)-1)){  #for each response process E/tau/theta combination
-     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_",CCMsec[j],".Rdata", sep="_"))
+     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_reduced_E_",CCMsec[j],".Rdata", sep="_"))
      if(j==1){CCM <- res}
      if(j>1){CCM <- rbind(CCM, res)}
 }     
@@ -201,19 +202,23 @@ for(j in 1:(length(CCMsec)-1)){  #for each response process E/tau/theta combinat
      CCM$upper95 <- as.numeric(CCM$upper95)
      CCM$lower99 <- as.numeric(CCM$lower99)
      CCM$upper99 <- as.numeric(CCM$upper99)
-     CCM$u_rho <- as.numeric(CCM$u_rho)
+     CCM$u_rho95 <- as.numeric(CCM$u_rho95)
+     CCM$u_rho99 <- as.numeric(CCM$u_rho99)
      
-save(CCM, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM.Rdata", sep="_"))     
+save(CCM, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM_reduced_E.Rdata", sep="_"))     
 ```
+
+
 
 
 
 #Put the result into the same format as the stock level analysis 
 ```{R}
-load(file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM.Rdata", sep="_"))
+load(file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM_reduced_E.Rdata", sep="_"))
 
-CCM <- CCM[CCM$u_rho>0,] #Leave out interactions with urho <=0
-#Leave out interactions with N<100
+CCM <- CCM[CCM$u_rho99>0, ] #Leave out interactions with urho <=0
+CCM <- CCM[CCM$pval<=0.01, ] #narrow the results to convergence with pval<=0.01
+
 
 levels <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
 variables <- c("rec4n", "rec5n")
@@ -222,7 +227,7 @@ l <- 2;v <- 1
 for(v in 1:length(variables)){ #loop through the different variables
   for(l in (1:length(levels))){  #loop through each level (ESU and the different MPGs)
  D <- CCM %>% filter(level==levels[l]) %>% filter(RP==variables[v])
- D <- D[,c("FP","u_rho")]
+ D <- D[,c("FP","u_rho99")]
  colnames(D) <- c("FP", paste(levels[l], variables[v], sep="_"))
  FP_D <- merge(FP_D, D, by="FP", all.x=TRUE)
   }

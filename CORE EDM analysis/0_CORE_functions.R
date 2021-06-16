@@ -19,7 +19,7 @@ library(gridExtra)
 library(foreach)
 library(parallel)
 library(doParallel)
-
+library(pracma) #detrending function
 
 #Normalize each column in a data frame
 normalize <- function(block)
@@ -85,8 +85,8 @@ create_lib <- function(D, min_cont_tp)
 #' E: the embedding dimension for s_map
 #'  ... optional arguments to s_map
 
-#ts <- Dt; method <-  "ebisuzaki"; num_surr <-  200; E <-  optEtau[i,1]; tau <-  optEtau[i,2]
-test_nonlin <- function(ts, method = "random_shuffle", num_surr = 200, 
+#ts <- Dt; method <-  "ebisuzaki"; num_surr <-  200; E <-  6; tau <-  1
+test_nonlin <- function(ts, method = "ebisuzaki", num_surr = 200, 
                         theta = c(0, 0.01, 0.1, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9),
                         tau = tau, tp = 1, E = E, ...)
 {

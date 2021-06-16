@@ -42,7 +42,7 @@ Thus, nonlinearity complicates the identification of causal drivers. Here we tes
 level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon", "South Fork Salmon")
 variables <- c("rec4n", "rec5n")
 
-
+l <- 1; v <- 1
 for(l in (1:length(level))){  #loop through each analysis level the ESU and the different MPGs
 
   subplot_list = list();
@@ -138,6 +138,10 @@ maxrho=max(Emat[,tau+1], na.rm=TRUE)
 Edf <- as.data.frame(Emat)
 Edf <- pivot_longer(Edf, cols=c(2:6))
 Edf$chosen <- 0
+
+#force a different chosen E
+E1 <- 6
+
 Edf$chosen [(Edf$E==E1 & Edf$name=="Tau1") | (Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4") | (Edf$E==E5 & Edf$name=="Tau5") ] <- 1
 
 #manual color codes for plot
@@ -234,7 +238,7 @@ theta_results$tau <- as.factor(theta_results$tau)
 pT <- ggplot(theta_results, aes(x=theta, y=rho, color=tau) ) +
      geom_line() +
      geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val<=0.05,], aes(x=theta, y=rho, color=tau), size=3) +
-  geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val > 0.05,], aes(x=theta, y=rho, color=tau), size=3, shape=1) +   
+  geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val > 0.1,], aes(x=theta, y=rho, color=tau), size=3, shape=1) +   
   labs(x = "theta", y = expression(rho)) +
      theme_bw() +
      theme(legend.position = "none")
@@ -249,7 +253,7 @@ subplot_list[[((v-1)*4 + 4)]] = pT
  n <- length(subplot_list)
  nCol <- 4 #floor(sqrt(n))
  pDIAGNOSTICS <- do.call("grid.arrange", c(subplot_list, ncol=nCol, top=level[l]))
-ggsave(filename = paste("Output/Figures/2_Diagnostics/",level[l],"_diagnostics.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
+ggsave(filename = paste("Output/Figures/2_Diagnostics/",level[l], "_", variables[v],"_reduced_E_diagnostics.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
 
 } 
 
@@ -326,7 +330,7 @@ data <- split(data, data$stk)
 #Imnaha is one of the longest data sets, use that to extract juct the causal variables
 data <- data[["Imnaha River"]]
 data[,c(1:2,4:11)] <- NULL
-FP_list <- FP_list[2:nrow(FP_list),] #remove stock level harvest from the list
+FP_list <- FP_list[2:nrow(FP_list),] #remove stock level harvest from the list because this differs by stock
 FP <- FP_list[!duplicated(FP_list[,2:3]),1:3] #remove offsets
 D <- cbind(data$year, data[,FP$FP])
 
@@ -335,7 +339,9 @@ subplot_list <- list()
 for(c in c(1:11)) {
      vars <-   FP$FP[FP$cat==varcat[c]]
      D_plot <- cbind("year"=D[,1], D[,vars]) 
-     D_plot <- pivot_longer(D_plot, cols=vars)
+     if(length(vars)>1){D_plot <- pivot_longer(D_plot, cols=vars)}
+     if(length(vars)==1){colnames(D_plot) <- c("year", "value"); D_plot <- data.frame(D_plot); D_plot$name <- "hseal_COL"}
+     D_plot <- data.frame(D_plot)
      p1 <- ggplot(D_plot, aes(x=year, y=value) )+
          geom_line(aes(col=name)) +
          geom_point(aes(col=name)) +
@@ -358,3 +364,5 @@ ggsave(filename = paste("Output/Figures/2_Diagnostics/UPW_ARC_diagnostics.pdf", 
  pFP <- do.call("grid.arrange", c(subplot_list[11], ncol=1))
 ggsave(filename = paste("Output/Figures/2_Diagnostics/flow_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
 ```
+
+

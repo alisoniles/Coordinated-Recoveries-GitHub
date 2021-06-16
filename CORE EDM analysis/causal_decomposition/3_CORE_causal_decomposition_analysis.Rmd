@@ -1,0 +1,92 @@
+---
+title: "3_CORE_causal_decomposition_analysis"
+author: "Alison Iles"
+date: "5/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This analysis converts the Matlab code by Albert Yand
+Causal decomposition analysis https://www.nature.com/articles/s41467-018-05845-7
+
+# Evaluate the Empirical Mode Decompositions of the rec4 and rec5 time series and their coherence with some of the causal time series identified by CCM.
+
+#Instantaneous phase synchrony between two timeseries.
+If you have a time series data that you believe may have oscillating properties (e.g. EEG, fMRI), you may also be able to measure instantaneous phase synchrony. This measure also measures moment-to-moment synchrony between two signals. It can be somewhat subjective because you need to filter the data to the wavelength of interest but you might have theoretical reasons for determining such bands. To calculate phase synchrony, we need to extract the phase of the signal which can be done by using the Hilbert transform which splits the signal into its phase and power (learn more about Hilbert transform here). This allows us to assess if two signals are in phase (moving up and down together) or out of phase.
+
+The instantaneous phase synchrony measures the phase similarities between signals at each timepoint.
+The phase refers to the angle of the signal when it is resonating between 0 ~ 360 degrees or -pi to pi degrees. When two signals line up in phase their angular difference becomes zero. The angles can be calculated through the hilbert transform of the signal. Phase coherence can be quantified by subtracting the angular difference from 1.
+
+```{R}
+# load functions and dependent libraries
+rm(list=ls())  
+library(Rlibeemd)
+library(seewave)
+library(signal)
+library(hht) #EMD analysis that produces directories of each EMD trial that must be compiled
+library(R.matlab)
+#load(file="CORE_data_EMD.Rdata")
+testdata <- readMat("ecosystem_data.mat")
+source("causal_decomposition_functions.R")
+```
+
+```{R}
+# Choose time series to analyze
+s1 <- testdata$DIDI
+s2 <- testdata$PARA
+stime <- testdata$time.DIDIPARA #testdata$year.LynxHare#time.DIDIPARA
+
+# normalize time series
+s1 <- s1-mean(s1)
+s1 <- s1/std(s1)
+s2 <- s2-mean(s2)
+s2 <- s2/std(s2)
+
+#choose noise level
+#r1 <- set_r_noise(s1)
+#r2 <- set_r_noise(s2)
+
+rnoise <- 0.35
+nensemble <- 1000
+CM <- causal_decomposition(s1, s2, rnoise=rnoise, nensemble=nensemble)
+CM_r0 <- causal_decomposition(s1, s2, rnoise=0, nensemble=1)
+
+
+# create a dataset
+specie <- c(rep("sorgho" , 3) , rep("poacee" , 3) , rep("banana" , 3) , rep("triticum" , 3) )
+condition <- rep(c("normal" , "stress" , "Nitrogen") , 4)
+value <- abs(rnorm(12 , 0 , 15))
+data <- data.frame(specie,condition,value)
+ 
+# Stacked
+ggplot(data, aes(fill=condition, y=value, x=specie)) + 
+    geom_bar(position="stack", stat="identity")
+
+
+CMp <- CM[,1:2]
+colnames(CMp) <- c("DIDI cause", "PARA cause")
+ggplot(CMp, aes())
+
+#plot time series and IMFs
+imfs1 <- eemd(s1, noise_strength = rnoise, ensemble_size = nensemble)
+imfs2 <- eemd(s2, noise_strength = rnoise, ensemble_size = nensemble)
+names <- c("time", "var", "data", colnames(imfs1))
+imfs1 <- cbind(stime, "s1", s1, imfs1); colnames(imfs1) <- names
+imfs2 <- cbind(stime, "s2", s2, imfs2); colnames(imfs2) <- names
+imfs1 <- pivot_longer(as.data.frame(imfs1), cols=c(3:ncol(imfs1)))
+imfs2 <- pivot_longer(as.data.frame(imfs2), cols=c(3:ncol(imfs2)))
+IMF <- rbind(imfs1, imfs2)
+IMF$var <- as.factor(IMF$var)
+IMF$name <- as.factor(IMF$name)
+IMF$time <- as.double(IMF$time)
+IMF$value <- as.numeric(IMF$value)
+ggplot(IMF, aes(x=time, y=value, group=var) )+
+         geom_line(aes(color=var)) +
+     facet_grid(rows=IMF$name, scales="free_y")
+
+
+```
+

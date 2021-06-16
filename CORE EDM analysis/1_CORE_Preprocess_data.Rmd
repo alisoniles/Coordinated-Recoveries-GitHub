@@ -30,15 +30,27 @@ mpg_data <- read.csv("Data/csv_data/CORE_2020_data_MPG.csv")
 
 # load functions
 source("0_CORE_functions.R")
+    
+    
+# create unlagged, unnormalized joint data list
+join_all_data <- function(stock_df){
+  stock_df <- merge(stock_df, esu_data, by="year", all.x =TRUE)
+  stock_df <- merge(stock_df, env_data, by="year", all.x = TRUE)
+  mpg_select <- mpg_data[mpg_data$mpg==stock_df$mpg[1],]
+  stock_df <- merge(stock_df, mpg_select, by="year", all.x = TRUE)
+  return(stock_df)
+}   
+data_join <- lapply(stock_data, join_all_data)
+save(data_join, file = "causal_decomposition/CORE_data_EMD.Rdata")
 ```
+
+
 
 ```{R}
 # To focus on one stock to trouble shoot the code
-#stock_df <- subset(data, stk == "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers") 
+stock_df <- subset(data, stk == "Bear Valley Creek") 
 
-#This function normalizes each stock's time series BEFORE joining together which puts them on the same scale. This preserves the quasicyclic
-#behavior of each stock, but corrects for the relative magnitude across different stocks. 
-
+#Normalizes each stock's time series BEFORE joining together which puts them on the same scale. This preserves the quasicyclic behavior of each stock, but corrects for the relative magnitude across different stocks. 
 normalize_stock <- function(stock_df) {
   stock_df$spwnn <- normalize(stock_df$spawn_tot)
   stock_df$rec4n <- normalize(stock_df$rec4)
@@ -49,40 +61,15 @@ normalize_stock <- function(stock_df) {
 
 stock_data <- lapply(stock_data, normalize_stock)
 
+#Some of the causal variables have monotonic trends, which can easily dupe CCM. Add detrended versions of these time series.
+esu_data$orca.DNRKW[complete.cases(esu_data$orca.NRKW)] <- detrend(esu_data$orca.NRKW[complete.cases(esu_data$orca.NRKW)], tt='linear')
+esu_data$orca.DSEAK[complete.cases(esu_data$orca.SEAK)] <- detrend(esu_data$orca.SEAK[complete.cases(esu_data$orca.SEAK)], tt='linear')
+esu_data$csl.Dpups[complete.cases(esu_data$csl.pups)] <- detrend(esu_data$csl.pups[complete.cases(esu_data$csl.pups)], tt='linear')
+esu_data$csl.Dmales[complete.cases(esu_data$csl.males)] <- detrend(esu_data$csl.males[complete.cases(esu_data$csl.males)], tt='linear')
+esu_data$csl.Dmales6[complete.cases(esu_data$csl.males6)] <- detrend(esu_data$csl.males6[complete.cases(esu_data$csl.males6)], tt='linear')
 
 
-# #This function lags the response variables for lagged embeddings
-# make_lagged_resp_var <- function(stock_df, maxlag=10)
-# {
-#   r4 <- stock_df$rec4
-#   for(i in c(1:maxlag)){
-#      df <- c(matrix(NA, nrow=1, ncol=i), r4[1:(length(r4)-i)])
-#      df.name <- paste("rec4_-",i, sep="")
-#      stock_df[, df.name] <- df
-#   }
-#   r5 <- stock_df$rec5
-#   for(i in c(1:maxlag)){
-#      df <- c(matrix(NA, nrow=1, ncol=i), r5[1:(length(r5)-i)])
-#      df.name <- paste("rec5_-",i, sep="")
-#      stock_df[, df.name] <- df
-#   }
-#   r4n <- stock_df$rec4n
-#   for(i in c(1:maxlag)){
-#      df <- c(matrix(NA, nrow=1, ncol=i), r4[1:(length(r4n)-i)])
-#      df.name <- paste("rec4n_-",i, sep="")
-#      stock_df[, df.name] <- df
-#   }
-#   r5n <- stock_df$rec5n
-#   for(i in c(1:maxlag)){
-#      df <- c(matrix(NA, nrow=1, ncol=i), r5[1:(length(r5n)-i)])
-#      df.name <- paste("rec5n_-",i, sep="")
-#      stock_df[, df.name] <- df
-#   }
-#    return(stock_df)
-# }
-# stock_data <- lapply(stock_data, function(stock_df) {make_lagged_resp_var(stock_df, maxlag=25)})
-
-#This function lines up all the putative causal variable time series with the brood year offset by the chosen number of years
+#Line up all the putative causal variable time series with the brood year offset by the chosen number of years
 make_block <- function(stock_df, env_data, esu_data)
     {
         # offset hatchery data from 1 to 3 years after brood year - assuming the hatchery releases age 2 smolts and they compete with the naturally spawned smolts starting at age 2
@@ -114,7 +101,7 @@ make_block <- function(stock_df, env_data, esu_data)
         }
         
         # offset pinniped data from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns
-        csl_names <- c("csl.haulout", "csl.males", "csl.males6", "csl.bonn", "csl.COL", "csl.WA", "csl.SalishSea") 
+        csl_names <- c("csl.haulout", "csl.males", "csl.Dmales", "csl.males6", "csl.Dmales6", "csl.bonn", "csl.COL") 
         csl_data <- esu_data[, csl_names]
         for(i in c(2:5)) { 
               desired_years <- stock_df$year + i
@@ -126,7 +113,7 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
         }
         
-        ssl_names <- c("ssl.WA", "ssl.SalishSea", "ssl.WCVIBC", "ssl.SEAK", "ssl.WAK", "ssl.rookORraw", "ssl.bonn")          
+        ssl_names <- c("ssl.COL", "ssl.rookORraw", "ssl.bonn")          
         ssl_data <- esu_data[, ssl_names]
             for(i in c(2:5)) { 
               desired_years <- stock_df$year + i
@@ -138,32 +125,32 @@ make_block <- function(stock_df, env_data, esu_data)
               stock_df[, df.colnames] <- df
             }
         
-        hseal_names <- c("hseal.COL", "hseal.WA", "hseal.SalishSea", "hseal.WCVIBC")
-        hseal_data <- esu_data[, hseal_names]
+        hseal_data <- esu_data[, "hseal.COL"]
             for(i in c(2:5)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(hseal_data)))
-              df[index_in_stock_df,] <- hseal_data[index_in_spp_data, ]
-              df.colnames <- paste(hseal_names, i, sep = ".")
+              df[index_in_stock_df,] <- hseal_data[index_in_spp_data]
+              df.colnames <- paste("hseal.COL", i, sep = ".")
               stock_df[, df.colnames] <- df
             }
 
-        # offset CSL pup data from 2 to 5 years after brood year. Add 6 years as only 6+ year old sea lion males swim up to Oregon and eat adult salmon (ref in Chasco paper)
-        CSL_pups_data <- esu_data[, "csl.pups"]
-        for(i in c(8:11)) { 
+        # offset CSL pup data from -5 to 0 years after brood year. There may be a long lagged effect of pup counts as only 6+ year old sea lion males swim up to Oregon and eat smolt or adult salmon (ref in Chasco paper)
+        csl_pups_names <- c("csl.pups", "csl.Dpups")
+        CSL_pups_data <- esu_data[, csl_pups_names]
+        for(i in c(-5:0)) { 
               desired_years <- stock_df$year + i
               index_in_spp_data <- match(desired_years, esu_data$year)
               index_in_stock_df <- 1:length(desired_years)
               df <- data.frame(matrix(NA, nrow = length(desired_years), ncol = NCOL(CSL_pups_data)))
-              df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data ]
-              df.colnames <- paste("csl.pups", (i-6), sep = ".")
+              df[index_in_stock_df,] <- CSL_pups_data[index_in_spp_data, ]
+              df.colnames <- paste(csl_pups_names, (i), sep = ".")
               stock_df[, df.colnames] <- df
         }
         
         # offset orca data from 4 to 5 years after brood year - assuming orcas just eat the returning fish
-        orca_names <- c( "orca.SRKWpodJ", "orca.SRKWpodK", "orca.SRKWpodL", "orca.SRKWpodKL", "orca.SRKWpodJKL", "orca.SRKWdeathsJKL", "orca.SRKWbirthsJKL", "orca.NRKW", "orca.SEAK", "orca.WAK")
+        orca_names <- c( "orca.SRKWpodJ", "orca.SRKWpodK", "orca.SRKWpodL", "orca.SRKWpodKL", "orca.SRKWpodJKL", "orca.SRKWdeathsJKL", "orca.SRKWbirthsJKL", "orca.NRKW", "orca.DNRKW", "orca.SEAK", "orca.DSEAK")
         orca_data <- esu_data[, orca_names]
         for(i in 4:5) { 
               desired_years <- stock_df$year + i
