@@ -1,0 +1,325 @@
+---
+title: "4_CORE_Multiview_Embeddings"
+author: "Alison Iles"
+date: "6/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(rEDM)
+library(plyr)
+library(reshape)
+library(stringr)
+library(tidyr)
+```
+
+#Multiview Embedding
+The generality of Taken’s Theorem means that in situations with multivariate time series, there
+can often be many different, valid attractor reconstructions. As described in (Ye and Sugihara
+2016), combining these different models can result in improved forecasts.
+
+We're not doing forecasting, only calculating the interaction strengths over time. Create all possible embeddings and evaluate for each variable of interest.
+
+
+```{R}
+rm(list=ls()) 
+
+# load functions and dependent libraries
+source("0_CORE_prepareR.R")
+
+# load lists of chosen causal variables 
+FP_rec4 <- readRDS("Output/RData/3_CORE_CCM_reduced_causal_vars/vars95_rec4_by_spatial.rds")
+FP_rec5 <- readRDS("Output/RData/3_CORE_CCM_reduced_causal_vars/vars95_rec5_by_spatial.rds")
+
+for(i in 1:2){ #nrow(ETT)) {
+     level <- ETT$level[i]
+     RP <- ETT$RP[i]
+     E <- ETT$E[i]
+     tau <- ETT$tau[i]
+     theta <- ETT$theta[i]
+     
+     #get list of possible causal variables
+     if(RP=="rec4n" & level=="ESU"){FPs <- FP_rec4$ESU}
+     if(RP=="rec4n" & level=="Imnaha"){FPs <- FP_rec4$IMN}
+     if(RP=="rec4n" & level=="Middle Fork Salmon"){FPs <- FP_rec4$MFS}
+     if(RP=="rec4n" & level=="Upper Salmon"){FPs <- FP_rec4$UPS}
+     if(RP=="rec5n" & level=="ESU"){FPs <- FP_rec5$ESU}
+     if(RP=="rec5n" & level=="Imnaha"){FPs <- FP_rec5$IMN}
+     if(RP=="rec5n" & level=="Middle Fork Salmon"){FPs <- FP_rec5$MFS}
+     if(RP=="rec5n" & level=="Upper Salmon"){FPs <- FP_rec5$UPS}
+  
+     FPs <- FPs[!FPs =="flow.gageht.0"] #not enough flow data
+     
+     #get data from only the focal ESU or MPG level
+     if(level=="ESU"){D <- data[,]}
+     if(level!="ESU"){D <- data[data$mpg==level,]}
+     
+     #make data block with year, FPs and a lagged block of RP variable
+     D <- D[c("stk", "year", as.vector(FPs), RP)]
+     D <- SMAP_shape_block_data(D, 10) #shape the data to remove short time sections (<10 years long) and to add lagged RP columns
+ 
+     #list all possible embeddings with dimention E
+     el <- t(combn((NCOL(D)-3), E-1, simplify = TRUE)) + 3
+     el <- cbind(matrix(3, nrow=nrow(el), ncol=1, byrow=TRUE), el)
+          
+     
+     ### define function environments to run in parallel
+     ### define function environments
+      env_lib_ts <- c("tidyverse", "foreach", "rEDM", "glmnet")
+      cl <- makeCluster(detectCores(), type="PSOCK")
+      registerDoParallel(cl)
+      system.time({
+
+           #in-results to find the top embeddings with the greatest rho
+           in_results <- foreach(j=1:nrow(el), .combine=rbind, .packages=env_lib_ts) %dopar% { #for each row of the embeddings list results
+
+             #for(j in 1:nrow(el)){
+
+                #make data block with year, and the embedded variables
+                block <- D[c(2,el[j,])]
+                block <- block[complete.cases(block), ]
+                columns_names <- colnames(block[2:ncol(block)])
+                row.names(block) <- NULL
+
+                #List in lib the begin and end points of each stock's data
+                lib <- create_lib(block, 10); pred <- lib
+
+                #Get optimal theta
+                #theta <- find_opt_theta(block, lib=lib, columns_names=columns_names, criterion="rho") %>% pull(theta)
+
+                #pick the top performing embeddings
+                smap <- block_lnlp(block,
+                                   lib=lib,
+                                   pred=pred,
+                                   tp=1,
+                                   method='s-map',
+                                   theta=theta,
+                                   first_column_time = TRUE,
+                                   target_column = 1,
+                                   columns = columns_names,
+                                   stats_only = TRUE,
+                                   save_smap_coefficients = FALSE)
+
+                smaprho<- cbind(unlist(smap$rho)[[1]], j)
+                colnames(smaprho) <- c("rho","embed")
+                data.frame(smaprho)
+                #in_results <- rbind(in_results,smaprho)
+
+           }#in_results loop for each embedding
+
+           save(in_results, file = paste("Output/Rdata/4_IS/SMAP_in_results_", level,"_", RP,".RData", sep=""), compress = FALSE)
+
+      }) #system.time
+      stopCluster(cl)
+
+
+      ##Step 2: Calculate the coefficients for the best embeddings
+      
+      load(paste("Output/Rdata/4_IS/SMAP_in_results_", level,"_", RP,".RData", sep=""))
+      #Then choose the top sqrt number of them based on rho. Run the smap again for these embeddings and save the results
+      in_results_sort <- in_results[order(-in_results$rho),]
+      in_results_sort <- in_results_sort[1:sqrt(nrow(in_results)),]
+      el_best <- el[in_results_sort$embed,]
+      
+      
+      ### define function environments
+      env_lib_ts <- c("tidyverse", "foreach", "rEDM", "glmnet")
+      cl <- makeCluster(detectCores(), type="PSOCK")
+      registerDoParallel(cl)
+      system.time({ 
+           
+           #out-results to save the coefficients of the top embeddings with the greatest rho
+           out_results <- foreach(k=1:nrow(el_best), .combine=rbind, .packages=env_lib_ts) %dopar% { #for each row of the best embeddings list results
+      
+                #make data block with year, response process, lags of RP and the one or two forcing process
+                block <- D[c(1,2,el_best[k,])]
+                block <- block[complete.cases(block), ]
+                row.names(block) <- NULL
+                results <- block[,1:3]
+                block <- block[,2:ncol(block)]
+                columns_names <- colnames(block[2:ncol(block)])
+                
+                #List in lib the begin and end points of each stock's data
+                lib <- create_lib(block, 10); pred <- lib
+                
+                #reshape the results table for the sections of the data that can't be used in the library
+                temp <- matrix(data=NA,nrow=1, ncol=3)
+                colnames(temp) <- colnames(results)
+                    for(r in 1:nrow(lib)){
+                      temp2 <- results[lib[r,1]:lib[r,2],]
+                      temp <- rbind(temp,temp2 )
+                    }
+                results <- temp[2:nrow(temp),]
+                
+                #Get optimal theta
+                #theta <- find_opt_theta(block, lib=lib, columns_names=columns_names, criterion="rho") %>% pull(theta)
+      
+                #Normal smap with optimal theta
+                smap <- block_lnlp(block,
+                                   lib=lib,
+                                   pred=pred,
+                                   tp=1,
+                                   method='s-map',
+                                   theta=theta,
+                                   first_column_time = TRUE,
+                                   target_column = 1,
+                                   columns = columns_names,
+                                   stats_only = TRUE,
+                                   save_smap_coefficients = TRUE)
+      
+                #Regularized smap
+                #reg_smap <- block[2:ncol(block)] %>% find_opt_regularized_smap(lib=lib, thetarange=theta, criterion="rho",tp=1, t_col=1, lambda=NULL, alpha=0, parallel=TRUE, random_state=NULL)
+                
+                #combine results of normal and regularized smaps coefficients data together
+                     #obs_pred <- rbind(c(NA,NA), reg_smap$output[[1]]) #predicted RP from smap model
+                      #    obs_pred <- obs_pred[-nrow(obs_pred),] 
+                     #regcoeffs <- matrix(unlist(reg_smap$smap_c[[1]][,2:E]), nrow=length(reg_smap$output[[1]]$obs), byrow=TRUE) #coefficients of FP from smap model
+                      #    colnames(regcoeffs) <- paste("reg_", columns_names[2:E])
+                     
+                 coeffs <- smap$smap_coefficients[[1]]
+                      coeffs <- coeffs[-nrow(coeffs),] #Remove last year
+                      coeffs[,1:2] <- NULL #remove CO 
+                 
+                 results <- cbind(results, coeffs)
+                 results <- results[complete.cases(results),] # remove results of non-occurrence duration 
+                 results <- pivot_longer(results, cols = c(4:ncol(results)))
+                 results <- cbind(level=level, RP, FP=columns_names, embedding = k, E=E, tau=tau, theta=theta, N=smap$num_pred[[1]], smap_rho=smap$rho[[1]], smap_pval=smap$p_val[[1]], results)
+                 rownames(results) <- NULL
+                 data.frame(results)
+
+           }#for each of the best embeddings
+      
+      save(out_results, file = paste("Output/Rdata/4_IS/SMAP_best_embeddings_", level,"_", RP,".RData", sep=""), compress = FALSE)  
+      
+      }) #system.time
+      stopCluster(cl)
+
+}
+```
+
+
+
+#summarize the interaction strength results in a table
+```{R}
+rm(list=ls())  
+
+library(dplyr) 
+
+filelist <- list.files(path="Output/Rdata/4_IS/", pattern="SMAP_best_embeddings")
+
+Dsummary <- data_frame()
+j <- 3
+for(j in 1:2){#length(filelist)){ #for each IS file
+
+  #retrieve the interaction strength data 
+     load(paste("Output/Rdata/4_IS/",filelist[j], sep=""))
+     D <- as.data.frame(out_results)
+     nom <- c("level","RP","FP","embedding","E","tau","theta","N","smap_rho","smap_pval","stk","year","Recruits","name","value")    
+     colnames(D) <- nom
+     
+     level <- D$level[1]
+     RP <- D$RP[1]
+# For each FP variable, plot the changing coefficients over time from different mutivariate embeddings
+
+      p1 <- ggplot(D, aes(x=year, y=value)) +
+      geom_line(aes(group=embedding)) +    
+      geom_hline(aes(yintercept=0), colour='#999999') +
+      theme_bw() + 
+      guides(col = guide_legend(ncol=1)) +
+      labs(title= level, subtitle = RP, x="year", y="interaction coefficient") + 
+      facet_wrap(vars(FP), nrow=3) 
+
+      ggsave(filename = paste("Output/Figures/4_IS/SMAP_coeffs_", level, "_", RP,".pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")  # saves the last plot
+             
+}     
+     
+
+
+```
+
+
+#S-map Coefficients
+Plot interaction strengths from the top k multiview embeddings.
+
+As described in (Deyle et al. 2016), the S-map coefficients from the appropriate multivariate embedding can be interpreted as dynamic, time-varying interaction strengths. The smap_coefficients column of the block_lnlp output is a list-column with the data.frames for the S-map coefficients in the first element of that list. The result is a data.frame with a row for each prediction and columns for each of the predictor variables plus a constant.
+
+```{R}
+rm(list=ls()) 
+load("Data/Rdata/block_data.Rdata")  
+  
+library(ggplot2)
+
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+
+target_vars <- c("rec4n", "rec5n")
+
+u <- 0
+
+for(u in c(0)){ #} c(0,1,3,5)){
+
+    if(u==0){ 
+    mpgname <- "Snake River ESU"
+        for(tv in 1:length(target_vars)){ # for each target variable 
+        smap_coeffs_ESU_mean <- readRDS(file = paste("Output/Rdata/5_MVE/5_MVE_coeffs_ESU_mean_",mpgname,"_",target_vars[tv],".RData", sep = ""))
+          if(tv==1){D <- smap_coeffs_ESU_mean}
+          if(tv>1){d <- smap_coeffs_ESU_mean
+          D <- cbind(D, d[,2:ncol(d)])}
+        }
+    
+    }
+    D <- D %>% pivot_longer(-Group.1, names_to = "var", values_to = "IS")  #create long data for plotting
+    D$mpg <- mpgname
+    D <- separate(D, var, into=c("model","var"), sep = "/")  #add columns for model number, variable
+    D <- separate(D, model, into=c("model","rho","target","offset"), sep = "_")  #add columns for model number, model rho, target variable
+    D$offset <- NULL
+    D <- separate(D, var, into=c("causal.cat","causal.subcat","causal.offset"), sep = "\\.")  #add columns for causal variable category,  
+    D$year <- D$Group.1
+    D$Group.1 <- NULL
+
+D$regionlabels <- factor(D$mpg, levels=c("Snake River ESU", "Imnaha", "Middle Fork Salmon", "Upper Salmon"), labels=c("Snake River ESU", "Imnaha MPG", "Middle Fork Salmon MPG", "Upper Salmon MPG"))
+
+D$salmoncohortlabels <- factor(D$target, levels=c("salm.rec","salm.rec3", "salm.rec4", "salm.rec5"), labels=c("All recruits", "3 yr old recruits", "4 yr old recruits", "5 yr old recruits"))
+
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+
+varcat <- unique(D$causal.cat)
+D$catlabels <- factor(D$causal.cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca", "flow" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales", "River flow"))
+
+saveRDS(D, file = paste("Output/Rdata/5_MVE/5_MVE_coeff_data_for_plotting_",mpgname,".RData", sep = ""))
+
+# For each variable, plot the changing coefficients over time from different mutivariate embeddings
+# loop through the different chosen variables
+            for(i in 1:NROW(varcat)) {  
+            df <- filter(D,causal.cat==varcat[i])
+            mcc <- manual_color_codes[manual_color_codes$cat==varcat[i],2:4]
+            mcc <- sapply(mcc, unlist)
+            rownames(mcc) <- mcc[,2]
+            
+            p1 <- ggplot(df, aes(x=year, y=IS)) +
+              geom_line(aes(col=causal.subcat, group=model)) +    
+              geom_hline(aes(yintercept=0), colour='#999999') +
+              theme_bw() + 
+              guides(col = guide_legend(ncol=1)) +
+              labs(title= df$catlabels[1], subtitle = paste("Mean effect across stocks in", mpgname, "from all multiview embeddings", sep = " "), x="year", y="interaction coefficient") + 
+              scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3])
+            
+            p2 <- p1 + facet_grid( ~ salmoncohortlabels) 
+            
+            print(p2)
+            
+            ggsave(filename = paste("Output/Figures/5_MVE/5_MVE_", varcat[i], "_interaction_coeff_", mpgname, ".pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  # saves the last plot
+
+              }
+}
+```
+
+
+
+

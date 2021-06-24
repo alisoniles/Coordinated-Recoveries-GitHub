@@ -269,3 +269,92 @@ CCM_boot_df_and_sig_test <- function(A, B, An, Bn, EB, tau)
 
 
 
+
+lag_block <- function(d, E, tau) {
+  dn <- colnames(d)
+  dl <- d
+  
+  if(E==2){
+    return(dl)}
+  
+  if(E>2){
+    for(i in 1:(E-2)){
+      NAlag <- matrix(data=NA, nrow=(abs(tau)*i), ncol=1)
+      colnames(NAlag) <- dn
+      tlag <- rbind(NAlag,d)
+      dl <- cbind(dl,tlag[1:nrow(dl),])
+    }
+    colnames(dl) <- c(dn, paste(dn, "_-", c(1:(E-2)), sep=""))
+    return(dl)}
+}
+
+RP_lag_block <- function(block_data, RP, E, tau) {  
+  #block_data: main data file
+  #RP: the chosen response process  
+  #E: optimal embedding dimension
+  #tau: optimal lag
+  
+  #fetch RP time series for each pod
+  RP_J <- as.matrix(block_data$J[RP])
+  RP_K <- as.matrix(block_data$K[RP])
+  RP_L <- as.matrix(block_data$L[RP])
+  
+  #Make lagged block of response process
+  RP_J_lag <- lag_block(RP_J, E=E, tau=tau)
+  RP_K_lag <- lag_block(RP_K, E=E, tau=tau)
+  RP_L_lag <- lag_block(RP_L, E=E, tau=tau)
+  
+  RPlag <- rbind(RP_J_lag, RP_K_lag, RP_L_lag)
+  
+  return(RPlag)
+}
+
+
+
+#Function to remove to extra NAs in RP data, and add lagged RP columns
+#'data' with columns: year, stk, response process and forcing processes and to create a lagged block for RP.
+SMAP_shape_block_data <- function(data, min_cont_ts = 10) {
+  
+  data <- rbind(rep(NA, ncol(data)),data) #add an initial row of NA so the difference function works for the first row
+  dataNA <- !complete.cases(data[,ncol(data)]) # locate NA in last column (the)
+  data[dataNA,] <- NA
+  rownames(data) <- NULL
+  
+  #record the beginning and endpoints of each data chunk
+  CC <- complete.cases(data[,1])  
+  lib <- matrix(NA, nrow = length(which(diff(CC)==1)), ncol = 2)
+  lib[,1] <- which(diff(CC)==1)+1
+  lib[,2] <- which(diff(CC)==-1)
+  colnames(lib) <- c("lower", "upper")
+  
+  #only include in the library the sections of data that are continuous for at least min_cont_ts time points. 
+  minlib <- lib[,2]-lib[,1]+1
+  #if there are no library chunks long enough, then return error
+  if(sum(minlib>=min_cont_ts)<=1){
+    print("Error - data chunks are too small for the given E and tau")
+    return()
+  }
+  lib <- as.matrix(lib[(minlib>=min_cont_ts),])
+  
+  x <- rep(NA, ncol(data))
+  for (r in 1:nrow(lib)){
+    xtmp <- data[lib[r,1]:lib[r,2],]
+    x <- rbind(x,rep(NA, ncol(data)),xtmp)}
+  data <- (x[3:nrow(x),])
+  data <- as.data.frame(data)
+  rownames(data) <- NULL
+  
+  #add lags of RP
+  datastk <- as.factor(data$stk)
+  data <- split(data, datastk)
+  for(k in 1:length(data)){
+    temp <- data[[k]][RP]
+    lagRP <- lag_block(temp,E+1,tau)
+    data[[k]] <- cbind(data[[k]][1:2], lagRP, data[[k]][3:(ncol(data[[k]])-1)])
+  }
+  datastk <- datastk[complete.cases(datastk)]
+  data <- unsplit(data, datastk)
+  
+  return(data)
+}
+
