@@ -1,0 +1,288 @@
+---
+title: "5_EDM_Multivariate_forecast_models"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(rEDM)
+library(plyr)
+library(reshape)
+```
+
+Excerpt from methods of McGowen et al.: With multiple environmental drivers to choose from, there are many ways to construct multivariate models (Ye and Sugihara 2016). We limit our models to a maximum of four coordinates to keep
+the analysis tractable and to be consistent with the optimal E determined for the univariate model. Fixing the
+first coordinate to be the unlagged chlorophyll-a concentration, we consider up to three additional coordinates, where each other coordinate is a 0-, 1-, or 2-week lag of either an environmental variable or of chlorophyll-a. We use all environmental variables that CCM identifies as significant. Choosing combinations of the six causal environmental variables listed in Table 1 generates 1351 possible multivariate models.
+
+```{r}
+load("Data/Rdata/block_data.Rdata")  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+for(u in c(1,2,3,5)){ #For each MPG excluding lower Snake for which there is only one stock
+    data <- block_data[c(mpg==u)]
+    mpgname <- as.character(data[[1]]$mpg[1])
+    
+#concatenate the time series of the different stocks in the MPG together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <-  is.finite(merged_data$rec_n) & is.finite(merged_data$eff_n)
+    block <- merged_data[valid,]  
+    
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+    lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+
+    # determine the best univariate embedding dimension and theta for the target variable (total recruitment)
+    target_var <- "rec4_n"
+    data_target <- as.matrix(cbind(block$year, block[target_var]))
+    rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+    simplex_output <- simplex(data_target, E = 1:10, silent = TRUE)
+    best_E <- simplex_output$E[which.max(simplex_output$rho)] #Apply optimal E that maximizes rho to the following CCM...
+    smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E) 
+    best_T <- smap_output$theta[which.max(smap_output$rho)] 
+            
+    #determine all the combinations of library variables to test        
+    vars <- readRDS(paste("Output/Rdata/3_CCM/3_CCM_multivar_MPG_",mpgname,".RDS", sep = ""))
+    vars[,9:12] <- matrix(0, nrow = NROW(ccm), ncol = 4)
+    colnames(vars) <- c("variable" ,  "target",  "cat", "subcat", "offset", "rho",  "N",  "95p_crit", "rec3 vars", "rec4 vars", "rec5 vars", "Total rec vars")
+vars$offset==2
+
+        # plot the distribution of rho values: ggplot(ccm, aes(x=rho, color=library)) + geom_histogram(fill="white")
+    ccm <- ccm %>% filter(library==target_var) %>% filter(!grepl('up45', env_fac)) #focus on total recruits and remove upwelling at 45 degrees
+    # Top two months of PDO, NPGO, and Upwelling 48 at lags 2, 3, 4 (only for rec4 and rec5), and 5 (only for rec5)
+    # Seal lion pup count data: offset by 3 years, then lag 2 and return year
+    # Male count not offset: lag 2 and return year
+    # Orcas are not eating smolts, only include return year lag.
+    ccm <- ccm[ccm$rho>(3*ccm$`95p_crit`),] #only include variables whose CCM rho was 2* the critical value
+    fac_combn <- t(combn(ccm$target, m=best_E-3, FUN = NULL, simplify = TRUE))  # Generate all combinations of variables in sets the size of the embedding dimension minus 2 because recruits 3 and the number of effective spawners are included by default. 
+    
+    #set up output table
+    MultiEDM_outputlist <- matrix(NA, nrow = NROW(fac_combn), ncol = best_E + 4)
+    colnames(MultiEDM_outputlist) <- c("MPG","target","rec3_n","eff_n","library1","library2","library3","library4","library5","library6","library7", "rho", "N", "95p_crit")
+    MultiEDM_outputlist[,1] <- mpgname
+    MultiEDM_outputlist[,2] <- target_var
+    MultiEDM_outputlist[,3] <- "rec3_n"  
+    MultiEDM_outputlist[,4] <- "eff_n"    
+    MultiEDM_outputlist[,5:(best_E - 3 + 4)] <- fac_combn    
+
+#Perform multivariate forecasts
+    for(i in c(1:NROW(MultiEDM_outputlist)) ){  
+    
+      library_vars <- c(MultiEDM_outputlist[i,3:(best_E+1)])
+
+          # CCM from library var to target var   
+            MultiEDM_data <- as.matrix(cbind(block$year, block[target_var], block[library_vars]))
+            rownames( MultiEDM_data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            MultiEDM <-  block_lnlp(MultiEDM_data, lib, pred=lib, columns = library_vars, target_column = target_var, method = c("s-map"), theta=best_T, silent = TRUE, first_column_time = TRUE)
+            MultiEDM_outputlist[i,NCOL(MultiEDM_outputlist)-2] <- MultiEDM$rho
+            MultiEDM_outputlist[i,NCOL(MultiEDM_outputlist)-1] <- MultiEDM$num_pred
+            MultiEDM_outputlist[i,NCOL(MultiEDM_outputlist)] <- qnorm(0.95, sd = 1/sqrt(MultiEDM$num_pred - 3)) #qnorm is used to look up percentiles of the standard normal distribution. The 0.95 quantile is the 95th percentile. qnorm produces the boundary value that the rho needs to be greater than. 
+    }
+    
+saveRDS(MultiEDM_outputlist, file = paste("Output/Rdata/5_Multi_EDM_MPG_",mpgname,".RDS", sep = ""), compress = FALSE)
+    
+#figure
+# plot the distribution of rho values
+MultiEDM_outputlist <- data.frame(MultiEDM_outputlist)
+MultiEDM_outputlist$rho <- as.numeric(as.character(MultiEDM_outputlist$rho))
+ggplot(MultiEDM_outputlist, aes(x=rho)) + geom_histogram()
+      
+}
+```
+
+
+
+#multivariate model to look at interaction coeffs of hatchery output on wild chinook salmon
+```{R}
+load("Data/Rdata/block_data.Rdata")  
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+
+target_var <- "rec4_n" #the focal variable of the analysis
+  
+for(u in c(1,3,4,5)){ #1,3,4,5 For each MPG excluding lower Snake for which there is only one stock
+    data <- block_data[c(mpg==u)]
+    mpgname <- as.character(data[[1]]$mpg[1])
+
+     # concatenate the time series of the different stocks in the MPG together
+    keys <-c(names(data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+    valid <-  is.finite(merged_data$rec4_n) & is.finite(merged_data$eff_n) & is.finite(merged_data$hatch.spring.5)
+    block <- merged_data[valid,]  
+    
+    # list the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+            #only keep libraries with sufficient length
+            validlib <- lib[,2]-lib[,1]
+            predlib <- lib[validlib>3,]
+    
+    #Only keep data contained within the libraries with sufficient length
+    keepvec <- matrix(FALSE,nrow=length(block), ncol=1)
+    for(j in 1: NROW(predlib)){
+    keepvec[predlib[j,1]:predlib[j,2]] <- TRUE
+      }
+    block <- block[keepvec,]
+    rownames(block) <- NULL #remove rownames
+     
+     lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+            
+    # determine the best univariate embedding dimension and theta for the target variable 
+          data_target <- as.matrix(cbind(block$year, block[target_var], block$eff_n))
+          rownames(data_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+          simplex_output <- simplex(data_target, lib=lib, pred=lib,  E = 1:8, silent = TRUE)
+          best_E<- min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho)
+          smap_output <- s_map(data_target, lib=lib, pred=lib, E=best_E) 
+          best_T <- smap_output$theta[which.max(smap_output$rho)] 
+  
+           #for each of the hatchery variables  
+ testvar <- c("hatch.spring.1","hatch.spring.2","hatch.spring.3","hatch.spring.4","hatch.spring.5","hatch.summer.1","hatch.summer.2","hatch.summer.3","hatch.summer.4","hatch.summer.5","hatch.total.1","hatch.total.2","hatch.total.3","hatch.total.4","hatch.total.5")
+ smapcoeffs = list()
+ for(i in 1:length(testvar)){          
+#Perform multivariate forecasts
+   # for each embedding, use smaps to calculate the coefficients over time
+         
+            MultiEDM_data <- as.matrix(cbind(block["year"], block[target_var], block["eff_n"], block[testvar[i]]))
+            rownames( MultiEDM_data) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+            smap <- block_lnlp(MultiEDM_data, lib=lib, pred=lib, method = c("s-map"), columns = c(target_var, "eff_n", testvar[i]), theta = best_T, first_column_time = TRUE, save_smap_coefficients = TRUE)
+           
+                  a <- data.frame(smap[[1]]$smap_coefficients)
+                  colnames(a) <- paste(i, c(colnames(MultiEDM_data[,2:4]),"constant"))
+                  smapcoeffs[[i]] <- a
+                   
+ }
+ 
+ 
+            #convert large smap coefficients list into plottable data frame
+            d = do.call(cbind, smapcoeffs)  
+            d <- cbind(block$year, d) #add year column
+                  colnames(d)[1] <- c("yr")
+            d <- gather(d, key, coeff, -yr)  #create long data for plotting
+            d <- separate(d, key, into=c("model","var"), sep = " ")  #add columns for model number, variable
+            d <- d %>% filter(!grepl('constant', var))  #remove coefficients for constants
+            d$var <- gsub('rec4_n', 'rec4', d$var) # rename some of the variables
+            d$var <- gsub("eff_n", 'eff', d$var)
+            d <- separate(d, var, into=c("var","subcat","offset"), extra = "merge", sep = "\\.")  # separate out the variable subcategories and their offsets that are stored in the variable names
+            d$offset <- d$offset %>% replace_na(0) #replace NAs for the target variable and offset values
+            
+         #Plot: how does hatchery data affect recruitment data of wild salmon 
+            df <- filter(d,var=="hatch")
+            p <- ggplot(df, aes(x=yr, y=coeff, group = interaction(subcat, offset), colour = offset)) +
+                geom_point(fill = "white", size = 0.1) +
+                geom_line()+
+                theme_bw() + 
+                labs( subtitle = paste("Effect of hatchery releases on", target_var, "in", mpgname,"MPG",sep = " "), x="year", y="interaction coefficient") 
+            p1 <- p + facet_grid(offset~subcat)  # rows are offset, columns are Spring, summer, total hatchery
+            print(p1)
+
+            ggsave(filename = paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")  # saves the last plot
+
+            ggsave(filename =         
+paste("Output/Figures/5_MVE/Hatchery_coeff_on_" ,target_var, "in", mpgname, "MPG_Facet.pdf", sep = ""), plot = p1, width = 7, height = 9.5, units = "in")             
+
+
+                  
+}
+                   
+
+```
+
+
+
+```{r}
+saveRDS(df, file = "~/Github/Coordinated-Recoveries-GitHub/CORE EDM visual/Data/hatch_models.rds")
+
+```
+
+
+
+
+
+#Multivariate models of all variables of interest
+```{R}
+rm(list=ls()) 
+load("Data/Rdata/block_data.Rdata")  
+name <- "Snake River ESU"
+
+target_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+
+best_E_T <- matrix(NA, nrow = length(target_vars), ncol = 3) # Save the optimal embedding dimension for each target variable
+          colnames(best_E_T) <- c("target","E", "theta")
+          best_E_T[,1] <- t(target_vars)    
+tv <- 1
+for(tv in 1:length(target_vars)){ # for each target variable 
+
+    # concatenate the time series of the different stocks together
+    keys <-c(names(block_data[[1]]))
+    merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(block_data, `[`, keys))), keys)
+    merged_data <- as.data.frame(merged_data)
+     valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.eff_n.0)
+    block <- merged_data[valid,]  
+    rm(keys, merged_data, valid)
+    
+    # list the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+            lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+            lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+           #only include in the library the sections of data that are continuous for at least 20 time points. 
+            minlib <- lib[,2]-lib[,1]
+                  lib <- lib[minlib>20,] 
+           #narrow the data block to these large library sections
+                  x <- block[lib[1,1]:lib[1,2],] 
+                  for (r in 2:nrow(lib)){
+                  xtmp <- block[lib[r,1]:lib[r,2],]
+                  x <- rbind(x,xtmp)
+                  }
+                  block <- x
+           #recreate the library list
+           lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+                  lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+                  lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+              rm(x,minlib, xtmp, r)
+            
+    # determine the best univariate embedding dimension and theta for each target variable
+    block_target <- as.matrix(cbind(block$year, block[target_vars[tv]]))
+          rownames(block_target) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+          simplex_output <- simplex(block_target, E = 1:10, silent = TRUE)
+          # choose the smallest E whose rho is within 1 stdv of the maximum rho)
+          best_E_T[tv,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) 
+          smap_output <- s_map(block_target, lib=lib, pred=lib, E=as.numeric(best_E_T[tv,2])) 
+          best_E_T[tv,3]  <- smap_output$theta[which.max(smap_output$rho)] 
+  
+    # determine which library variables to include from the CCM analysis    
+    ccm <- readRDS("Output/Rdata/3_CCM/3_CCM_SnakeESU.RDS")
+          ccm <- ccm %>% filter(library==target_vars[tv]) #The 'library' variable from the ccm analysis is the target variable here. 
+          ccm <- ccm[ccm$rho_eff>(3*ccm$`95p_crit`),] #only keep variables whose CCM rho from the multivariate embedding with the effective spawners is greater than the critical value
+          max_ret_year <- c(3,4,5,5) #max return year for each target variable
+                  #remove offsets greater than return year 
+          ccm <- ccm[ccm$offset<=max_ret_year[tv],]
+          #remove effective spawners as a potential causal variable, as it will be included in all multivariate embeddings
+          ccm <- ccm %>% filter(target!="salm.eff_n.0")
+          #remove lagged salmon variables as they will dominate the best embeddings and we are not interested in producting great forecasting models
+          ccm <- ccm %>% filter(cat!="salm")
+          #remove the current MVE target variable as a potential causal variable, as it will be included in all multivariate embeddings
+          ccm <- ccm %>% filter(target!=target_vars[tv])
+
+    # make a multivariate embeddings for each of the chosen variables from the CCM analysis. Include the target variable plus lags of the target variable (to match the optimal embedding dimention) and the number of effective spawners in each embedding.       
+          
+          Multivar_block <- as.matrix(cbind(block["year"], block[target_vars[tv]], block["salm.eff_n.0"], block[ccm$target]))  #The chosen predictor variables are the sames as the target variables from the CCM; Here they are the library vars
+          rownames(MVE_block) <- NULL #remove rownames to supress error 
+          
+          E <- as.numeric(max(3, best_E_T[tv,2])) #embedding dimension for the target variable
+          max_lag <- E-2 #number of lags of each of the target_var for the multivariate embedding equal to E-2 because of the caulsal var and the eff spawners
+          lagged_block <- make_block(MVE_block[, 2:NCOL(MVE_block)], max_lag = max_lag)

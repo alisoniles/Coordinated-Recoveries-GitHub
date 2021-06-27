@@ -1,0 +1,12 @@
+---
+title: "2_multispatial_CCM_diagnostics"
+author: "Alison Iles"
+date: "8/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#runs multispatial convergent cross-mapping algorithm on two time series, A and B, to determine whether process A is a forcing process for process B. 

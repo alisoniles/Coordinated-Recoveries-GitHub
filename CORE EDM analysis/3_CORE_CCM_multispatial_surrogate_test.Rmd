@@ -1,0 +1,237 @@
+---
+title: "3_CORE_CCM_multispatial_surrogate_test"
+author: "Alison Iles"
+date: "4/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())  
+
+# load functions and dependent libraries
+source("0_CORE_prepareR.R")
+
+
+```
+
+
+
+## CCM: MULTISPATIAL Test of convergence for each putative causal variable
+Run multispatial convergent cross-mapping algorithm on two time series, A and B, to determine whether process A is a forcing process for process B based on two criteria: 1. if the terminal rho is significantly different from the rho at the minimum library size, and 2. if the terminal rho is significantly different compared to the rho for the twin surrogates. 
+
+This version optimizes E and tau for the response process, following Kawatsu 2021
+
+THis version does NOT include spawners in the embedding as the multispatial CCM doesn't have that functionality
+```{R}
+library(rstatix)
+#add columns to list of putative forcing processes to store results
+FP_list[,5:12] <- matrix(NA, nrow = NROW(FP_list), ncol = 8)
+colnames(FP_list) <- c("FP", "cat", "subcat", "offset", 
+                              "level",
+                              "RP", "E", "tau", 
+                              "N", "termrho", "deltarho", "pval")     
+j <- 1; i <- 1
+ for(j in 1:8){    
+ #load optimal embedding parameters for the response process
+     level <- ETT$level[j]
+     RP <- ETT$RP[j]
+     E <- ETT$E[j]
+     tau <- ETT$tau[j]     
+     
+     #get data block
+     if(level=="ESU"){D_level <- data[,]}
+     if(level!="ESU"){D_level <- data[data$mpg==level,]}
+
+### define function environments to run in parallel
+registerDoParallel(8)  # use multicore, set to the number of our cores
+
+     system.time({  
+
+     R <- foreach(i=1:nrow(FP_list), .combine=rbind) %dopar% {    #FP loop
+
+           FP <- FP_list$FP[i]
+           D <- cbind(D_level$year, D_level[FP], D_level[RP])
+           colnames(D) <- c("year", "FP", "RP")
+           D <- CCM_shape_block_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+
+            tryCatch({
+                 CCMboot <- CCM_boot(D[,2], D[,3], E=E, tau=tau, DesiredL=seq(from = (tau*(E-1)+(E+1)), to=(nrow(D)-E+2), by=100))
+                 N <- length(CCMboot$Aest)-sum(is.na(CCMboot$Aest)) #the number of estimated values of RP from FP using CCM, for the longest library length considered
+                 termrho <- CCMboot$rho[length(CCMboot$rho)] #terminal rho - rho for CCM at largest library size
+                 deltarho <- CCMboot$rho[length(CCMboot$rho)]-CCMboot$rho[1] #delta rho - the change in rho from smallest to largest library size
+                 pval <- ccmtest_oneway(CCMboot)
+                 
+                 #Test for significant causal signal based on t-test between rho from shortest library to longest library
+                        out1 <- cbind(CCMboot$FULLinfo[1,], CCMboot$Lobs[1])
+                        out2 <- cbind(CCMboot$FULLinfo[nrow(CCMboot$FULLinfo),], last(CCMboot$Lobs))
+                        out <- rbind(out1, out2)
+                        colnames(out) <- c("rho", "N")
+                        out <- data.frame(out)
+                        out$N <- as.factor(out$N)
+                      ttestpval <- t_test(out, rho ~ N)$p
+
+                 data.frame(cbind(i, level, RP, E, tau, FP, N, termrho, deltarho, pval, ttestpval))
+            }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")}) #if error in CCM_boot (usually due to to small sample size, then move on to next variable)
+           
+        }#FP loop
+    }) #system.time
+
+save(R, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM_reduced_E_",level,RP,".Rdata", sep="_"))
+}#for each ETT
+
+```
+
+
+
+
+#--------------------Twin surrogate significance test--------------------
+Run surrogate analysis for each interaction in the CCM output table that showed significant convergence
+This takes a super long time to run... only run after the CCM tests that include the number of spawners in the embedding as that is what we're likely to go with in the end.
+```{R}
+
+for(j in 1:8){  #for each response process E/tau/theta combination
+     level <- ETT$level[j]
+     RP  <- ETT$RP[j]
+     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/multispatial_CCM_reduced_E_",level,RP,".Rdata", sep="_"))
+     if(j==1){CCM <- R[,1:10]}
+     if(j>1){CCM <- rbind(CCM, R[,1:10])}
+}     
+
+
+     CCM$i <- NULL
+     CCM$E <- as.numeric(CCM$E)
+     CCM$tau <- as.numeric(CCM$tau)
+     CCM$N <- as.numeric(CCM$N)
+     CCM$termrho <- as.numeric(CCM$termrho)
+     CCM$deltarho <- as.numeric(CCM$deltarho)
+     CCM$pval <- as.numeric(CCM$pval)
+     row.names(CCM) <- NULL
+
+      #only move ahead with those interactions demonstrating significant convergence at p<0.05
+      CCM <- CCM[CCM$pval<=0.05,] 
+      CCM <- CCM[!is.na(CCM[,1]),] #Remove NAs
+
+
+      #run in sections
+      CCMsec <- c(seq(1, nrow(CCM), 100), nrow(CCM))
+      for(j in 1:(length(CCMsec)-1)){
+            
+env_lib_ts <- c("foreach", "rEDM", "multispatialCCM", "zoo")
+cl <- makeCluster(detectCores(), type="PSOCK")
+registerDoParallel(cl)
+system.time({
+res <- foreach(i=CCMsec[j]:(CCMsec[j+1]-1), .combine=rbind, .packages=env_lib_ts) %do% {
+#for(i in CCMsec[j]:(CCMsec[j+1]-1))  {     
+  
+      #get data block
+      level <- CCM$level[i]  
+      if(level=="ESU"){D_level <- data[,]}
+      if(level!="ESU"){D_level <- data[data$mpg==level,]}
+      
+      E <- CCM$E[i]
+      tau <- CCM$tau[i]
+
+    #shape the data for the interaction test        
+     FP <- CCM$FP[i] # select the putative causal variable (forcing process) 
+     RP <- CCM$RP[i] # select the response process
+     
+      D <- cbind(D_level$year, D_level[FP], D_level[RP])
+      colnames(D) <- c("year", "FP", "RP")
+      row.names(D) <- NULL
+      D <- CCM_shape_block_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+      D <- D[complete.cases(D),]
+      D <- as.data.frame(D)
+      lib <- create_lib(D, 5)
+     
+      #Calculate twin surrogates for the response variable (original, dim, num.iter, tau = 1,..)
+      #Done separately for each stock then joined together with NAs separating each stock
+      #Use tau=1 to create the surrogate data, even if the optimal tau is >1
+      iter <- 200
+      D_sur <- data.frame()
+      for(k in 1:NROW(lib)){
+          D_RP_stock <- D[lib[k,1]:lib[k,2],]
+          stock.sur <- make_surrogate_data(D_RP_stock[,3], method="ebisuzaki", num_surr=iter)
+          D_sur <- rbind(D_sur, stock.sur)
+      }
+      
+      #for each surrogate RP time series, evaluate causality using CCMboot and record the rho of each
+      sur_rhos <- matrix(data=NA, nrow=iter, ncol=1)
+      for(s in c(1:iter)){
+           x <- cbind(D[,1:2],D_sur[s]); colnames(x) <- c( "year","FP","RP.sur")
+           x <- shape_stock_data(x, 5) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+           tryCatch({
+                    CCMboot <- CCM_boot(x[,2], x[,3], E=E, tau=abs(tau), DesiredL=nrow(D)-E+2, iterations=1)
+                    sur_rhos[s] <- tail(CCMboot$rho, n=1)
+           }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")}) #if error in CCM_boot (usually due to to small sample size, then move on to next variable)
+      }
+       #save the 95% CI for rho based on the surrogate data
+       lower95 <-  quantile(sur_rhos,0.025, na.rm = TRUE)
+       upper95 <-  quantile(sur_rhos,0.975, na.rm = TRUE)
+              u_rho95 <- CCM$termrho[i]-upper95 #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
+       lower99 <-  quantile(sur_rhos,0.005, na.rm = TRUE)
+       upper99 <-  quantile(sur_rhos,0.995, na.rm = TRUE)
+              u_rho99 <- CCM$termrho[i]-upper99 #difference between terminal rho and the top of the 99% CI of rho for the surrogate data
+        
+#res <- rbind(res, )
+data.frame(cbind(i, level, RP, E, tau, FP, N=CCM$N[i], termrho=CCM$termrho[i], deltarho=CCM$deltarho[i], pval=CCM$pval[i], lower95, upper95, u_rho95, lower99, upper99, u_rho99))
+      
+} #do par
+}) #system.time
+stopCluster(cl)     
+
+save(res, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_reduced_E_",CCMsec[j],".Rdata", sep="_"))
+      }
+
+#Summarize the twin surrogate results into one file
+for(j in 1:(length(CCMsec)-1)){  #for each response process E/tau/theta combination
+     load(file=paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/twinsurr_CCM_reduced_E_",CCMsec[j],".Rdata", sep="_"))
+     if(j==1){CCM <- res}
+     if(j>1){CCM <- rbind(CCM, res)}
+}     
+      row.names(CCM) <- NULL
+     CCM$i <- NULL
+     CCM$E <- as.numeric(CCM$E)
+     CCM$tau <- as.numeric(CCM$tau)
+     CCM$N <- as.numeric(CCM$N)
+     CCM$termrho <- as.numeric(CCM$termrho)
+     CCM$deltarho <- as.numeric(CCM$deltarho)
+     CCM$pval <- as.numeric(CCM$pval)
+     CCM$lower95 <- as.numeric(CCM$lower95)
+     CCM$upper95 <- as.numeric(CCM$upper95)
+     CCM$lower99 <- as.numeric(CCM$lower99)
+     CCM$upper99 <- as.numeric(CCM$upper99)
+     CCM$u_rho95 <- as.numeric(CCM$u_rho95)
+     CCM$u_rho99 <- as.numeric(CCM$u_rho99)
+     
+save(CCM, file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM_reduced_E.Rdata", sep="_"))     
+```
+
+
+
+
+
+#Put the result into the same format as the stock level analysis 
+```{R}
+load(file = paste("Output/Rdata/3_CCM_without_spawners_in_embedding/Twin_surrogate_test/Twin_surr_CCM_reduced_E.Rdata", sep="_"))
+
+CCM <- CCM[CCM$u_rho99>0, ] #Leave out interactions with urho <=0
+CCM <- CCM[CCM$pval<=0.01, ] #narrow the results to convergence with pval<=0.01
+
+
+levels <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon")
+variables <- c("rec4n", "rec5n")
+FP_D <- FP_list
+l <- 2;v <- 1
+for(v in 1:length(variables)){ #loop through the different variables
+  for(l in (1:length(levels))){  #loop through each level (ESU and the different MPGs)
+ D <- CCM %>% filter(level==levels[l]) %>% filter(RP==variables[v])
+ D <- D[,c("FP","u_rho99")]
+ colnames(D) <- c("FP", paste(levels[l], variables[v], sep="_"))
+ FP_D <- merge(FP_D, D, by="FP", all.x=TRUE)
+  }
+}
+
+
+```

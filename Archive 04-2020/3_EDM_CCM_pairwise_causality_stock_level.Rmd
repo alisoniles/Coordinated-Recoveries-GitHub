@@ -1,0 +1,780 @@
+---
+title: "3_EDM_CCM_pairwise_causality_multispatial"
+author: "Alison Iles"
+date: "12/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rEDM)
+library(multispatialCCM)
+library(tidyr)
+library(stringr)
+library(dplyr)
+library(zoo)
+library(tseriesChaos)
+library(pforeach)
+
+library(ggplot2)
+library(ggforce)
+library(gridExtra)
+library(tictoc)
+library(treemap)
+library(d3Tree)
+
+
+rm(list=ls()) 
+```
+
+#Stock level CCM
+#run convergent cross-mapping algorithm on two time series, A and B, to determine whether process A is a forcing process for process B. 
+
+prints rho for each multispatial CCM test and colors if significantly different from the min library size and significantly different compared to twin surrogates. 
+
+
+#load the functions
+```{R}
+
+#modified ccmtest function to test one-way interactions (we're only interested in the effects on salmon, not what salmon affect and most of the variables are exogenous anyway)
+ccmtest_oneway <- function(CCM_boot_AcB) {
+    #Tests for significant causal signal based on 95%
+    #confidence intervals from bootstrapping.
+    #Compares shortest library to longest
+    pval_a_cause_b<-1-sum(CCM_boot_AcB$FULLinfo[1,]<
+      CCM_boot_AcB$FULLinfo[nrow(CCM_boot_AcB$FULLinfo),], na.rm=T)/
+      ncol(CCM_boot_AcB$FULLinfo)
+    return(pval_a_cause_b)
+  }
+
+
+# Configure EDM
+config <- list()
+
+config$kBestE.Method   <- "MAE"
+config$kBestE.Range    <- 1:12
+config$kBestE.RangeStr <-
+  paste0("E", config$kBestE.Range[1], "to",
+         config$kBestE.Range[length(config$kBestE.Range)])
+config$kFishNameFileEncoding <- "Shift-JIS"
+config$kMacFont <- "HiraMaruProN-W4"
+config$kPdfFont <- "Japan1GothicBBB"
+config$kMaxCore <- 0
+config$kRndSeed <- 2430
+
+if (!is.null(config$kRndSeed)) {
+  set.seed(config$kRndSeed)
+}
+
+
+# #Troubleshoot TwinSurrogate function
+# original <- D[,2]
+# dim <- E
+# num.iter <- 100
+# surrogate.option <-  "random"
+# tau = 1
+# s   = 0.875
+# initial.point <-  "twins" 
+# distance.method  <-  "norm"
+# point.per.year <-  52
+# s.update  <-  "on"
+# n.twin.threshold <-  10
+# output.message <-  T
+ 
+TwinSurrogate <- function(original,
+                          dim,
+                          num.iter,
+                          tau = 1,
+                          s   = 0.875,
+                          surrogate.option = "random",  # or "phase_lock"
+                          initial.point    = "same_season",  # or "twins"
+                          distance.method  = "norm",
+                          point.per.year   = 52,
+                          s.update         = "on",
+                          n.twin.threshold = 10,
+                          output.message = F) {
+  # Generate time-lag embedding matrix with columns corresponding to lagged time series
+  if (dim >  1) {
+    original_e <- embedd(original, dim, tau) 
+  }
+  if (dim == 1) {
+    original_e <- as.matrix(original)
+  }
+  if (dim <  1) {
+    cat("Warning: Embedding dimension should be >= 1")
+  }
+  # s candidates
+  s.seq <- c(0.875, 0.88, 0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.87, 0.86, 0.85, 0.84, 0.83, 0.82, 0.81, 0.80)
+  s.i <- 1
+
+  # Calculate binary matrix (= recurrence plot)
+  repeat {
+    d <- DistOneZero(original_e, method = distance.method, s = s)
+
+    # Search twins
+    twins <- c()
+    for (i in 1:ncol(d)) {
+      for (j in 1:ncol(d)) {
+        if (all(d[, i] == d[, j])) {
+          if (surrogate.option == "phase_lock") {
+            if ((i - j) %% point.per.year == 0) {
+              twins <- rbind(twins, c(i, j))
+            }
+          } else{
+            twins <- rbind(twins, c(i, j))
+          }
+        }
+      }
+    }
+
+    num.twins <- nrow(twins) - nrow(d)
+    if (num.twins >= n.twin.threshold) {
+      break
+    }
+    if (s.update == "off") {
+      break
+    }
+    s.i <- s.i + 1
+    if (s.i > length(s.seq)) {
+      break
+    }
+    s = s.seq[s.i]
+  }
+
+  if (output.message) {
+    prop.black <- sum(d) / (ncol(d) * nrow(d))
+    print(c("Proportion of 1:", prop.black), quote = F)
+    print(c("Number of twins:", num.twins), quote = F)
+  }
+
+  # Generate twin surrogates
+  surrogate <- as.list(NULL)
+  avoid.infinite.loop <- 0
+  repeat {
+    # Select the initial point of the surrogate
+    if (surrogate.option == "random") {
+      # Select random initial points
+      surr <- sample(1:(ncol(d) - 1), 1)
+    } else if (surrogate.option == "phase_lock") {
+      if (initial.point == "same_season") {
+        # Select the point of the same season
+        surr <- sample(seq(1 + point.per.year, ncol(d) - 1, by = point.per.year), 1)
+      } else if (initial.point == "twins") {
+        # Select twins of the original initial point as the surrogate initial point
+        surr <- sample(twins[twins[, 1] == 1, 2], 1)
+      }
+    } else{
+      cat("Warning: specify the correct option!")
+    }
+
+    # Search next point
+    for (j in 1:(ncol(d) - 1)) {
+      repeat {
+        nex <- PointNext(surr[length(surr)], twins, d)
+        if (surrogate.option == "phase_lock" &&
+            initial.point == "same_season") {
+          if (nex != (length(surr) + 1)) {
+            break
+          }
+        } else{
+          break
+        }
+      }
+      surr <- c(surr, nex)
+    }
+
+    # Save the surrogate if it reach to the length of the origial data
+    # Not save if the surrogate is short
+    if (surr[length(surr)] != 0) {
+      surrogate <- c(surrogate, list(original_e[surr,]))
+    }
+
+    # Complete the surrogate generation if length(surrogate) == num.iter
+    if (length(surrogate) == num.iter) {
+      break
+    }
+
+    # Avoid infinite loop
+    # End cycles if surrogates cannot be generated during > 30*num.iter trials
+    avoid.infinite.loop <- avoid.infinite.loop + 1
+    if (avoid.infinite.loop > 30 * num.iter) {
+      break
+    }
+  }
+
+  surrogate.one.col <-
+    data.frame(matrix(rep(NaN, num.iter * length(original)), ncol = num.iter))
+  if (avoid.infinite.loop <= 30 * num.iter) {
+    for (i in 1:num.iter) {
+      if (dim >= 2) {
+        surrogate.one.col[1:(dim - 1), i] <- surrogate[[i]][1, 1:(dim - 1)]
+        surrogate.one.col[dim:length(original), i] <- surrogate[[i]][, dim]
+      } else {
+        surrogate.one.col[dim:length(original), i] <- surrogate[[i]]
+      }
+    }
+  }
+  return(surrogate.one.col)
+}
+
+
+
+# #Troubleshoot ParSurCI
+# target.ts <- D[,2] #salm.recspn 4 or 5 data are the target time series
+# target.E <- E
+# cause.ts <- D[,3] #
+# surrogate.ts <- x.sur
+# tau <-  tau
+# lib <-  c(1, NROW(target.ts))
+# lib.parms <- seq.int(10, length(target.ts)-(tau+1), 5)
+# surrogate <-  "effect"
+# E.range <-  1:12
+# tp <-  0
+  
+ParSurCI <- function(target.ts, #here the 'target' time series is the recspn data
+                     target.E, 
+                     cause.ts, #the causal time series are the putative causal variables
+                     surrogate.ts,
+                     tau=1,
+                     lib = c(1, NROW(target.ts)),
+                     lib.parms = c((tau * (target.E - 1) + (target.E + 1)), length(target.ts)-(tau*(target.E-1))-1),
+                     surrogate = "effect",  #the surrogate data are for the response variable, recspn, not the causal variable
+                     E.range   = 1:12,
+                     tp        = 0) 
+  {
+  E.tar <- target.E
+  lib.m <- length(target.ts)
+  lib.size.s <- lib.parms
+  surrogate.sum <- data.frame(L = lib.size.s)
+
+  
+  # Do CCM for the surrogate data
+  surrogate.all <-
+    pforeach(
+      i      = 1:ncol(surrogate.ts),
+      .c     = cbind,
+      .cores = config$kMaxCore,
+      .seed  = config$kRndSeed
+    )({
+      if (surrogate == "effect") {
+        target.sur <- surrogate.ts[, i]
+        block      <- cbind(target.sur, cause.ts)
+      } else if (surrogate == "cause") {
+        cause.sur <-  surrogate.ts[, i]
+        block     <- cbind(target.ts, cause.sur)
+      }
+      m <- nrow(block)
+
+      ccm.tar.cau <-
+        ccm(
+          block,
+          lib       = lib, 
+          E         = E.tar,
+          tau       = -tau,
+          lib_sizes = lib.size.s,
+          silent    = T,
+          tp        = tp
+        )
+      ccm.m <- ccm.tar.cau[, 1:2]
+
+      rhos.tmp <- ccm.m[,2]
+    })
+
+  if (!is.null(surrogate.all)) {
+    surrogate.sum <- as.data.frame(cbind(surrogate.sum, surrogate.all[1:length(lib.parms), 1:ncol(surrogate.ts)]))
+  }
+
+   # calculate 95% CI
+  ccm.sur.ci <-
+    data.frame(
+      L = lib.size.s,
+      lower95 = NA,
+      upper95 = NA,
+      lower99 = NA,
+      upper99 = NA
+    )
+  csa <- surrogate.sum
+  n.s <- length(surrogate.ts)
+
+  for(j in 1:nrow(surrogate.sum)){
+    upper95 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.975)
+    lower95 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.025)
+    ccm.sur.ci[j,'upper95'] <- upper95
+    ccm.sur.ci[j,'lower95'] <- lower95
+    upper99 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.995)
+    lower99 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.005)
+    ccm.sur.ci[j,'upper99'] <- upper99
+    ccm.sur.ci[j,'lower99'] <- lower99
+  }
+
+  result <- list(rho = ccm.sur.ci)
+  return(result)
+}
+
+
+
+
+#  ----------- Convert matrix of thresholds into binary 0-1 values ----------- 
+Binalize <- function(e, threshold) {
+  if (e > threshold) {
+    return(1)
+  } else{
+    return(0)
+  }
+}
+
+# -----------  ----------- 
+DistOneZero <- function(m, method = "norm", s = 0.875) {
+  # Calculate the maximum norm
+  if (method == "norm") {
+    dist.mat <-
+      apply(m, 1, function(row2) {
+        apply(m, 1, function(row1) {
+          max(abs(row1 - row2))
+        })
+      })
+  } else if (method == "euclid") {
+    dist.mat <- as.matrix(dist(m))
+  }
+
+  # Identify 100*s % quantlie value of dist.mat
+  d.threshold <- quantile(dist.mat, s)
+
+  # Replace values lower than d.threshold with 0
+  # Replace values higher than d.threshold with 1
+  rec <- apply(dist.mat, c(1, 2), function(a) Binalize(a, d.threshold))
+
+  # Return binary matrix
+  return(rec)
+}
+
+# ----------- Return next point ----------- 
+PointNext <- function(x, twins, d) {
+  if (x == 0) {
+    nex <- 0  # Add 0 if the next point is the end point
+  } else{
+    cand <- c(0, 0)
+    if (!is.null(twins[twins[, 1] == x,])) {
+      cand <- rbind(cand, twins[twins[, 1] == x,])
+      nex <- cand[floor(runif(1, 2, (nrow(cand) + 1))), 2] + 1
+    } else{
+      nex <- x + 1
+    }
+  }
+
+  if (nex > ncol(d)) {
+    nex <- 0  # Add 0 if the next point is the end point
+  }
+  nex
+}
+
+```
+
+
+
+#load the data
+```{R}
+
+load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+          rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(c(aa[31:nrow(aa)] ))
+          colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+      var_list <- cbind(bb,cc)
+      colnames(var_list) <- c("target", "cat", "subcat", "offset")   
+      var_list$offset <- as.numeric(var_list$offset)
+      rm("aa", "bb", "cc")
+      
+
+#Narrow the stocks to those that passed the diagnostic tests in 2_EDM_Nonlinearity_CORE.Rmd
+vars4 <- c("stk", "year", "salm.recspn4n.0", var_list$target) 
+vars5 <- c("stk", "year", "salm.recspn5n.0", var_list$target) 
+block <- list(block_data$'Bear Valley Creek'[vars4],  
+              block_data$'Big Creek'[vars4],
+              block_data$'Camas Creek'[vars4],
+              block_data$'Catherine Creek'[vars4],
+              block_data$'Imnaha River'[vars4],
+              block_data$'Loon Creek'[vars4],
+              block_data$'Marsh Creek'[vars4],
+              block_data$'Minam River'[vars4],  
+              block_data$'Salmon River Upper Mainstem above Redfish Lake'[vars4],
+              block_data$'Secesh River'[vars4],
+              block_data$'South Fork Salmon River Mainstem'[vars4],
+              block_data$'Valley Creek'[vars4],
+              block_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars4],
+              block_data$'Big Creek'[vars5],
+              block_data$'Camas Creek'[vars5],
+              block_data$'Grande Ronde Upper Mainstem'[vars5],
+              block_data$'Loon Creek'[vars5],
+              block_data$'Salmon River Lower Mainstem below Redfish Lake'[vars5],
+              block_data$'Sulphur Creek'[vars5], 
+              block_data$'Valley Creek'[vars5],
+              block_data$'Wenaha River'[vars5])
+
+stock_tau <- read.table("Data/csv_data/stocks_chosen_from_diagnostics.csv", sep = ",", header = TRUE)
+stock_tau$stock <- str_replace_all(stock_tau$stock, '\xca', " ")
+stock_tau$mpg <- str_replace_all(stock_tau$mpg, '\xca', " ")
+```
+
+#CCM: MULTISPATIAL Test of convergence for each putative causal variable for each stock time series of rec per spawner 4 and 5 
+ccm uses time delay embedding on one time series to generate an attractor reconstruction, and then applies the simplex projection algorithm to estimate concurrent values of another time series. This method is typically applied, varying the library sizes, to determine if one time series contains the necessary dynamic information to recover the influence of another, causal variable.
+```{R}
+#Empty matrix to store results
+stock_CCM_summary<- matrix(data=NA, nrow=1, ncol=11); colnames(stock_CCM_summary) <- c("stock",  "response_var", "causal_var", "cat", "subcat", "offset", "tau", "E", "Nest", "rho", "pval")   
+
+  
+v <- 60; j <- 1; tau <- 1
+  for (v in 1:nrow(var_list)){ #for each putative forcing process
+
+    FP <- var_list[v,1] #test each variable in turn as the putative forcing process
+
+    #find optimal E for putative causal variable; Use the site with the longest time series
+    D <- as.matrix(block_data$'Wenaha River'[c("year", FP)])  
+
+    maxE<-floor(sqrt(sum(complete.cases(D)))) #Maximum E to test: E ≤ sqrt(n)
+    D <- na.trim(D, sides="both", is.na ="any")
+    Emat<-matrix(nrow=maxE-1, ncol=2); colnames(Emat)<-c("E", "ForcingProcess") #Matrix for storing output
+        #Loop over potential E values and calculate predictive ability of each process for its own dynamics
+        for(E in 2:maxE) {
+          #Uses defaults of looking forward one prediction step (predstep)
+          #And using time lag intervals of one time step (tau)
+          Emat[E-1,"E"] <- E
+          Emat[E-1,"ForcingProcess"]<-SSR_pred_boot(A=D, E=E, predstep=1, tau=1)$rho
+        }
+    #We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+    #n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+    maxrho=max(Emat[,"ForcingProcess"], na.rm=TRUE)
+    E_FP <- min(Emat[(Emat[,"ForcingProcess"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+
+
+        #run the CCM for each stock in each age group of recspn
+        for(j in 1:length(block)){ #for each stock
+            for(tau in 1:5){ #test a range of tau
+              tryCatch({
+              data <- block[[j]] 
+              RP <- names(data[3]) #the time series being tested as a response process
+              data <- data[,c("year", RP, FP)]
+              data <- data[complete.cases(data),]
+              CCMboot <- CCM_boot(A=data[,3], B=data[,2], E=E_FP, tau=tau)
+              CCM_sig_test<-ccmtest_oneway(CCMboot)
+              Nest <- length(CCMboot$Aest)-sum(is.na(CCMboot$Aest)) #the number of estimated values of RP from FP using CCM, for the longest library length considered
+              rho <- CCMboot$rho[length(CCMboot$rho)] #the rho of estimates of RP from the longest library length of FP considered
+              out <- c(block[[j]]$stk[1],RP,FP,var_list[v,2],var_list[v,3],var_list[v,4],tau, E_FP, Nest, rho, CCM_sig_test)
+              stock_CCM_summary <- rbind(stock_CCM_summary, out)
+              }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+            } #tau
+        } #j
+  } #v, (FP)
+
+save(stock_CCM_summary, file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn45.Rdata", sep=""))
+```
+
+
+
+
+
+
+
+
+
+#CCM: INDIVIDUAL STOCK Test of convergence for each putative causal variable for each stock time series of rec per spawner 4 and 5 
+#Using the optimal E based on CCM instead of simplex projection
+ccm uses time delay embedding on one time series to generate an attractor reconstruction, and then applies the simplex projection algorithm to estimate concurrent values of another time series. This method is typically applied, varying the library sizes, to determine if one time series contains the necessary dynamic information to recover the influence of another, causal variable.
+```{R}
+#Empty matrix to store results
+stock_CCM_summary<- matrix(data=NA, nrow=1, ncol=12); colnames(stock_CCM_summary) <- c("stock",  "response_var", "causal_var", "cat", "subcat", "offset", "tau", "E","N", "Nest", "rho", "pval")   
+
+  
+v <- 1; j <- 1; tau <- 1
+  for (v in 1:nrow(var_list)){ #for each putative forcing process
+
+    FP <- var_list[v,1] #test each variable in turn as the putative forcing process
+
+    #run the CCM for each stock in each age group of recspn
+        for(j in 1:length(block)){ #for each stock
+          data <- block[[j]] 
+          
+              RP <- names(data[3]) #the time series being tested as a response process
+              tau <- as.numeric(stock_tau$tau[stock_tau$RP==RP & stock_tau$stock == data$stk[1]]) #tau determined from diagnostics
+              data <- data[,c(RP, FP)]
+              data <- na.trim(data, sides="both", is.na ="any")
+              
+              if (sum(complete.cases(data)) != nrow(data)) {next} #only proceed if there are no na's in the middle of the time series
+            
+              tryCatch({
+              
+              #We now determine the proper embedding dimension for cross-mapping. Following the procedure of Deyle et al. (2016) we determine the E that gives optimal prediction of cross-mapping lagged 1 time step.
+              maxE<-floor(sqrt(nrow(data)))-1 #Maximum E to test: E < sqrt(n)
+              Emat<-matrix(nrow=maxE-1, ncol=2); colnames(Emat)<-c("E", "CCMrho") #Matrix for storing output
+              for(E in 2:maxE){
+              ccm.out <- ccm(block=data,
+                  E=E,
+                  tau=-tau,
+                  lib_sizes = NROW(data), exclusion_radius=0, random_libs = FALSE, num_sample=1,
+                  tp = -1,
+                  lib_column = 1, 
+                  target_column = 2)
+            
+              Emat[E-1,1] <- E
+              Emat[E-1,2] <- ccm.out[1,2]
+              }
+              #We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+              maxrho=max(Emat[,"CCMrho"], na.rm=TRUE)
+              E_CCM <- min(Emat[(Emat[,"CCMrho"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+
+              #We then measure the un-lagged cross-map skill with this value of E and test for convergence at the minimum and maximum library lengths
+              ccm.tmp <-ccm(block=data,
+                             E         = E_CCM,
+                             tau       = -tau,
+                             tp        = 0,
+                             lib_sizes = c((tau * (E_CCM - 1) + (E_CCM + 1)), nrow(data)-(tau*(E_CCM-1))-1),
+                             num_samples = 500,
+                             silent    = T,
+                             stats_only = F)
+              minlib_rhos <- ccm.tmp$CCM1_PredictStat$rho[ccm.tmp$CCM1_PredictStat$LibSize==min(ccm.tmp$CCM1_PredictStat$LibSize, na.rm=TRUE)]
+              maxlib_rhos <- ccm.tmp$CCM1_PredictStat$rho[ccm.tmp$CCM1_PredictStat$LibSize==max(ccm.tmp$CCM1_PredictStat$LibSize, na.rm=TRUE)]
+              CCM_sig_test<- 1-sum(minlib_rhos < maxlib_rhos, na.rm=T)/length(minlib_rhos)
+              Nest <- tail(ccm.tmp$LibMeans$LibSize,1) #the number of estimated values of RP from FP using CCM, for the longest library length considered
+              rho <- as.numeric(tail(ccm.tmp$LibMeans[2],1)) #the rho of estimates of RP from the longest library length of FP considered
+              out <- c(block[[j]]$stk[1],RP,FP,var_list[v,2],var_list[v,3],var_list[v,4],tau, E_CCM, nrow(data), Nest, rho, CCM_sig_test)
+              stock_CCM_summary <- rbind(stock_CCM_summary, out)
+
+              }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+        } #j
+  } #v, (FP)
+
+save(stock_CCM_summary, file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn45_opt_tau.Rdata", sep=""))
+```
+
+
+
+#--------------------Twin surrogate significance test--------------------
+Run surrogate analysis for each interactions in the CCM output table that showed significant convergence
+```{R}
+
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_recspn45_opt_tau.Rdata", sep=""))
+
+#clean up CCM results
+CCM <- stock_CCM_summary[2:nrow(stock_CCM_summary),]
+CCM <- as.data.frame(CCM)
+row.names(CCM) <- NULL
+#add shortened response process name
+CCM$RP <- NA
+CCM$RP[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
+CCM$RP[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
+
+CCM$offset <- as.numeric(CCM$offset)
+CCM$tau <- as.numeric(CCM$tau)
+CCM$E <- as.numeric(CCM$E)
+CCM$Nest <- as.numeric(CCM$Nest)
+CCM$rho <- as.numeric(CCM$rho)
+CCM$pval <- as.numeric(CCM$pval)
+
+CCM <- CCM[CCM$pval<=0.1,] #Narrow results to those interactions with significant convergence
+    
+CCMt <- CCM %>% #only include the offset for each variable that optimizes rho 
+      group_by(stock, response_var, RP, cat, subcat, E) %>%
+      mutate(best_offset = offset[rho==max(rho, na.rm = TRUE)])
+      CCMt <- CCMt[CCMt$offset==CCMt$best_offset,]
+      CCM <- CCMt[,1:12]
+      
+CCM$ter_rho <- NA
+CCM$d_rho <- NA
+CCM$u_rho <- NA
+CCM$xmap_from_to <- NA
+
+
+i <- 1
+for(i in c(1:NROW(CCM)) ){ #for each of the interactions with significant convergence
+      causal_var <- CCM$causal_var[i] #the putative causal variable, or forcing process that is predicted in CCM
+      y <- block_data[[CCM$stock[i]]][causal_var]
+      response_var <- CCM$response_var[i] #the response variable recspn4 or recspn5 to use as the library var in the embedding
+      x <- block_data[[CCM$stock[i]]][response_var]
+      year <- block_data[[CCM$stock[i]]]["year"]
+      D <- cbind(year, x, y)
+      D <- na.trim(D, sides="both", is.na ="any")
+      E <- CCM$E[i] #the optimal embedding dimension of the forcing process
+      tau <- CCM$tau[i]
+      libsize <- CCM$Nest[i]
+      
+      #Calculate twin surrogates for the response variable (original, dim, num.iter, tau = 1,..)
+      #Use tau=1 to create the surrogate data, even if the optimal tau is >1
+      x.sur <- TwinSurrogate(D[,2], dim = E, num.iter = 100, tau = 1, surrogate.option = "random", output.message = F)
+   
+      blocki <- cbind(D[,2], D[,3])
+         ccm.tmp <-
+           ccm(
+             blocki,
+             E         = E,
+             tau       = -tau,
+             tp        = 0,
+             lib_sizes = c((tau * (E - 1) + (E + 1)), libsize),
+             num_samples = 500,
+             silent    = T,
+             stats_only = T
+           )
+         rho.ccm <- as.numeric(tail(ccm.tmp[,2],1))
+         
+          #ccm_boot function generally produces better rho values... why? Both use the simplex projection algorithm. Both report the average rho accross 500 interations at each library size. ccm_boot uses many more library sizes. But that shouldn't matter.  
+          #CCM.boot <- CCM_boot(A=D[,3], B=D[,2], E=E, tau=tau, iterations=500)
+          #rho.boot <- CCM.boot$rho[length(CCM.boot$rho)]
+          #pval.boot <- ccmtest_oneway(CCM.boot)
+          
+          
+      twin.sur <- ParSurCI(D[,2], E, D[,3], x.sur, tau=tau) #returns the 95% CI for rho based on the surrogate data
+         twin.sur$rho$rho <- ccm.tmp[,2]
+         twin.sur$rho$u_rho <- twin.sur$rho$rho - twin.sur$rho$upper95
+         twin.sur$rho$d_rho <- twin.sur$rho$rho[nrow(ccm.tmp)] - twin.sur$rho$rho[1]
+         ccm.tmp <- cbind(ccm.tmp, twin.sur$rho)
+     
+           CCM$ter_rho[i] = rev(ccm.tmp$rho)[1] #terminal rho - rho for CCM at largest library size
+           CCM$d_rho[i] = rev(ccm.tmp$rho)[1] - ccm.tmp$rho[1] #delta rho - the change in rho from smallest to largest library size
+           CCM$u_rho[i] = rev(twin.sur$rho$u_rho)[1] #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
+           CCM$xmap_from_to[i] = sprintf("Xmap from %s to %s", response_var, causal_var) 
+      
+    }
+      
+
+save(CCM, file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45_opt_tau.Rdata", sep=""))
+```
+
+
+
+#Visualize results
+```{R}
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45.Rdata", sep=""))
+#add shortened response process name
+CCM$RP <- NA
+CCM$RP[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
+CCM$RP[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
+
+#Narrow results to those with terminal rho greater than the 95% CI of the twin surrogates
+    CCM <- CCM[CCM$u_rho>0,]
+
+#Add the different run types
+    CCM$runtype <- "Spring"    
+    CCM$runtype[CCM$stock=="Pahsimeroi River"] <- "Summer"
+    CCM$runtype[CCM$stock=="South Fork Salmon River"] <- "Summer"
+    CCM$runtype[CCM$stock=="Big Creek"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Camas Creek"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="East Fork Salmon River"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Imnaha River Mainstem"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Loon Creek"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Middle Fork Salmon River Lower Mainstem"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Salmon River Lower Mainstem"] <- "Spring/Summer"
+    CCM$runtype[CCM$stock=="Valley Creek"] <- "Spring/Summer"
+
+#plot as treemaps
+    Stock4Spr <- CCM[CCM$RP=="4yo" & CCM$runtype=="Spring",]
+    Stock4Spr <- data.frame(cbind(Stock4Spr$stock, Stock4Spr$cat, Stock4Spr$subcat, Stock4Spr$ter_rho))
+    colnames(Stock4Spr) <-  c("stock", "cat", "subcat", "value")
+    Stock4Spr$value <- as.numeric(Stock4Spr$value)
+    
+    Stock5Spr <- CCM[CCM$RP=="5yo" & CCM$runtype=="Spring",]
+    Stock5Spr <- data.frame(cbind(Stock5Spr$stock, Stock5Spr$cat, Stock5Spr$subcat, Stock5Spr$ter_rho))
+    colnames(Stock5Spr) <-  c("stock", "cat", "subcat", "value")
+    Stock5Spr$value <- as.numeric(Stock5Spr$value)
+    
+    Stock4Sum <- CCM[CCM$RP=="4yo" & (CCM$runtype=="Summer" | CCM$runtype=="Spring/Summer" ),]
+    Stock4Sum <- data.frame(cbind(Stock4Sum$stock, Stock4Sum$cat, Stock4Sum$subcat, Stock4Sum$ter_rho))
+    colnames(Stock4Sum) <-  c("stock", "cat", "subcat", "value")
+    Stock4Sum$value <- as.numeric(Stock4Sum$value)
+    
+    Stock5Sum <- CCM[CCM$RP=="5yo" & (CCM$runtype=="Summer" | CCM$runtype=="Spring/Summer" ),]
+    Stock5Sum <- data.frame(cbind(Stock5Sum$stock, Stock5Sum$cat, Stock5Sum$subcat, Stock5Sum$ter_rho))
+    colnames(Stock5Sum) <-  c("stock", "cat", "subcat", "value")
+    Stock5Sum$value <- as.numeric(Stock5Sum$value)
+    
+    
+  dflist <- list(Stock4Spr, Stock5Spr, Stock4Sum, Stock5Sum)
+  Titlelist <- list("Stock level CCM of 4yo Spring run recruits per spawner: terminal rho",
+                    "Stock level CCM of 5yo Spring run recruits per spawner: terminal rho",
+                    "Stock level CCM of 4yo Spring/Summer run recruits per spawner: terminal rho",
+                    "Stock level CCM of 5yo Spring/Summer run recruits per spawner: terminal rho")
+    for (i in 1:4){
+      data <- dflist[[i]]
+    p <- treemap(data,
+                index=c("cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title=Titlelist[i],
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")
+                )  
+              )     
+    }
+ 
+
+```
+
+#stock-level plots with diagnostics
+```{R}
+rm(list=ls()) 
+#load diagnostic results and subplot list
+load(file = "Output/Rdata/2_Nonlinearity/recspn45_stock_level_diagnostic_results.Rdata")
+diagnostics <- results[complete.cases(results),]
+load(file = "Output/Rdata/2_Nonlinearity/recspn4_stock_level_diagnostic_subplot_list.Rdata")
+load(file = "Output/Rdata/2_Nonlinearity/recspn5_stock_level_diagnostic_subplot_list.Rdata")
+
+#load CCM results
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_CCM_twinsur_recspn45.Rdata", sep=""))
+    #add shortened response process name
+    CCM$RP <- NA
+    CCM$RP[CCM$response_var=="salm.recspn4n.0"] <- "4yo"
+    CCM$RP[CCM$response_var=="salm.recspn5n.0"] <- "5yo"
+    #Narrow results to those with terminal rho greater than the 95% CI of the twin surrogates
+    CCM <- CCM[CCM$u_rho>0,]
+    
+#Make summary plots for each stock with significant CCM results
+stock_list <- unique(CCM$stock)
+for(i in 1:length(stock_list)){
+  
+  stock_name <- stock_list[i]
+  
+  #plot CCM results treemaps
+    Stock4CCM <- CCM[CCM$RP=="4yo" & CCM$stock==stock_name,]
+    Stock4CCM <- data.frame(cbind(Stock4CCM$stock, Stock4CCM$cat, Stock4CCM$subcat, Stock4CCM$ter_rho))
+    colnames(Stock4CCM) <-  c("stock", "cat", "subcat", "value")
+    Stock4CCM$value <- as.numeric(Stock4CCM$value)
+      if(nrow(Stock4CCM)>0) {pCCM4 <- treemap(Stock4CCM,
+                index=c("cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title=paste(stock_name, "; 4 year old recruits per spawner", sep=""),
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")))  }
+                
+    Stock5CCM <- CCM[CCM$RP=="5yo" & CCM$stock==stock_name,]
+    Stock5CCM <- data.frame(cbind(Stock5CCM$stock, Stock5CCM$cat, Stock5CCM$subcat, Stock5CCM$ter_rho))
+    colnames(Stock5CCM) <-  c("stock", "cat", "subcat", "value")
+    Stock5CCM$value <- as.numeric(Stock5CCM$value)
+      
+    if(nrow(Stock5CCM)>0) {pCCM5 <- treemap(Stock5CCM,
+                index=c("cat", "subcat"),
+                vSize="value",
+                type="index",
+                palette = "-RdYlBu",
+                bg.labels=c("white"),
+                title=paste(stock_name, "; 5 year old recruits per spawner", sep=""),
+                align.labels=list(
+                  c("center", "top"), 
+                  c("left", "bottom")))  }
+}
+
+d <- as.numeric(diagnostics[diagnostics[,1]==stock_name,11])   
+
+stock_subplot_list <- list(rs4_subplot_list[[d]], rs4_subplot_list[[d+1]], rs4_subplot_list[[d+2]], rs4_subplot_list[[d+3]],
+                           rs5_subplot_list[[d]], rs5_subplot_list[[d+1]], rs5_subplot_list[[d+2]], rs5_subplot_list[[d+3]])
+p <- marrangeGrob(stock_subplot_list, nrow=4, ncol=2)
+ggsave(filename = paste("Output/Figures/2_Nonlinearity/",stock_name,"_diagnostic_plots.pdf", sep = ""), plot = p, width = 9, height = 9, units = "in")
+
+    
+```

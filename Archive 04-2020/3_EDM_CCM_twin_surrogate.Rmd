@@ -1,0 +1,580 @@
+---
+title: "3_EDM_CCM_pairwise_causality"
+author: "Alison Iles"
+date: "6/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load the necessary packages. 
+Note that the `echo = FALSE` parameter prevents printing of the R code.
+
+```{r, echo=FALSE}
+library(rEDM)
+library(reshape2)
+library(ggplot2)
+library(viridis)
+library(gridExtra)
+library(xtable)
+library(rlist)
+library(Kendall) #for MannKendall test
+library(psych) #for paired.r function
+library(tidyr)
+library(stringr)
+library(tseriesChaos)
+library(pforeach)
+
+```
+#Functions for the surrogate analysis
+```{R}
+rm(list=ls())  
+
+# Configure EDM
+config <- list()
+
+config$kBestE.Method   <- "MAE"
+config$kBestE.Range    <- 1:12
+config$kBestE.RangeStr <-
+  paste0("E", config$kBestE.Range[1], "to",
+         config$kBestE.Range[length(config$kBestE.Range)])
+config$kFishNameFileEncoding <- "Shift-JIS"
+config$kMacFont <- "HiraMaruProN-W4"
+config$kPdfFont <- "Japan1GothicBBB"
+config$kMaxCore <- 0
+config$kRndSeed <- 2430
+
+if (!is.null(config$kRndSeed)) {
+  set.seed(config$kRndSeed)
+}
+
+
+
+ParSurCI <- function(target.ts,
+                     target.E,
+                     cause.ts,
+                     surrogate.ts,
+                     lib = c(1, NROW(target.ts)),
+                     lib.parms = c(50,100,150,300,450,600,750, length(target.ts)),
+                     surrogate = "effect",
+                     E.range   = 1:12,
+                     tp        = 0) 
+  {
+  E.tar <- target.E
+  lib.m <- length(target.ts)
+  lib.size.s <- lib.parms
+  surrogate.sum <- data.frame(L = lib.size.s)
+
+  
+  # Do CCM for the surrogate data
+  surrogate.all <-
+    pforeach(
+      i      = 1:ncol(surrogate.ts),
+      .c     = cbind,
+      .cores = config$kMaxCore,
+      .seed  = config$kRndSeed
+    )({
+      if (surrogate == "effect") {
+        target.sur <- surrogate.ts[, i]
+        block      <- cbind(target.sur, cause.ts)
+      } else if (surrogate == "cause") {
+        cause.sur <-  surrogate.ts[, i]
+        block     <- cbind(target.ts, cause.sur)
+      }
+      m <- nrow(block)
+
+      ccm.tar.cau <-
+        ccm(
+          block,
+          lib       = lib, 
+          E         = E.tar,
+          lib_sizes = lib.size.s,
+          silent    = T,
+          tp        = tp
+        )
+      ccm.m <- ccm_means(ccm.tar.cau)[, c('lib_size', 'rho')]
+
+      rhos.tmp <- ccm.m$rho
+    })
+
+  if (!is.null(surrogate.all)) {
+    surrogate.sum <- as.data.frame(cbind(surrogate.sum, surrogate.all[1:length(lib.parms), 1:ncol(surrogate.ts)]))
+  }
+
+   # calculate 95% CI
+  ccm.sur.ci <-
+    data.frame(
+      L = lib.size.s,
+      lower95 = NA,
+      upper95 = NA,
+      lower99 = NA,
+      upper99 = NA
+    )
+  csa <- surrogate.sum
+  n.s <- length(surrogate.ts)
+
+  for(j in 1:nrow(surrogate.sum)){
+    upper95 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.975)
+    lower95 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.025)
+    ccm.sur.ci[j,'upper95'] <- upper95
+    ccm.sur.ci[j,'lower95'] <- lower95
+    upper99 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.995)
+    lower99 <- quantile(as.numeric(csa[j,2:(n.s+1)]), 0.005)
+    ccm.sur.ci[j,'upper99'] <- upper99
+    ccm.sur.ci[j,'lower99'] <- lower99
+  }
+
+  result <- list(rho = ccm.sur.ci)
+  return(result)
+}
+
+
+
+# Check best embedding dimension
+BestErEDM <- function(time.series,
+                      E = 1:12,
+                      save.raw.data = F) {
+  simplex.res <- simplex(time.series, E = E, silent=T)
+
+  if (save.raw.data) {
+    return(simplex.res)
+  } else{
+    bestE <- simplex.res[simplex.res$mae == min(simplex.res$mae), 'E']
+    return(bestE)
+  }
+}
+
+
+
+
+
+##Trouble shoot code
+#original <- x
+#dim <- e.x
+#num.iter <- 100
+#surrogate.option <-  "phase_lock"
+#tau = 1
+#s   = 0.875
+#initial.point <-  "same_season"  # or "twins"
+ #                         distance.method  <-  "norm"
+ #                         point.per.year <-  52
+ #                         s.update  <-  "on"
+ #                         n.twin.threshold <-  10
+ #                         output.message <-  T
+ 
+TwinSurrogate <- function(original,
+                          dim,
+                          num.iter,
+                          tau = 1,
+                          s   = 0.875,
+                          surrogate.option = "random",  # or "phase_lock"
+                          initial.point    = "same_season",  # or "twins"
+                          distance.method  = "norm",
+                          point.per.year   = 52,
+                          s.update         = "on",
+                          n.twin.threshold = 10,
+                          output.message = F) {
+  # Generate time-lag embedding matrix
+  if (dim >  1) {
+    original_e <- embedd(original, dim, tau)
+  }
+  if (dim == 1) {
+    original_e <- as.matrix(original)
+  }
+  if (dim <  1) {
+    cat("Warning: Embedding dimension should be >= 1")
+  }
+  # s candidates
+  s.seq <- c(0.875, 0.88, 0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.87, 0.86, 0.85, 0.84, 0.83, 0.82, 0.81, 0.80)
+  s.i <- 1
+
+  # Calculate binary matrix (= recurrence plot)
+  repeat {
+    d <- DistOneZero(original_e, method = distance.method, s = s)
+
+    # Search twins
+    twins <- c()
+    for (i in 1:ncol(d)) {
+      for (j in 1:ncol(d)) {
+        if (all(d[, i] == d[, j])) {
+          if (surrogate.option == "phase_lock") {
+            if ((i - j) %% point.per.year == 0) {
+              twins <- rbind(twins, c(i, j))
+            }
+          } else{
+            twins <- rbind(twins, c(i, j))
+          }
+        }
+      }
+    }
+
+    num.twins <- nrow(twins) - nrow(d)
+    if (num.twins >= n.twin.threshold) {
+      break
+    }
+    if (s.update == "off") {
+      break
+    }
+    s.i <- s.i + 1
+    if (s.i > length(s.seq)) {
+      break
+    }
+    s = s.seq[s.i]
+  }
+
+  if (output.message) {
+    prop.black <- sum(d) / (ncol(d) * nrow(d))
+    print(c("Proportion of 1:", prop.black), quote = F)
+    print(c("Number of twins:", num.twins), quote = F)
+  }
+
+  # Generate twin surrogates
+  surrogate <- as.list(NULL)
+  avoid.infinite.loop <- 0
+  repeat {
+    # Select the initial point of the surrogate
+    if (surrogate.option == "random") {
+      # Select random initial points
+      surr <- sample(1:(ncol(d) - 1), 1)
+    } else if (surrogate.option == "phase_lock") {
+      if (initial.point == "same_season") {
+        # Select the point of the same season
+        surr <- sample(seq(1 + point.per.year, ncol(d) - 1, by = point.per.year), 1)
+      } else if (initial.point == "twins") {
+        # Select twins of the original initial point as the surrogate initial point
+        surr <- sample(twins[twins[, 1] == 1, 2], 1)
+      }
+    } else{
+      cat("Warning: specify the correct option!")
+    }
+
+    # Search next point
+    for (j in 1:(ncol(d) - 1)) {
+      repeat {
+        nex <- PointNext(surr[length(surr)], twins, d)
+        if (surrogate.option == "phase_lock" &&
+            initial.point == "same_season") {
+          if (nex != (length(surr) + 1)) {
+            break
+          }
+        } else{
+          break
+        }
+      }
+      surr <- c(surr, nex)
+    }
+
+    # Save the surrogate if it reach to the length of the origial data
+    # Not save if the surrogate is short
+    if (surr[length(surr)] != 0) {
+      surrogate <- c(surrogate, list(original_e[surr,]))
+    }
+
+    # Complete the surrogate generation if length(surrogate) == num.iter
+    if (length(surrogate) == num.iter) {
+      break
+    }
+
+    # Avoid infinite loop
+    # End cycles if surrogates cannot be generated during > 30*num.iter trials
+    avoid.infinite.loop <- avoid.infinite.loop + 1
+    if (avoid.infinite.loop > 30 * num.iter) {
+      break
+    }
+  }
+
+  surrogate.one.col <-
+    data.frame(matrix(rep(NaN, num.iter * length(original)), ncol = num.iter))
+  if (avoid.infinite.loop <= 30 * num.iter) {
+    for (i in 1:num.iter) {
+      if (dim >= 2) {
+        surrogate.one.col[1:(dim - 1), i] <- surrogate[[i]][1, 1:(dim - 1)]
+        surrogate.one.col[dim:length(original), i] <- surrogate[[i]][, dim]
+      } else {
+        surrogate.one.col[dim:length(original), i] <- surrogate[[i]]
+      }
+    }
+  }
+  return(surrogate.one.col)
+}
+
+# Convert matrix of thresholds into binary 0-1 values
+Binalize <- function(e, threshold) {
+  if (e > threshold) {
+    return(1)
+  } else{
+    return(0)
+  }
+}
+
+DistOneZero <- function(m, method = "norm", s = 0.875) {
+  # Calculate the maximum norm
+  if (method == "norm") {
+    dist.mat <-
+      apply(m, 1, function(row2) {
+        apply(m, 1, function(row1) {
+          max(abs(row1 - row2))
+        })
+      })
+  } else if (method == "euclid") {
+    dist.mat <- as.matrix(dist(m))
+  }
+
+  # Identify 100*s % quantlie value of dist.mat
+  d.threshold <- quantile(dist.mat, s)
+
+  # Replace values lower than d.threshold with 0
+  # Replace values higher than d.threshold with 1
+  rec <- apply(dist.mat, c(1, 2), function(a) Binalize(a, d.threshold))
+
+  # Return binary matrix
+  return(rec)
+}
+
+# Return next point
+PointNext <- function(x, twins, d) {
+  if (x == 0) {
+    nex <- 0  # Add 0 if the next point is the end point
+  } else{
+    cand <- c(0, 0)
+    if (!is.null(twins[twins[, 1] == x,])) {
+      cand <- rbind(cand, twins[twins[, 1] == x,])
+      nex <- cand[floor(runif(1, 2, (nrow(cand) + 1))), 2] + 1
+    } else{
+      nex <- x + 1
+    }
+  }
+
+  if (nex > ncol(d)) {
+    nex <- 0  # Add 0 if the next point is the end point
+  }
+  nex
+}
+```
+
+
+
+#Convergent Cross Mapping (CCM) with Twin surrogate significance test'
+
+Only used the twin surrogate significance test on univarite CCM interactions that showed convergence (MannKendall==TRUE) and whose CCM rho was greater than the critical 95% rho meaning that it is significant. 
+
+Only tested at the whole ESU level, which includes the Imnaha, the Middle Fork Salmon, and the Upper Salmon MPGs. 
+
+Only included sections of data with at least 20 time points. This is because the twin surrogate time series were generated for each data chunk separately and then concatenated together. There aren't enough twins in short time series to generate a good sample (~100) twin surrogate time series. This means that some of the data, from short spans of time of a stock, are tossed out. The resulting CCM rho values tend to be higher, even though there is less data. 
+
+
+
+```{r}
+###--- nonlinear test for different major population groups
+
+load("Data/Rdata/block_data.Rdata")  
+      aa <- t(data.frame(as.list(names(block_data[[1]]))))
+      rownames(aa) <- NULL #remove rownames
+      bb <- data.frame(c(aa[13:485] ))
+      colnames(bb) <- c("variable")
+      cc <- str_split_fixed(bb$variable, "[.]",n=3)
+var_names <- cbind(bb,cc)
+      colnames(var_names) <- c("name","cat","subcat","offset")
+rm(aa,bb,cc)
+
+mpg <- c() 
+  for(stk in 1:length(block_data)) { 
+      mpg[stk] <- block_data[[stk]]$mpg[1]
+  } 
+rm(stk)
+    
+data <- block_data[c(mpg==1 | mpg==3 | mpg==5)] #only include Imnaha, Middle Fork Salmon and Upper Salmon MPGs. 
+esuname <- as.character("SnakeESU")
+rm(block_data)  
+  
+#Determine best embedding dimension: E would be set to the best univariate embedding dimension for each lib_column variable:
+library_vars <- c("salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0", "salm.rec_n.0")
+    #concatenate the time series together:
+        keys <-c(names(data[[1]]))
+        merged_data <-setNames(do.call(mapply, c(FUN=c, lapply(data, `[`, keys))), keys)
+        merged_data <- as.data.frame(merged_data)
+        valid <-  is.finite(merged_data$salm.rec3_n.0) & is.finite(merged_data$salm.rec4_n.0) & is.finite(merged_data$salm.rec5_n.0) & is.finite(merged_data$salm.rec_n.0)
+        block <- merged_data[valid,]  
+        rm(keys, merged_data, valid)
+        
+    #List in lib the begin and end points of each stock and the break points within stocks
+        lib <- matrix(NA, nrow = length(which(diff(block$year)!=1))+1, ncol = 2)
+        lib[,1] <- c(1, which(diff(block$year)!=1)+1)
+        lib[,2] <- c(which(diff(block$year)!=1), nrow(block))
+        minlib <- lib[,2]-lib[,1]
+        lib <- lib[minlib>20,]
+        x <- block[lib[1,1]:lib[1,2],]
+        for (r in 2:nrow(lib)){
+            xtmp <- block[lib[r,1]:lib[r,2],]
+            x <- rbind(x,xtmp)
+        }
+        block <- x
+        rm(x,minlib, xtmp)
+
+    #calculate best E for the concatenated time series
+        best_E <- matrix(NA, nrow = length(library_vars), ncol = 2) # Save the optimal embedding dimension for each library variable
+        colnames(best_E) <- c("library","E")
+        best_E[,1] <- t(library_vars)
+        for(j in 1:length(library_vars)){
+          Edata <- as.matrix(cbind(block$year, block[library_vars[j]]))
+          rownames(Edata) <- NULL #remove rownames to supress error in CCM: NAs introduced by coersion
+                simplex_output <- simplex(Edata, lib=lib, E = 1:10, silent = T)
+                best_E[j,2] <-  min(simplex_output$E[simplex_output$rho>max(simplex_output$rho)-sd(simplex_output$rho)]) #choose the smallest E whose rho is within 1 stdv of the maximum rho
+        }
+        rm(j,Edata, simplex_output)
+
+#load CCM output table and remove non-significant and non-convergent interactions from the surrogate analysis:
+    CCM<- readRDS("Output/Rdata/3_CCM/3_CCM_SnakeESU.RDS" )
+          CCM <- CCM[CCM$rho>(1*CCM$`95p_crit`),] #only keep variables whose CCM rho is greater than the critical value
+          CCM <- CCM[CCM$MannKendall==TRUE,] #only keep variables whose CCM demonstrates convergence
+          CCM[,14:17] <- matrix(NA, nrow = NROW(CCM), ncol = 4)
+          colnames(CCM) <- c( "library", "target", "cat", "subcat", "offset", "rho", "rho_eff", "N", "95p_crit", "ccm_rho", "MannKendall", "FisherZ", "E", "ter_rho", "d_rho", "u_rho", "xmap_from_to")
+
+l <- 4
+#Calculate twin surrogates for null testing for each library variable
+for(l in 1:length(library_vars)){ #For each library var
+      E <- as.numeric(best_E[l,2])
+      
+      for(n in 1:length(unique(block$stk))){
+        blocktmp <- block[block$stk==unique(block$stk)[n],]
+        x <- blocktmp[library_vars[l]]
+        year <- blocktmp$year[is.finite(as.matrix(x))]
+        x <- x[is.finite(as.matrix(x))]
+        x.sur <- TwinSurrogate(x, E, 100, surrogate.option = "random", output.message = T)
+        x.sur <- cbind(year, x.sur)
+        if(n==1){block.sur <- x.sur}
+        if(n>1){block.sur <- rbind(block.sur,x.sur)}
+      }
+   
+    #List in lib the begin and end points of each stock and the break points within stocks
+    lib <- matrix(NA, nrow = length(which(diff(block.sur$year)!=1))+1, ncol = 2)
+    lib[,1] <- c(1, which(diff(block.sur$year)!=1)+1)
+    lib[,2] <- c(which(diff(block.sur$year)!=1), nrow(block.sur))
+    minlib <- lib[,2]-lib[,1]
+    lib <- lib[minlib>20,]
+    libsize <- c(50,100,150,300,450,600,800,NROW(block.sur)) 
+    rm(blocktmp,x,year,x.sur, minlib)
+    block.sur$year <- NULL
+
+#Run surrogate analysis for each of the chosen interactions in the CCM output table
+    for(i in c(1:NROW(CCM)) ){
+    if(CCM$library[i]==library_vars[l]){
+      library_var <- CCM$library[i]
+      x <- block[library_var]
+      target_var <- CCM$target[i]
+      y <- block[target_var]
+      
+       blocki <- cbind(x, y)
+         ccm.raw <-
+           ccm(
+             blocki,
+             lib       = lib,
+             E         = E,
+             lib_sizes = libsize,
+             silent    = T
+           )
+         ccm.tmp <- ccm_means(ccm.raw)
+      
+      twin.sur <- ParSurCI(x, E, y, block.sur, lib = lib, lib.parms = libsize)
+         twin.sur$rho$rho <- ccm.tmp$rho
+         twin.sur$rho$u_rho <- ccm.tmp$rho - twin.sur$rho$upper95
+         twin.sur$rho$d_rho <- ccm.tmp$rho[nrow(ccm.tmp)] - ccm.tmp$rho[1]
+         ccm.tmp <- cbind(ccm.tmp, twin.sur$rho)
+     
+           CCM$ter_rho[i] = rev(ccm.tmp$rho)[1] #terminal rho - rho for CCM at largest library size
+           CCM$d_rho[i] = rev(ccm.tmp$rho)[1] - ccm.tmp$rho[1] #delta rho - the change in rho from smallest to largest library size
+           CCM$u_rho[i] = rev(twin.sur$rho$u_rho)[1] #difference between terminal rho and the top of the 95% CI of rho for the surrogate data
+           CCM$xmap_from_to[i] = sprintf("Xmap from %s to %s", library_var, target_var) 
+      
+    }}
+      
+
+saveRDS(CCM, file = paste("Output/Rdata/3_CCM/3_CCM_twin_sur_",library_var,".RDS", sep = ""), compress = FALSE)
+
+#-----------------------------------------------------------------------------------------------------  
+    }
+    
+
+```
+#CCM output list meta data:
+    "library": In CCM analysis the 'library' variable is the variable of interest, in our case chinook recruitment
+    "target": In CCM analysis the 'target' variable is the putative causal variable, in our case the various abiotic and biotic variables that are hypothesized to affect chinook recruitment
+    "cat": The broader category that the target variable is in
+    "subcat": The specific variable in the broader target variable categories
+    "offset": The number of years that the target variable is offset. Environmental data are offset from 1 to 5 years after brood year. Pinniped data are offset from 2 to 5 years after brood year - assuming seals and sea lions eat smolts and returns. For the CSL pup count data, 6 years are added to each offset as only 6+ year old sea lion males swim up to Oregon and eat salmon (ref in Chasco paper). Orca data is offset by 4 to 5 years after brood year - assuming orcas just eat the returning chinook. 
+
+The first analysis uses the block_lnlp function on a delay coordinate embedding of the library variable to predict the target variable. The embedding dimension used is the optimal E for the library variable (our variable of interest). 
+    "rho": The correlation coefficient between observations and predictions from the block_lnlp function. 
+    "rho_eff": The correlation coefficient from a parallel analysis that includes the number of effective spawners in place of one of the delay embeddings.  
+    "N": The number of predictions made in the block_lnlp analysis
+    "95p_crit": Based on the standard normal distribution, this is the boundary value that the rho needs to be greater than for a 95% confidence that rho is greater than zero. 
+
+The second analysis uses the ccm function to test the univariate causal influence of the target variable on the library variable. The analysis tests many different library sizes sampled randomly many times to get distributions of rho values (the correlation coefficient between observations and predictions).
+    "ccm_rho": The cross map skill at the maximum library size. 
+    "MannKendall": A test for convergence, or an increasing monotonic trend in rho as library size increases based on the Kendall rank correlation. Here the first, median and & 3rd quantiles of rho are tested, not the last quantile as the plot often flattens out; all need to be <0.05 for this to be 'TRUE'.  
+    "FisherZ": A test that rho at the max library size is significantly higher than at the minimum. 
+    
+“E”: the embedding dimension
+
+"ter_rho": the terminal rho, or rho from the CCM at the largest library size
+“d_rho”: the delta rho representing the change and rho from the smallest to the largest library size. A positive value indicates convergence.
+"u_rho": The difference in rho from the upper 95% CI of the twin surrogate data rho and the true data's terminal rho. 
+"xmap_from_to": A label for the interaction being tested
+
+“regionlabels”: a factor version of the mpg variable for plotting purposes
+“salmoncohortlabels”: a factor version of the salmon recruit library variable for plotting purposes
+“catlabels”: a factor version of the target variable categories for plotting purposes 
+
+```{R}
+# make figures for twin surrogate analysis
+rm(list=ls())
+
+CCM <- readRDS("Output/Rdata/3_CCM/3_CCM_twin_sur_Snake_ESU.RDS")
+manual_color_codes <- read.csv("Data/csv_data/CORE_CCM_figure_color_codes.csv")
+ 
+# sort CCM table by offset then category, then subcategory
+D <-  CCM[order(CCM$offset),]
+D <-  D[order(D$subcat),]
+D <-  D[order(D$cat),]
+
+D$offset <- as.numeric(D$offset)
+
+varcat <- unique(D$cat)
+D$catlabels <- factor(D$cat, levels=c("hatch", "npgo", "pdo", "upw", "csl", "ssl", "harv", "hseal", "salm", "arc", "orca" ), labels=c("Hatcheries", "NPGO", "PDO", "Upwelling", "California sea lions", "Steller sea lions", "Chinook harvest", "Harbor seals", "Chinook salmon", "Sea surface temperature", "Orca whales"))
+
+D$salmoncohortlabels <- factor(D$library, levels=c("salm.rec_n.0","salm.rec3_n.0", "salm.rec4_n.0", "salm.rec5_n.0"), labels=c("All recruits", "3 yr old recruits", "4 yr old recruits", "5 yr old recruits"))
+
+for(c in c(1:length(varcat))) {
+  D_plot <- D[D$cat==varcat[c],]
+  mcc <- manual_color_codes[manual_color_codes$cat==varcat[c],2:4]
+  mcc <- sapply(mcc, unlist)
+  rownames(mcc) <- mcc[,2]
+  
+  p1 <- ggplot(D_plot, aes(x=offset, y=u_rho)) +
+    geom_point(aes(col=subcat, shape=(d_rho>0))) +
+    geom_vline(aes(xintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=0), colour='#999999') +
+    geom_hline(aes(yintercept=min(D_plot$'95p_crit')), colour='#999999', linetype="dashed") + #horizontal line for rho sig diff from zero
+    theme_bw() + 
+    guides(col = guide_legend(ncol=1)) +
+    labs(title= D_plot$catlabels[1], subtitle = "CCM Twin Surrogate significance test: uses the ccm function; without effective spawners in the embedding ", x="Variable offset, year", y=expression(paste("difference between true ", rho," and the 95% CI of the surrogate", rho, sep=""))) + 
+    scale_color_manual(values = mcc[,1], name="Time series", breaks = mcc[,2], labels = mcc[,3]) +
+    scale_shape_manual(name=expression(paste("Convergence test ", delta, rho,">0")),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+
+p2 <- p1 + facet_grid(catlabels ~ salmoncohortlabels) 
+
+ggsave(filename = paste("Output/Figures/3_CCM/3_CCM_",varcat[c],"_twin_sur_CCM.pdf", sep = ""), plot = p2, width = 7, height = 9.5, units = "in")  
+}
+
+
+
+p2 <- ggplot(D, aes(x=d_rho, y=u_rho))+
+  geom_point(aes(shape=(d_rho>0)))+
+  geom_vline(aes(xintercept=0), colour='#999999') +
+  geom_hline(aes(yintercept=0), colour='#999999') +
+    labs(title= D_plot$catlabels[1], subtitle = "CCM Twin Surrogate significance test: comparison of u_rho and delta rho ", x="Delta rho", y="u_rho") + 
+    scale_shape_manual(name=expression(paste("Convergence test, ", delta, rho, " > 0", sep="")),  values=c("FALSE"=1, "TRUE"=16),  breaks = c("TRUE", "FALSE"), labels = c("True", "False"))
+
+print(p2)  
+```

@@ -1,0 +1,230 @@
+---
+title: "clutering of Chinook stocks"
+author: "Alison Iles"
+date: "10/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dtwclust)
+library(tidyr)
+library(data.table)
+library(rEDM)
+library(zoo)
+
+
+```
+
+Question: to the different stock in the ESU and MPGs belong to the same system? How similar are the different stocks to each other? How do we assess this?
+
+https://cran.r-project.org/web/packages/dtwclust/vignettes/dtwclust.pdf
+Hierarchical clustering, as its name suggests, is an algorithm that tries to create a hierarchy of groups in which, as the level in the hierarchy increases, clusters are created by merging the clusters from the next lower level, such that an ordered sequence of groupings is obtained (Hastie et al. 2009). The created hierarchy can be visualized as a binary tree where the height of each node is proportional to the value of the inter-group dissimilarity between its two daughter nodes (Hastie et al. 2009). The dendrogram does not directly imply a certain number of clusters, but one can be induced. One option is to visually evaluate the dendrogram in order to assess the height at which the largest change in dissimilarity occurs, consequently cutting the dendrogram at said height and extracting the clusters that are created. Another option is to specify the number of clusters that are desired, and cut the dendrogram in such a way that the chosen number is obtained. In the latter case, several cuts can be made, and validity indices can be used to decide which value yields better performance (see Section 6).
+
+
+#Hierarchical clustering based on simplex projection.
+Predict each stock time series by every other stock to create a pairwise distance matrix using MAE output from simplex projection with best E(1:7).
+Make dendrogram based on distance matrix.
+
+```{R}
+rm(list=ls())  
+load("Data/Rdata/stock_data_no_lags.Rdata")  
+
+MPG <- matrix(data=NA, nrow=length(stock_data), ncol=2)
+for(s in 1:length(stock_data)){
+  MPG[s,1] <- stock_data[[s]]$stk[1]
+  MPG[s,2] <- stock_data[[s]]$mpg[1]
+}
+
+#choose the library variable to analyze
+tarvar <- "salm.recspn5n"
+vars <- c("year", "stk", tarvar) 
+D_ESU <- rbind(stock_data$'Bear Valley Creek'[vars],  #1, MFS
+              stock_data$'Big Creek'[vars],   #2, MFS
+              stock_data$'Camas Creek'[vars],   #3, MFS; Missing 1984
+              stock_data$'Loon Creek'[vars],  #4, MFS; Missing 1975, 1986
+              stock_data$'Marsh Creek'[vars],  #5, MFS
+              stock_data$'Sulphur Creek'[vars],  #6, MFS
+              stock_data$'Catherine Creek'[vars],  #7, IMN
+              stock_data$'Grande Ronde Upper Mainstem'[vars],  #8, IMN
+              stock_data$'Imnaha River'[vars],  #9, IMN
+              stock_data$'Minam River'[vars],  #11, IMN
+              stock_data$'Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers'[vars],  #12, IMN
+              stock_data$'Wenaha River'[vars],  #13, IMN; Missing 1957, 1958
+              stock_data$'East Fork Salmon River'[vars],  #14, UPS
+              stock_data$'Lemhi River'[vars],  #15, UPS
+              stock_data$'Salmon River Lower Mainstem below Redfish Lake'[vars],  #16 UPS; Missing 1975
+              stock_data$'Salmon River Upper Mainstem above Redfish Lake'[vars],  #17, UPS
+              stock_data$'Valley Creek'[vars],  #18, UPS
+              stock_data$'Yankee Fork'[vars],  #19, UPS; Missing 1980
+              stock_data$'South Fork Salmon River Mainstem'[vars],  #20, SFS
+              stock_data$'East Fork South Fork'[vars],   #SFS; Missing last four years
+              stock_data$'Secesh River'[vars])  #SFS; Missing last four years   
+              
+              #data sets to leave out of analysis
+              #stock_data$'Chamberlain Creek'[vars],  #MFS; Missing many years
+              #stock_data$'Middle Fork Salmon River above Indian Creek'[vars],  #MFS; Missing many years
+              #stock_data$'Middle Fork Salmon River below Indian Creek'[vars],  #MFS; Missing many years
+              #stock_data$'Pahsimeroi River'[vars],  #UPS; Missing many years
+              #stock_data$'North Fork Salmon River'[vars],  #UPS; Missing many years
+              #stock_data$'Tucannon River'[vars])  #LS; Missing many years
+
+D_ESU <- pivot_wider(D_ESU, names_from = stk, id_cols = year, values_from = tarvar)
+D_ESU <- D_ESU[order(D_ESU$year),]
+D <- D_ESU
+
+#remove early years for stocks with missing early years. 
+D$`Grande Ronde Upper Mainstem`[1:9] <- NA
+D$`Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers` [1:9] <- NA
+D$`Wenaha River`[1:5] <- NA
+
+#interpolate missing years for those stocks missing years in middle of their range
+if(tarvar=="salm.recspn4n" | tarvar=="salm.rec4n"){rangeend <- 66}
+if(tarvar=="salm.recspn5n" | tarvar=="salm.rec5n"){rangeend <- 65}
+D$`Camas Creek`[9:rangeend] <- na.approx(D_ESU$`Camas Creek`[9:rangeend])
+D$`Loon Creek`[9:rangeend] <- na.approx(D_ESU$`Loon Creek`[9:rangeend])
+D$`Marsh Creek`[9:rangeend] <- na.approx(D_ESU$`Marsh Creek`[9:rangeend])
+D$`Sulphur Creek`[9:rangeend] <- na.approx(D_ESU$`Sulphur Creek`[9:rangeend])
+D$`Salmon River Lower Mainstem below Redfish Lake`[9:70] <- na.approx(D_ESU$`Salmon River Lower Mainstem below Redfish Lake`[9:70])
+D$`Valley Creek`[9:rangeend] <- na.approx(D_ESU$`Valley Creek`[9:rangeend])
+D$`Yankee Fork`[9:rangeend] <- na.approx(D_ESU$`Yankee Fork`[9:rangeend])
+
+D <- as.data.frame(D)
+
+dist_mat <- matrix(data = NA, nrow=21, ncol = 21)
+for(i in c(2:22)){
+  for(j in c(2:22)){
+      I <- as.matrix(D[!is.na(D[,c(i)]),c(1,i)])
+      J <- as.matrix(D[!is.na(D[,c(j)]),c(1,j)])
+      colnames(I) <- colnames(J) <- rownames(I) <- rownames(J) <- NULL
+      IJ <- rbind(I,c(NA,NA),J)
+
+      #Use time series i to predict j
+          lib <- c(1, nrow(I))
+          pred <- c(nrow(I)+2, nrow(IJ))
+          
+          simpout <- simplex(IJ[,2], lib=lib, pred=pred, E = 1:7 )
+          dist_mat[(i-1),(j-1)] <- 1-max(as.data.frame(simpout$rho))
+
+  }
+}
+
+#Clean up dist_mat
+mpg <- c("MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "MFS"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "IMN"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "UPS"  , "SFS"  , "SFS"  , "SFS")
+colnames(dist_mat) <- paste(names(D)[2:22], ", ", mpg, sep="")
+rownames(dist_mat) <- paste(names(D)[2:22], ", ", mpg, sep="")
+
+#keep only rows and cols of dist_mat from a single MPG
+dmMFS <- as.dist(dist_mat[which(mpg=="MFS"), which(mpg=="MFS")])
+dmIMN <-  as.dist(dist_mat[which(mpg=="IMN"), which(mpg=="IMN")])
+dmUPS <-  as.dist(dist_mat[which(mpg=="UPS"), which(mpg=="UPS")])
+dmESU <-  as.dist(dist_mat)
+
+#plot dendrogram
+hclust_comp <- hclust(dmESU, method = 'complete')
+hclust_MFS <- hclust(dmMFS, method = 'complete')
+hclust_IMN <- hclust(dmIMN, method = 'complete')
+hclust_UPS <- hclust(dmUPS, method = 'complete')
+
+png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_ESU_", tarvar, ".png", sep=""),
+width=2000, height=1400)
+p <- plot(hclust_comp, main=paste(tarvar, " simplex cluster dendrogram for ESU"), cex=2)
+dev.off()
+
+png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_MFS_", tarvar, ".png", sep=""),
+width=2000, height=1400)
+pMFS <- plot(hclust_MFS, main=paste(tarvar, " simplex cluster dendrogram for MFS"), cex=2)
+dev.off()
+
+png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_IMN_tau3_", tarvar, ".png", sep=""),
+width=2000, height=1400)
+pIMN <- plot(hclust_IMN, main=paste(tarvar, " simplex cluster dendrogram for IMN"), cex=2)
+dev.off()
+
+png(file = paste("Output/Figures/2_Nonlinearity/simplex_dendrogram_UPS_", tarvar, ".png", sep=""),
+width=2000, height=1400)
+pUPS <- plot(hclust_UPS, main=paste(tarvar, " simplex cluster dendrogram for UPS"), cex=2)
+dev.off()
+
+
+```
+
+
+
+#clustering the results of the stock level CCM analysis. 
+```{R}
+#Reorganize the stock level CCM results in an NxP matrix with N Stocks and P putative causal variables. Each entry in the matrix is the terminal rho from the CCM analysis. 
+rm(list=ls())  
+tarvar="recspn5"
+load(file = paste("Output/Rdata/3_CCM/stock_level/3_stock_results_", tarvar, ".Rdata", sep=""))
+CCM <- as.data.frame(stock_CCM_summary[-1,c(-2, -6, -7, -10)])
+row.names(CCM) <- NULL
+CCM$rho <- as.numeric(CCM$rho)
+
+#includes the optimal tau only
+CCM <- CCM %>%
+  group_by(stock, causal_var, cat, subcat) %>%
+  summarize(max_rho = max(rho, na.rm = TRUE))
+
+#includes the optimal offset only
+CCM <- CCM %>%
+  group_by(stock, cat, subcat) %>%
+  summarize(max_rho = max(max_rho, na.rm = TRUE))
+
+CCMoptT <- pivot_wider(CCM, names_from = stock, values_from=max_rho)
+
+
+#Convert this NxP matrix into an NxN correlation matrix that reflects the correlation or similarity between stocks with respect to their CMC terminal rho values. The correlation matrix is then converted to a NxN distance matrix, D through a simple transformation: dij=sqrt(2(1-rij)) citation: Matthew A. Zapala and Nicholas J. Schork (2006) Multivariate regression analysis of distance matrices for testing associations between gene expression patterns and related variables. PNAS December 19, 2006 103 (51) 19430-19435; first published December 4, 2006; https://doi.org/10.1073/pnas.0609333103
+DT <- cor(CCMoptT[,c(-1,-2)], method = "pearson"); DT <- sqrt(2*(1-DT)) #for the optimal tau
+
+
+#Clean up dist_mat
+
+#  [1] "Bear Valley Creek"  MFS                                           
+#  [2] "Big Creek"             MFS                                        
+#  [3] "Camas Creek"              MFS                                     
+#  [4] "Catherine Creek"      IMN                                         
+#  [5] "East Fork Salmon River"  UPS                                      
+#  [6] "East Fork South Fork"       SFS                                   
+#  [7] "Grande Ronde Upper Mainstem"   IMN                      Grand Ronde Upper
+#  [8] "Imnaha River"                     IMN                             
+#  [9] "Lemhi River"                         UPS                          
+# [10] "Loon Creek"              MFS                                      
+# [11] "Marsh Creek"                MFS                                   
+# [12] "Minam River"                    IMN                               
+# [13] "Salmon River Lower Mainstem below Redfish Lake"   UPS         Salmon River Lower    
+# [14] "Salmon River Upper Mainstem above Redfish Lake"   UPS             Salmon River Upper
+# [15] "Secesh River"                           SFS                       
+# [16] "South Fork Salmon River Mainstem"          SFS                    South Fork Salmon River
+# [17] "Sulphur Creek"                                MFS                 
+# [18] "Valley Creek"                                      UPS            
+# [19] "Wallowa River, Hurricane Creek, Bear Creek, and Lostine Rivers"  IMN       WHBL Rivers
+# [20] "Wenaha River"                                           IMN       
+# [21] "Yankee Fork"                              UPS
+
+mpg <- c("MFS"  , "MFS"  , "MFS"  , "IMN", "UPS", "SFS", "IMN", "IMN", "UPS" , "MFS"  , "MFS", "IMN", "UPS"  , "UPS"   , "SFS"  , "SFS"  , "MFS"  , "UPS"  , "IMN"  , "IMN"  , "UPS")
+colnames(DT) <- paste(colnames(DT), ", ", mpg, sep=""); rownames(DT) <- paste(rownames(DT), ", ", mpg, sep="")
+ 
+
+#plot dendrogram
+
+png(file = paste("Output/Figures/2_Nonlinearity/CCM_dendrogram_stock_level_MPGs_", tarvar, ".png", sep=""), width=2000, height=1400)
+par(mfrow=c(1,3))
+MFS <-  as.dist(DT[mpg=="MFS", mpg=="MFS"])
+hclust <- hclust(MFS, method = 'complete')
+plot(hclust, main=paste(tarvar, " Middle Fork Salmon"), cex.main = 3, cex=2.5, cex.axis=2.5, ylab = "")
+
+UPS <-  as.dist(DT[mpg=="UPS", mpg=="UPS"])
+hclust <- hclust(UPS, method = 'complete')
+plot(hclust, main=paste(tarvar, " Upper Salmon"), cex.main = 3, cex=2.5, cex.axis=2.5, ylab = "")
+
+IMN <-  as.dist(DT[mpg=="IMN", mpg=="IMN"])
+hclust <- hclust(IMN, method = 'complete')
+plot(hclust, main=paste(tarvar, " Imnaha"), cex.main = 3, cex=2.5, cex.axis=2.5, ylab = "")
+dev.off()
+
+D <-  as.dist(DT)
+hclust_DT <- hclust(D, method = 'complete')
+png(file = paste("Output/Figures/2_Nonlinearity/CCM_dendrogram_stock_level_opt_tau_causal_vars_", tarvar, ".png", sep=""), width=2000, height=1400)
+p <- plot(hclust_DT, main=paste(tarvar, " Dendrogram based on stock level CCM rho"), cex.main = 3, cex=2.5, cex.axis=2.5, ylab = "")
+dev.off()
+```

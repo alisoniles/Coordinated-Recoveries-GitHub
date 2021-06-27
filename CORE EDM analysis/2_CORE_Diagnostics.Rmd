@@ -1,0 +1,368 @@
+---
+title: "2_CORE_Diagnostics"
+author: "Alison Iles"
+date: "4/15/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())  
+
+# load functions and dependent libraries
+source("0_CORE_functions.R")
+
+#load data
+load("Data/Rdata/norm_block_data.Rdata")  
+data <- norm_block_data
+```
+# This code runs several optimizations of parameters for nonlinear time series analysis
+
+#1: Evaluate the optimal tau
+The time-delay of the embedding, tau, is introduced to improve the observability of a time series (Judd and Mees 1998). The time lag is chosen to optimize the spread of the embedded time series without confusing the dynamics. The criteria for estimating a proper time lag is based on the following reasoning: if the time lag used to build the Takens' vectors is too small, the coordinates will be too highly temporally correlated and the embedding will tend to cluster around the diagonal in the phase space. If the time lag is chosen too large, the resulting coordinates may be almost uncorrelated and the resulting embedding will be very complicated. 
+
+There are two principle methods for choosing the lags, the first zero of the autocorrelation function and the first local minimum of the time-delayed mutual information. However, autocorrelation is a linear statistic, and thus it does not take into account nonlinear dynamical correlations. To take into account nonlinear correlations the average mutual information (AMI) is the most appropriate. 
+
+Issues: the mutual information calculation cannot handle missing data points and multispatial data. It just treats the joined together stocks as one large data set. I will look for another algorithm that handles this better. For now, I'm calculating the 'optimal' tau (printed in the title of each subplot), but still considering all tau from 1 to 5 in the diagnostic plots for the embedding dimension and the test for non-linearity
+
+#Find the optimal embedding dimension
+The embedding dimension, E, is an estimate of the number of dimensions, or 'active variables', of the attractor underlying a time series. In practice, it is simply the OPTIMAL number of dimensions with which to unfold the attractor that maximizes the forecast skill (rho between predicted and observed values) of the embedding. Additional data may reveal additional dimensionality that was otherwise obscured by process or observational noise.  The maximum E that can be tested depends on the length of the data as max E < sqrt(n).  We evaluated the optimal E for each tau from 1:5.
+
+#Test for nonlinearity in the SRKW time series 
+Nonlinear state dependence dynamics frequently occur nature. Such nonlinearaties arise when variables have interdependent effects. For example, the strength of predation of orcas on chinook may depend on the relative abundance of pink salmon. Consequently, applying models that assume independent effects of causal variables can give the appearance of stochasticity and unpredictability, even when the underlying mechanics are deterministic. 
+
+Thus, nonlinearity complicates the identification of causal drivers. Here we test whether the salmon population data exhibits non-linearity. Because the data is mulispatial, we use the SSR_pred_boot function to evaluate how forecast skill changes with the time to prediction. We also evaluate the optimal theta parameter using s-maps in comparison to surrogate data.
+
+```{R}
+#Diagnostic analyses for rec4n, rec5n for each MPG and ESU
+#--------------------------------------------------------
+## Run diagnostics for each MPG separately and the whole ESU
+level <- c("ESU", "Middle Fork Salmon", "Imnaha", "Upper Salmon", "South Fork Salmon")
+variables <- c("rec4n", "rec5n")
+
+l <- 1; v <- 1
+for(l in (1:length(level))){  #loop through each analysis level the ESU and the different MPGs
+
+  subplot_list = list();
+  for(v in 1:length(variables)){ #loop through the different variables
+        vars <- c("stk", "year", variables[v])
+        if(l==1){D <- data[,vars]}
+        if(l>1){D <- data[data$mpg==level[l],vars]}
+
+        D <- shape_stock_data(D, 10) #shape the data so there is a row of NAs between each stock and only include chunks of data with at least 10 data points
+
+
+#---------------------------- time-delay, tau ----------------------------
+# the 'mutual' function that calculates the average mutual information 
+Dt <- as.numeric(D[complete.cases(D[,3]),3]) #needs a time series with no NA
+AMI <- mutual(Dt, lag.max = 10, plot=FALSE)
+minAMI <- min(which(diff(AMI)>=0))-1
+
+  AMI <- as.data.frame(as.numeric(AMI)); 
+  AMI <- cbind( c(0:(nrow(AMI)-1)), AMI); colnames(AMI) <- c("lag", "AMI")
+  #tau <- minAMI #choose the tau with the first local minimum AMI
+  tau <-  AMI[AMI[,2]==min(AMI[1:6,2]),1] #choose the tau <=5 with the lowest AMI (sample size becomes too restrictive if we use bigger tau)
+  
+  pAMI <- ggplot(AMI, aes(x=lag, y=AMI)) +
+    geom_point() +
+    theme_bw(base_size = 7) +
+    theme(legend.position = "none") +
+    labs(title = paste(variables[v], ", tau = ", tau, sep="")) 
+ 
+subplot_list[[((v-1)*4 + 1)]] = pAMI
+
+  
+#---------------------------- lagged population plot ----------------------------
+NAmat <- matrix(NA, ncol = 3, nrow=tau)
+colnames(NAmat) <- colnames(D)
+Lagblock <- cbind(rbind(NAmat, D), rbind(D, NAmat))
+removerows <- Lagblock[,1]!=Lagblock[,4] | is.na(Lagblock[,1]) | is.na(Lagblock[,4])
+Lagblock[removerows,] <- NA 
+Lagblock <- Lagblock[complete.cases(Lagblock[,1]),]
+
+Lagblock[,4:5] <- NULL
+    colnames(Lagblock) <- c("stk", "year", "t0", "t-tau")
+Lagblock$t0 <- as.numeric(Lagblock$t0)
+Lagblock$`t-tau` <- as.numeric(Lagblock$`t-tau`)
+
+#pLag <- ggplot(Lagblock, aes(x=t0, y=`t-tau`, color=stk)) +
+     #geom_point(shape=1)+
+     #geom_hline(aes(yintercept=0), colour='#999999') +
+     #theme_bw(base_size = 10) + # big text
+     #theme(legend.position = "none") 
+ 
+#subplot_list[[((v-1)*4 + 2)]] = pLag
+
+
+
+
+#---------------------------- Embedding dimension, E ----------------------------
+
+A <- as.numeric(D[,3])
+
+#set optimal E for each MPG and the ESU levels
+maxE<-min(floor(sqrt(sum(complete.cases(A)))),10) #Maximum E to test based on the square root of the number of samples, also depends on tau
+
+Emat<-matrix(nrow=maxE-1, ncol=6); colnames(Emat)<-c("E", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+#Loop over potential E values and save rho as an estimate of the ability of each process for its own dynamics
+
+
+for(E in 2:maxE) {
+  #Uses defaults of looking forward one prediction step (predstep)
+  Emat[E-1,"E"] <- E
+  Emat[E-1,"Tau1"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=1)$rho
+  Emat[E-1,"Tau2"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=2)$rho
+  Emat[E-1,"Tau3"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=3)$rho
+  Emat[E-1,"Tau4"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=4)$rho
+  Emat[E-1,"Tau5"] <- SSR_pred_boot(A=A, E=E, predstep=1, tau=5)$rho
+}
+
+
+#We defined E as the smallest dimension that came within 1% of the best predictive value observed across all dimensions with E ≤ sqrt(n), where
+#n is time series length (Sugihara & May 1990; Sugihara et al. 2012; Ye et al. 2015; Karacoc et at 2020). 
+maxrho=max(Emat[,"Tau1"], na.rm=TRUE)
+    E1 <- min(Emat[(Emat[,"Tau1"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau2"], na.rm=TRUE)
+    E2 <- min(Emat[(Emat[,"Tau2"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau3"], na.rm=TRUE)
+    E3 <- min(Emat[(Emat[,"Tau3"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau4"], na.rm=TRUE)
+    E4 <- min(Emat[(Emat[,"Tau4"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+maxrho=max(Emat[,"Tau5"], na.rm=TRUE)
+    E5 <- min(Emat[(Emat[,"Tau5"]>=(maxrho-(maxrho*0.01))),"E"], na.rm=TRUE)
+
+maxrho=max(Emat[,tau+1], na.rm=TRUE)    
+
+Edf <- as.data.frame(Emat)
+Edf <- pivot_longer(Edf, cols=c(2:6))
+Edf$chosen <- 0
+
+#force a different chosen E
+E1 <- 6
+
+Edf$chosen [(Edf$E==E1 & Edf$name=="Tau1") | (Edf$E==E2 & Edf$name=="Tau2") | (Edf$E==E3 & Edf$name=="Tau3") | (Edf$E==E4 & Edf$name=="Tau4") | (Edf$E==E5 & Edf$name=="Tau5") ] <- 1
+
+#manual color codes for plot
+pE <- ggplot(Edf, aes(x=E, y=value, color=name)) +
+     geom_line() +
+     geom_point(data=Edf[Edf$chosen==1,], aes(x=E, y=value, color=name), size=2, shape=1) +
+     labs(x = "E", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+subplot_list[[((v-1)*4 + 2)]] = pE 
+
+
+#---------------------------- Time to prediction, TP ----------------------------
+##Check data for nonlinear signal that is not dominated by noise
+#Checks whether predictive ability of processes declines with increasing time distance
+#Loop over the number of time steps into the future to make predictions from past observations. 
+#Set 'matchSugi' to 0 to match results in Sugihara et al. publication, which removes all points within X(t-(E-1)):X(t+1) instead of just the target point
+
+maxTP <- 10 #Maximum TP to test
+
+TPdf <- matrix(nrow=maxTP, ncol=6); colnames(TPdf)<-c("TP", "Tau1", "Tau2", "Tau3", "Tau4", "Tau5") #Matrix for storing output
+TPdf[,"TP"] <- c(1:maxTP) 
+TPdf[,"Tau1"]<-SSR_check_signal(A=as.matrix(A), E=E1, tau=1, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau2"]<-SSR_check_signal(A=as.matrix(A), E=E2, tau=2, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau3"]<-SSR_check_signal(A=as.matrix(A), E=E3, tau=3, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau4"]<-SSR_check_signal(A=as.matrix(A), E=E4, tau=4, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+TPdf[,"Tau5"]<-SSR_check_signal(A=as.matrix(A), E=E5, tau=5, predsteplist=1:maxTP, matchSugi = 0)[[1]]$rho
+
+TPdf <- as.data.frame(TPdf) 
+TPdf <- pivot_longer(TPdf, cols=c(2:6))
+pTP <- ggplot(TPdf, aes(x=TP, y=value, color=name) ) +
+     geom_line() +
+     labs(x = "time steps to prediction", y = expression(rho)) +
+     theme_bw() +
+     theme( legend.position = c(.99, .99),
+              legend.justification = c("right", "top"),
+              legend.box.just = "left",
+              legend.margin=margin(0,0,0,0),
+              legend.title = element_blank(),
+              legend.text = element_text(size = 8),
+              legend.background = element_blank(),
+              legend.key.size = unit(0.3, "cm"))
+
+subplot_list[[((v-1)*4 + 3)]] = pTP
+
+
+
+#----------------------------------- Theta, T -----------------------------------
+#Determine the optimal theta for each tau*E combination and test that it is significantly different from zero 
+#This function doesn't work with NAs
+
+Dt <- cbind(as.numeric(D[,2]), as.numeric(D[,3]))
+Dt <- as.data.frame(Dt[complete.cases(Dt),])
+lib <- create_lib(Dt, 20)
+
+optEtau <- Edf[Edf[,4]==1,1:2]
+optEtau$name[optEtau$name=="Tau1"]<-1
+optEtau$name[optEtau$name=="Tau2"]<-2
+optEtau$name[optEtau$name=="Tau3"]<-3
+optEtau$name[optEtau$name=="Tau4"]<-4
+optEtau$name[optEtau$name=="Tau5"]<-5
+colnames(optEtau) <- NULL
+colnames(optEtau) <- c("E", "tau")
+optEtau$tau <- as.numeric(optEtau$tau)
+
+### set environment for parallel computing
+### define function environments
+env_lib_ts <- c("tidyverse", "foreach", "rEDM", "glmnet")
+cl <- makeCluster(detectCores(), type="PSOCK")
+registerDoParallel(cl)
+
+system.time({ 
+theta_results <-  foreach(i=1:5, .combine=rbind, .packages=env_lib_ts) %dopar% {
+
+       test_nonlin_out <- test_nonlin(ts = Dt, lib = lib, E = as.numeric(optEtau[i,1]), tau = as.numeric(-optEtau[i,2]))
+       Tdf <- as.data.frame(cbind(test_nonlin_out$theta, test_nonlin_out$rho))
+       colnames(Tdf) <- c("theta", "rho")
+       Tdf$delta_rho <- test_nonlin_out$delta_rho
+       Tdf$delta_rho_p_val <- test_nonlin_out$delta_rho_p_value
+       Tdf$chosen <- 0
+       Tdf$chosen[(Tdf$theta==(test_nonlin_out$opt_theta))] <- 1
+       Tdf$E <- as.numeric(optEtau[i,1])
+       Tdf$tau <- as.numeric(-optEtau[i,2])
+       data.frame(Tdf) 
+       
+       }
+       
+}) #system.time
+stopCluster(cl)
+
+theta_results$tau <- -(theta_results$tau)
+theta_results$tau <- as.factor(theta_results$tau)
+pT <- ggplot(theta_results, aes(x=theta, y=rho, color=tau) ) +
+     geom_line() +
+     geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val<=0.05,], aes(x=theta, y=rho, color=tau), size=3) +
+  geom_point(data=theta_results[theta_results$chosen==1 & theta_results$delta_rho_p_val > 0.1,], aes(x=theta, y=rho, color=tau), size=3, shape=1) +   
+  labs(x = "theta", y = expression(rho)) +
+     theme_bw() +
+     theme(legend.position = "none")
+
+subplot_list[[((v-1)*4 + 4)]] = pT
+
+
+
+}  #variables loop  
+
+
+ n <- length(subplot_list)
+ nCol <- 4 #floor(sqrt(n))
+ pDIAGNOSTICS <- do.call("grid.arrange", c(subplot_list, ncol=nCol, top=level[l]))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/",level[l], "_", variables[v],"_reduced_E_diagnostics.pdf", sep = ""), plot = pDIAGNOSTICS, width = 9, height = 9, units = "in")  # saves the last plot
+
+} 
+
+
+```
+
+
+
+## Nonlinearity may appear as an artifact when aggregating linear time series with somewhat different dynamics. 
+Therefore, to confirm the presence of nonlinearity, we also apply the S-map to each stock individually.
+
+```{R}
+results_E <- data.frame()
+results_Tp <- data.frame()
+results_theta <- data.frame()
+
+variables <- c("rec4n", "rec5n")
+level <- unique(data$stk)
+l <- 1; v <- 1
+
+for(l in (1:length(level))){  
+  for(v in 1:length(variables)){ #loop through the different variables
+         vars <- c("year", variables[v])
+         D <- data[data$stk==level[l], vars]
+         D <- D[complete.cases(D),]
+         lib <- paste("1 ", nrow(D) )
+rho_E <- EmbedDimension(dataFrame = D, lib = lib, pred = lib, columns= variables[v], target = variables[v], showPlot = FALSE)
+    rho_E$stk <- level[l]
+    rho_E$var <- variables[v]
+    opt_E <- rho_E$E[which(rho_E$rho== max(rho_E$rho))]
+    rho_E$chosen <- 0
+    rho_E$chosen[(rho_E$E==(opt_E))] <- 1
+    results_E <- rbind(results_E, rho_E)
+
+rho_Tp <- PredictInterval(dataFrame = D, lib = lib, pred = lib, columns= variables[v], target = variables[v], E = opt_E, showPlot = FALSE)
+    rho_Tp$stk <- level[l]
+    rho_Tp$var <- variables[v]
+    results_Tp <- rbind(results_Tp, rho_Tp)
+
+test_PN <- test_PredictNonlinear(D = D, lib = lib, pred = lib, columns= variables[v], target = variables[v], E = opt_E)
+       rho_theta <- as.data.frame(cbind(test_PN$theta, test_PN$rho))
+       colnames(rho_theta) <- c("theta", "rho")
+       rho_theta$delta_rho <- test_PN$delta_rho
+       rho_theta$delta_rho_p_val <- test_PN$delta_rho_p_value
+       rho_theta$chosen <- 0
+       rho_theta$chosen[(rho_theta$theta==(test_PN$opt_theta))] <- 1
+       data.frame(rho_theta) 
+       rho_theta$stk <- level[l]
+       rho_theta$var <- variables[v]
+       results_theta <- rbind(results_theta, rho_theta)
+    }
+}
+
+pT <- ggplot(results_theta, aes(x=theta, y=rho, color=var) ) +
+      geom_line() +
+      geom_point(data=results_theta[results_theta$chosen==1 & results_theta$delta_rho_p_val<=0.1,], aes(x=theta, y=rho, color=var), size=3) +
+      geom_point(data=results_theta[results_theta$chosen==1 & results_theta$delta_rho_p_val > 0.1,], aes(x=theta, y=rho, color=var), size=3, shape=1) +   
+     theme(legend.position = "none") +
+     labs(x = "theta", y = expression(rho)) +
+     theme_bw() +
+     facet_wrap(~stk)
+
+print(pT)
+ggsave(filename = paste("Output/Figures/2_Diagnostics/stock_level_nonlinearity_diagnostics.pdf", sep = ""), plot = pT, width = 9, height = 9, units = "in")  # saves the last plot
+```
+
+## plot all the putative causal variables
+```{R}
+# load functions and dependent libraries
+rm(list=ls())  
+source("0_CORE_prepareR.R")
+
+data <- split(data, data$stk)  
+#Imnaha is one of the longest data sets, use that to extract juct the causal variables
+data <- data[["Imnaha River"]]
+data[,c(1:2,4:11)] <- NULL
+FP_list <- FP_list[2:nrow(FP_list),] #remove stock level harvest from the list because this differs by stock
+FP <- FP_list[!duplicated(FP_list[,2:3]),1:3] #remove offsets
+D <- cbind(data$year, data[,FP$FP])
+
+varcat <- unique(FP_list$cat)
+subplot_list <- list()
+for(c in c(1:11)) {
+     vars <-   FP$FP[FP$cat==varcat[c]]
+     D_plot <- cbind("year"=D[,1], D[,vars]) 
+     if(length(vars)>1){D_plot <- pivot_longer(D_plot, cols=vars)}
+     if(length(vars)==1){colnames(D_plot) <- c("year", "value"); D_plot <- data.frame(D_plot); D_plot$name <- "hseal_COL"}
+     D_plot <- data.frame(D_plot)
+     p1 <- ggplot(D_plot, aes(x=year, y=value) )+
+         geom_line(aes(col=name)) +
+         geom_point(aes(col=name)) +
+         geom_hline(aes(yintercept=0), colour='#999999') +
+         theme_bw() + 
+         guides(col = guide_legend(ncol=1)) +
+         labs(title= varcat[c], subtitle = "", x="year", y="normalized value") 
+     subplot_list[[c]] = p1
+}
+ pFP <- do.call("grid.arrange", c(subplot_list[1:2], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/harv_hatch_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[3:4], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/sea_lion_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[5:6], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/seal_orca_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[7:8], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/PDO_NPGO_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[9:10], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/UPW_ARC_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+ pFP <- do.call("grid.arrange", c(subplot_list[11], ncol=1))
+ggsave(filename = paste("Output/Figures/2_Diagnostics/flow_diagnostics.pdf", sep = ""), plot = pFP, width = 9, height = 9, units = "in")  # saves the plot
+```
+
+
