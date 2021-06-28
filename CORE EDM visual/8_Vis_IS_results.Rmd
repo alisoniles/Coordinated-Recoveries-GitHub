@@ -1,0 +1,27 @@
+---
+title: "8_Vis_IS_results"
+author: "Kurt Ingeman"
+date: "6/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(here)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+```
+
+```{r}
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Upper Salmon_rec4n.RData"))
+
+data.frame(out_results)
+
+```
+
+

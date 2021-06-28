@@ -1,0 +1,170 @@
+---
+title: "Rules for pairing down vars"
+output: html_notebook
+---
+
+
+```{r}
+library(dplyr)
+library(here)
+
+```
+
+```{r}
+rm(list = ls())
+
+df <- read.csv(here("CCM_twin_surr_u_rho .csv")) %>% 
+  select(-Chosen) %>% 
+  mutate(ESU = round(ESU, 4)) %>% 
+  mutate(MFS = round(MFS, 4)) %>% 
+  mutate(IMN = round(IMN, 4)) %>% 
+  mutate(UPS = round(UPS, 4)) # produces 552 vars
+
+
+# Replace NAs with 0 numeric (so that max() works)
+df[is.na(df)] <- -99
+
+# Remove all Rec4 offset 5
+df <- df %>% 
+  filter(RP == "rec5n" | RP == "rec4n" & !offset == 5) # produces 486 vars
+
+# For each of ESU, 3 MPGs
+    # Select highest Rho offset within each category, if present
+        # Mutate new var with 1 vs 0 (top_cat_[spatial_segment])
+df <- df %>% 
+  group_by(RP, cat) %>% 
+  mutate(top_cat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(top_cat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(top_cat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(top_cat_UPS = case_when(UPS > 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% ungroup()
+
+# For each of ESU, 3 MPGs
+    # Select highest Rho offset within each subcat if present
+        # Mutate new var with 1 vs 0 (top_subcat)
+df <- df %>% 
+  group_by(RP, cat, subcat) %>% 
+  mutate(top_subcat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(top_subcat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(top_subcat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(top_subcat_UPS = case_when(UPS > 0 & UPS == max(UPS) ~ 1)) %>% 
+   ungroup() %>% ungroup() %>% ungroup
+
+
+
+```
+
+```{r}
+# measure lengths for each list
+
+colSums(df[,10:17], na.rm = TRUE) 
+
+
+```
+
+```{r}
+
+# Create new dataframe from only those that have at least one top rho
+
+df_top <- df %>% 
+  replace(is.na(.), 0) %>%
+  filter(rowSums(.[10:17]) > 0) # produces 307 vars
+
+
+```
+
+
+```{r}
+
+#  Filter by Rho 
+
+df_ESU <- df %>% 
+  select(1:6, 10, 14) %>% 
+  replace(is.na(.), 0) %>%
+  filter(rowSums(.[7:8]) > 0) # 156 vars for ESU only
+
+hist(df_ESU$ESU)
+  
+df_ESU <- df_ESU %>% 
+  mutate(rho_thresh = case_when(ESU > 0.5 ~ "high", 
+                                ESU < 0.3 ~ "low", 
+                                TRUE ~ "med"))
+
+length(df_ESU$rho_thresh[df_ESU$rho_thresh == "med"])
+# threshold of rho greater than 0.5 = 40
+# threshold of rho greater than 0.3 = 137  
+
+
+```
+
+```{r}
+#  Filter by Rho for MFS
+
+df_MFS <- df %>% 
+  select(1:5, 7, 11, 15) %>% 
+  replace(is.na(.), 0) %>%
+  filter(rowSums(.[7:8]) > 0) # 151 vars for MFS only
+
+hist(df_MFS$MFS)
+  
+df_MFS <- df_MFS %>% 
+  mutate(rho_thresh = case_when(MFS > 0.5 ~ "high", 
+                                MFS < 0.3 ~ "low", 
+                                TRUE ~ "med"))
+
+length(df_MFS$rho_thresh[df_MFS$rho_thresh == "med"])
+# threshold of rho greater than 0.5 = 22
+# threshold of rho greater than 0.3 = 118 
+
+
+```
+```{r}
+#  Filter by Rho for IMN
+
+df_IMN <- df %>% 
+  select(1:5, 8, 12, 16) %>% 
+  replace(is.na(.), 0) %>%
+  filter(rowSums(.[7:8]) > 0) # 123 vars for IMN only
+
+hist(df_IMN$IMN)
+  
+df_IMN <- df_IMN %>% 
+  mutate(rho_thresh = case_when(IMN > 0.35 ~ "high", 
+                                IMN < 0.2 ~ "low", 
+                                TRUE ~ "med"))
+
+length(df_IMN$rho_thresh[df_IMN$rho_thresh == "low"])
+# threshold of rho greater than 0.35 = 20
+# threshold of rho greater than 0.2 = 76 
+
+```
+
+```{r}
+#  Filter by Rho for UPS
+
+df_UPS <- df %>% 
+  select(1:5, 9, 13, 17) %>% 
+  replace(is.na(.), 0) %>%
+  filter(rowSums(.[7:8]) > 0) # 82 vars for UPS only
+
+hist(df_UPS$UPS)
+  
+df_UPS <- df_UPS %>% 
+  mutate(rho_thresh = case_when(UPS > 0.35 ~ "high", 
+                                UPS < 0.2 ~ "low", 
+                                TRUE ~ "med"))
+
+length(df_UPS$rho_thresh[df_UPS$rho_thresh == "high"])
+# threshold of rho greater than 0.35 = 12
+# threshold of rho greater than 0.2 = 54 
+
+
+```
+
+
+
+
+
+
+
+

@@ -1,0 +1,410 @@
+---
+title: "CCM_reduce_revised"
+author: "Kurt Ingeman"
+date: "6/5/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r}
+
+rm(list = ls())
+
+library(dplyr)
+library(here)
+
+```
+
+## Read in 99 data and rename
+```{r}
+
+df <- read.csv(here("CORE EDM Visual", "CORE_reduce_CCM_vars", "CCM_twin_99.csv"))
+# 258 vars
+
+# ensure that max will work when all values negative
+df[is.na(df)] <- -99
+
+# split df into the rec4 and rec5 values
+df4 <- df %>% 
+  select(1:8) %>% 
+  rename(
+    ESU = ESU_rec4n,
+    IMN = Imnaha_rec4n,
+    MFS = Middle.Fork.Salmon_rec4n, 
+    UPS = Upper.Salmon_rec4n
+  )
+
+df5 <- df %>% 
+  select(1:4, 9:12) %>% 
+  rename(
+    ESU = ESU_rec5n,
+    IMN = Imnaha_rec5n,
+    MFS = Middle.Fork.Salmon_rec5n, 
+    UPS = Upper.Salmon_rec5n
+  )
+
+
+```
+## Rec4 -- Create df with only those variables x offset that represent the highest rho for at least one of the spatial components (ESU or one of the three MPGs)
+```{r}
+
+df4_cat <- df4 %>% 
+  group_by(cat) %>% 
+  mutate(cat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(cat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(cat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(cat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_cat = sum(cat_ESU, cat_MFS, cat_IMN, cat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one full category: 
+colSums(df4_cat[,9:12], na.rm = TRUE) 
+#top_cat_ESU top_cat_MFS top_cat_IMN top_cat_UPS 
+#         10           9           6           6 
+
+
+rec4_top_cat <- df4_cat %>% 
+  filter(sum_cat > 0)
+# 28 variables
+
+# write.csv(rec4_top_cat, "rec4_top_cat99.csv")
+  
+
+```
+
+# Rec4 -- Do the same for subcategories
+```{r}
+
+df4_subcat <- df4 %>% 
+  group_by(subcat) %>% 
+  mutate(subcat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(subcat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(subcat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(subcat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_subcat = sum(subcat_ESU, subcat_MFS, subcat_IMN, subcat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one  subcategory: 
+colSums(df4_subcat[,9:12], na.rm = TRUE) 
+#subcat_ESU    subcat_MFS   subcat_IMN  subcat_UPS 
+#         46           35           11           8 
+
+
+rec4_top_subcat <- df4_subcat %>% 
+  filter(sum_subcat > 0)
+# 70 variables
+
+write.csv(rec4_top_subcat, "rec4_top_subcat99.csv")
+
+```
+
+
+## Rec 5 -- Create df with only those variables x offset that represent the highest rho for at least one of the spatial components (ESU or one of the three MPGs)
+```{r}
+
+df5_cat <- df5 %>% 
+  group_by(cat) %>% 
+  mutate(cat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(cat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(cat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(cat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_cat = sum(cat_ESU, cat_MFS, cat_IMN, cat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one full category: 
+colSums(df5_cat[,9:12], na.rm = TRUE) 
+# cat_ESU cat_MFS cat_IMN cat_UPS 
+#     11      10      11      10 
+
+rec5_top_cat <- df5_cat %>% 
+  filter(sum_cat > 0)
+# 35 variables
+
+write.csv(rec5_top_cat, "rec5_top_cat99.csv")
+  
+
+```
+
+# Rec 5 -- Do the same for subcategories
+```{r}
+
+df5_subcat <- df5 %>% 
+  group_by(subcat) %>% 
+  mutate(subcat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(subcat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(subcat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(subcat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_subcat = sum(subcat_ESU, subcat_MFS, subcat_IMN, subcat_UPS, na.rm = T))
+
+#rec5 variables that represents the highest uRho in at least one  subcategory: 
+colSums(df5_subcat[,9:12], na.rm = TRUE) 
+# subcat_ESU subcat_MFS subcat_IMN subcat_UPS 
+#        54         48         37         38 
+
+rec5_top_subcat <- df5_subcat %>% 
+  filter(sum_subcat > 0)
+# 107 variables
+
+write.csv(rec5_top_subcat, "rec5_top_subcat99.csv")
+
+```
+
+## Figure out how many of those variable by offset combos are shared vs unique
+
+```{r}
+cat4 <- rec4_top_cat$FP
+scat4 <- rec4_top_subcat$FP
+cat5 <- rec5_top_cat$FP
+scat5 <- rec5_top_subcat$FP
+
+intersect(cat4,scat4) # 21 in common
+intersect(cat4,cat5) # 6 in common
+intersect(cat4,scat5) # 12 in common
+intersect(scat4,cat5) # 13 in common
+intersect(scat4,scat5) # 47 in common
+intersect(cat5,scat5) # 30 in common 
+
+Reduce(intersect, list(cat4, cat5, scat4, scat5))
+# 2 in common to all
+# "npgo.spr.2" and "orca.SRKWdeathsJKL.5"
+
+
+vars99 <- list(cat4, scat4, cat5, scat5, names = c("cat4", "cat5", "scat4", "scat5"))
+
+names(vars99) <- c("cat4", "scat4", "cat5", "scat5")
+
+saveRDS(vars99, file = "vars99.rds")
+
+```
+
+## - 
+## Repeat entire procedure for 95% CI
+## -
+
+```{r}
+
+rm(list = ls())
+
+library(dplyr)
+library(here)
+
+```
+
+## Read in 95 data and rename
+```{r}
+
+df <- read.csv(here("CCM_twin_95.csv"))
+# 250 vars
+
+# ensure that max will work when all values negative
+df[is.na(df)] <- -99
+
+# split df into the rec4 and rec5 values
+df4 <- df %>% 
+  select(1:8) %>% 
+  rename(
+    ESU = ESU_rec4n,
+    IMN = Imnaha_rec4n,
+    MFS = Middle.Fork.Salmon_rec4n, 
+    UPS = Upper.Salmon_rec4n
+  )
+
+df5 <- df %>% 
+  select(1:4, 9:12) %>% 
+  rename(
+    ESU = ESU_rec5n,
+    IMN = Imnaha_rec5n,
+    MFS = Middle.Fork.Salmon_rec5n, 
+    UPS = Upper.Salmon_rec5n
+  )
+
+
+```
+## Rec4 -- Create df with only those variables x offset that represent the highest rho for at least one of the spatial components (ESU or one of the three MPGs)
+```{r}
+
+df4_cat <- df4 %>% 
+  group_by(cat) %>% 
+  mutate(cat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(cat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(cat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(cat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_cat = sum(cat_ESU, cat_MFS, cat_IMN, cat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one full category: 
+colSums(df4_cat[,9:12], na.rm = TRUE) 
+#cat_ESU cat_MFS cat_IMN cat_UPS 
+#     10      10      10      10 
+
+
+rec4_top_cat <- df4_cat %>% 
+  filter(sum_cat > 0)
+# 35 variables
+
+write.csv(rec4_top_cat, "rec4_top_cat95.csv")
+  
+
+```
+
+## Create RDS for Alison with top cat by spatial segment
+```{r}
+rec4_vars_ESU <- df4_cat %>% 
+  filter(cat_ESU > 0)
+rec4_vars_ESU <- rec4_vars_ESU$FP
+
+rec4_vars_MFS <- df4_cat %>% 
+  filter(cat_MFS > 0)
+rec4_vars_MFS <- rec4_vars_MFS$FP
+
+rec4_vars_IMN <- df4_cat %>% 
+  filter(cat_IMN > 0)
+rec4_vars_IMN <- rec4_vars_IMN$FP
+
+rec4_vars_UPS <- df4_cat %>% 
+  filter(cat_UPS > 0)
+rec4_vars_UPS <- rec4_vars_UPS$FP
+
+vars_rec4_95 <- list(rec4_vars_ESU, rec4_vars_MFS, rec4_vars_IMN, rec4_vars_UPS)
+names(vars_rec4_95) <- c("ESU", "MFS", "IMN", "UPS")
+
+
+saveRDS(vars_rec4_95, file = "vars95_rec4_by_spatial.rds")
+
+```
+
+# Rec4 -- Do the same for subcategories
+```{r}
+
+df4_subcat <- df4 %>% 
+  group_by(subcat) %>% 
+  mutate(subcat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(subcat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(subcat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(subcat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_subcat = sum(subcat_ESU, subcat_MFS, subcat_IMN, subcat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one  subcategory: 
+colSums(df4_subcat[,9:12], na.rm = TRUE) 
+#subcat_ESU subcat_MFS subcat_IMN subcat_UPS 
+#        49         43         23         20 
+
+
+rec4_top_subcat <- df4_subcat %>% 
+  filter(sum_subcat > 0)
+# 90 variables
+
+write.csv(rec4_top_subcat, "rec4_top_subcat95.csv")
+
+```
+
+## Rec 5 -- Create df with only those variables x offset that represent the highest rho for at least one of the spatial components (ESU or one of the three MPGs)
+```{r}
+
+df5_cat <- df5 %>% 
+  group_by(cat) %>% 
+  mutate(cat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(cat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(cat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(cat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_cat = sum(cat_ESU, cat_MFS, cat_IMN, cat_UPS, na.rm = T))
+
+#rec4 variables that represents the highest uRho in at least one full category: 
+colSums(df5_cat[,9:12], na.rm = TRUE) 
+# cat_ESU cat_MFS cat_IMN cat_UPS 
+#     11      10      11      10 
+
+rec5_top_cat <- df5_cat %>% 
+  filter(sum_cat > 0)
+# 33 variables
+
+write.csv(rec5_top_cat, "rec5_top_cat95.csv")
+  
+```
+
+
+## Create RDS for Alison with top cat by spatial segment
+```{r}
+rec5_vars_ESU <- df5_cat %>% 
+  filter(cat_ESU > 0)
+rec5_vars_ESU <- rec5_vars_ESU$FP
+
+rec5_vars_MFS <- df5_cat %>% 
+  filter(cat_MFS > 0)
+rec5_vars_MFS <- rec5_vars_MFS$FP
+
+rec5_vars_IMN <- df5_cat %>% 
+  filter(cat_IMN > 0)
+rec5_vars_IMN <- rec5_vars_IMN$FP
+
+rec5_vars_UPS <- df5_cat %>% 
+  filter(cat_UPS > 0)
+rec5_vars_UPS <- rec5_vars_UPS$FP
+
+vars_rec5_95 <- list(rec5_vars_ESU, rec5_vars_MFS, rec5_vars_IMN, rec5_vars_UPS)
+names(vars_rec5_95) <- c("ESU", "MFS", "IMN", "UPS")
+
+
+saveRDS(vars_rec5_95, file = "vars95_rec5_by_spatial.rds")
+
+```
+
+
+# Rec 5 -- Do the same for subcategories
+```{r}
+
+df5_subcat <- df5 %>% 
+  group_by(subcat) %>% 
+  mutate(subcat_ESU = case_when(ESU > 0 & ESU == max(ESU) ~ 1)) %>% 
+  mutate(subcat_MFS = case_when(MFS > 0 & MFS == max(MFS) ~ 1)) %>%
+  mutate(subcat_IMN = case_when(IMN > 0 & IMN == max(IMN) ~ 1)) %>%
+  mutate(subcat_UPS = case_when(UPS> 0 & UPS == max(UPS) ~ 1)) %>% 
+  ungroup() %>% rowwise() %>% 
+  mutate(sum_subcat = sum(subcat_ESU, subcat_MFS, subcat_IMN, subcat_UPS, na.rm = T))
+
+#rec5 variables that represents the highest uRho in at least one  subcategory: 
+colSums(df5_subcat[,9:12], na.rm = TRUE) 
+# subcat_ESU subcat_MFS subcat_IMN subcat_UPS 
+#        54         49         47         45 
+
+rec5_top_subcat <- df5_subcat %>% 
+  filter(sum_subcat > 0)
+# 107 variables
+
+write.csv(rec5_top_subcat, "rec5_top_subcat95.csv")
+
+```
+
+## Figure out how many of those variable by offset combos are shared vs unique
+
+```{r}
+cat4 <- rec4_top_cat$FP
+scat4 <- rec4_top_subcat$FP
+cat5 <- rec5_top_cat$FP
+scat5 <- rec5_top_subcat$FP
+
+vars95 <- list(cat4, scat4, cat5, scat5)
+
+names(vars95) <- c("cat4", "scat4", "cat5", "scat5")
+
+saveRDS(vars95, file = "vars95.rds")
+
+intersect(cat4,scat4) # 26 in common
+intersect(cat4,cat5) # 9 in common
+intersect(cat4,scat5) # 14 in common
+intersect(scat4,cat5) # 14 in common
+intersect(scat4,scat5) # 54 in common
+intersect(cat5,scat5) # 27 in common 
+
+Reduce(intersect, list(cat4, cat5, scat4, scat5))
+# 5 in common to all
+# "hatch.all.1" + "npgo.spr.2" + "orca.SRKWdeathsJKL.5" + "ssl.COL.2" + "upw.tdmi.4"
+
+readRDS(file = "vars95.rds")
+
+```
