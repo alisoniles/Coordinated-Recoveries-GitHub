@@ -26,6 +26,9 @@ df <- read.csv(here("CORE EDM Visual", "CORE_reduce_CCM_vars", "CCM_twin_99.csv"
 # ensure that max will work when all values negative
 df[is.na(df)] <- -99
 
+# explore categories
+unique(df$cat)
+
 # split df into the rec4 and rec5 values
 df4 <- df %>% 
   select(1:8) %>% 
@@ -196,7 +199,7 @@ library(here)
 ## Read in 95 data and rename
 ```{r}
 
-df <- read.csv(here("CCM_twin_95.csv"))
+df <-  read.csv(here("CORE EDM Visual", "CORE_reduce_CCM_vars", "CCM_twin_95.csv"))
 # 250 vars
 
 # ensure that max will work when all values negative

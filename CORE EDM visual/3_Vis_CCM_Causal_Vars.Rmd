@@ -1,0 +1,38 @@
+---
+title: "7_Vis_CCM_Sig_Causal_Vars"
+author: "Kurt Ingeman"
+date: "6/27/2021"
+output: html_document
+---
+
+
+```{r}
+df <-  read.csv(here("CORE EDM Visual", "CORE_reduce_CCM_vars", "CCM_twin_95.csv"))
+# 250 vars
+
+# ensure that max will work when all values negative
+df[is.na(df)] <- -99
+
+# split df into the rec4 and rec5 values
+df4 <- df %>% 
+  select(1:8) %>% 
+  rename(
+    ESU = ESU_rec4n,
+    IMN = Imnaha_rec4n,
+    MFS = Middle.Fork.Salmon_rec4n, 
+    UPS = Upper.Salmon_rec4n
+  )
+
+df5 <- df %>% 
+  select(1:4, 9:12) %>% 
+  rename(
+    ESU = ESU_rec5n,
+    IMN = Imnaha_rec5n,
+    MFS = Middle.Fork.Salmon_rec5n, 
+    UPS = Upper.Salmon_rec5n
+  )
+
+```
+
+
+
