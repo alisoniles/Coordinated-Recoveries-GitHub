@@ -2,7 +2,9 @@
 title: "7_Vis_CCM_Sig_Causal_Vars"
 author: "Kurt Ingeman"
 date: "6/27/2021"
-output:output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r}

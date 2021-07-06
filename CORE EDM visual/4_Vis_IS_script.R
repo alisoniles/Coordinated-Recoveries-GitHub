@@ -47,7 +47,7 @@ legend(x=.9, y=.5, legend = c("Ave Rank", "No. Models", "Highest Rank"), bty = "
 
 ## UPS
 op <- par(mar = c(1, 1, 1, 1))
-par(mar = c(1, 0, 1, 5))
+par(mar = c(1, 1, 1, 1))
 
 radarchart(rec4_spider, axistype=0,
            #custom polygon
