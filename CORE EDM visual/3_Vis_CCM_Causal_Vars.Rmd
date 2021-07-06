@@ -2,8 +2,19 @@
 title: "7_Vis_CCM_Sig_Causal_Vars"
 author: "Kurt Ingeman"
 date: "6/27/2021"
-output: html_document
+output:output: html_document
 ---
+
+```{r}
+rm(list = ls())
+
+library(here)
+library(tidyr)
+library(dplyr)
+library(RColorBrewer)
+library(ggplot2)
+
+```
 
 
 ```{r}
@@ -11,7 +22,7 @@ df <-  read.csv(here("CORE EDM Visual", "CORE_reduce_CCM_vars", "CCM_twin_95.csv
 # 250 vars
 
 # ensure that max will work when all values negative
-df[is.na(df)] <- -99
+# df[is.na(df)] <- -99
 
 # split df into the rec4 and rec5 values
 df4 <- df %>% 
@@ -33,6 +44,254 @@ df5 <- df %>%
   )
 
 ```
+# 1. Are predators drivers of salmon recruitment 
+## evidence: Exceed CCM thresholds, can recover causal vars from salmon dynamics 
+
+## Rec4: Visualize the distribution of uRho values for broadest categories of causal variables  
+### Create new variables to distiguish oceanographic, biological, and human variables 
+
+```{r}
+
+df <- df %>% 
+  filter(!cat == "flow") %>% 
+  filter(!cat == "hseal") %>% 
+  mutate(domain = case_when(
+    cat == "arc" | cat == "pdo" | cat == "upw" | cat == "npgo" ~ "ocean", 
+    cat == "ssl" | cat == "csl" | cat == "orca" | cat == "hseal" ~ "predator", 
+    cat == "harv" | cat == "hatch" ~ "human")) %>% 
+  group_by(domain) %>% 
+  mutate(mu_ESU = mean(ESU_rec4n, na.rm=TRUE)) %>%
+  ungroup()
+  
+  
+```
+
+### Histogram of distribution of uRho values, facet by domain
+```{r}
+
+ggplot(df, aes(x=ESU_rec4n)) + geom_histogram(color="black", fill="white", binwidth=0.01)
 
 
+ggplot(df, aes(x = ESU_rec4n, color = domain, fill = domain )) +
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.4) +
+  geom_density(alpha = 0.4) +
+  geom_vline(aes(xintercept = mu_ESU, color = domain),
+             linetype = "dashed") +
+  theme(legend.position = "top") +
+  scale_color_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  scale_fill_manual(values=c("#FFC300", "#2E86C1", "#CB4335"))
 
+
+ggplot(df, aes(x = ESU_rec4n, color = domain, fill = domain )) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.4) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  scale_fill_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  facet_grid(domain ~ .) +
+  geom_vline(aes(xintercept = mu_ESU, color = domain),
+            lty = "11", lwd = 1.5) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+
+```
+
+### Are predators important drivers of salmon recruitment? Yes, numerous predator time series exceed CCM thresholds of rho > 0 and increasing with library size. Magnitude of correlation coeffient between predator putative causal variables those predicted by salmon recuitment levels is, on average higher than humn or ocean variables. indicating that several predator pcv left a strong imprint on salmon dynamics
+
+### Within each domain, how do the various categories stack up
+```{r}
+
+
+# roughly simlar mean rho: ssl slightly higher
+
+ocean <- df %>% 
+  filter(domain == "ocean") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec4n, na.rm=TRUE)) %>%
+  ungroup()
+
+ocean$cat = factor(ocean$cat, levels=c('pdo','arc','upw','npgo'))
+
+ggplot(ocean, aes(x = ESU_rec4n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+
+```
+#### For rec4, NPGO higher than other ocean vars
+
+```{r}
+
+predator <- df %>% 
+  filter(domain == "predator") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec4n, na.rm=TRUE)) %>%
+  ungroup()
+
+predator$cat = factor(predator$cat, levels=c('orca','csl','ssl'))
+
+ggplot(predator, aes(x = ESU_rec4n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Reds"))(6)[2:4]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Reds"))(6)[2:4]) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+
+```
+#### For rec4, SSL higher than other pred vars
+
+```{r}
+human <- df %>% 
+  filter(domain == "human") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec4n, na.rm=TRUE)) %>%
+  ungroup()
+
+human$cat = factor(human$cat, levels=c('hatch','harv'))
+
+ggplot(human, aes(x = ESU_rec4n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = c("#FFC300" , "#FFDA60")) +
+  scale_fill_manual(values = c("#FFC300" , "#FFDA60")) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+```
+#### For rec4, harvest higher than hatchery
+
+##############################################################################
+################################ Rec 5 #######################################
+##############################################################################
+
+
+```{r}
+
+ggplot(df, aes(x = ESU_rec5n, color = domain, fill = domain )) +
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.4) +
+  geom_density(alpha = 0.4) +
+  geom_vline(aes(xintercept = mu_ESU, color = domain),
+             linetype = "dashed") +
+  theme(legend.position = "top") +
+  scale_color_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  scale_fill_manual(values=c("#FFC300", "#2E86C1", "#CB4335"))
+
+
+ggplot(df, aes(x = ESU_rec5n, color = domain, fill = domain )) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.4) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  scale_fill_manual(values=c("#FFC300", "#2E86C1", "#CB4335")) +
+  facet_grid(domain ~ .) +
+  geom_vline(aes(xintercept = mu_ESU, color = domain),
+            lty = "11", lwd = 1.5) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+
+```
+
+### Compared to rec4, the rec5 mean rho for predators is similar but there is far more right-skew, or a small number of predator vars with very high rh0
+
+
+### Within each domain, how do the various categories stack up
+```{r}
+
+ocean <- df %>% 
+  filter(domain == "ocean") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec5n, na.rm=TRUE)) %>%
+  ungroup()
+
+ocean$cat = factor(ocean$cat, levels=c('pdo','upw','arc','npgo'))
+
+ggplot(ocean, aes(x = ESU_rec5n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+
+
+```
+#### For rec5, NPGO remains higher than other ocean vars
+
+```{r}
+
+predator <- df %>% 
+  filter(domain == "predator") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec5n, na.rm=TRUE)) %>%
+  ungroup()
+
+predator$cat = factor(predator$cat, levels=c('orca','csl','ssl'))
+
+ggplot(predator, aes(x = ESU_rec5n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Reds"))(6)[2:4]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Reds"))(6)[2:4]) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+```
+#### For rec4, SSL reamins higher on average than other pred vars, but driven by a small number of variables with 0.5 < rho < 0.75 among the highest correlation coefficients observed
+
+```{r}
+human <- df %>% 
+  filter(domain == "human") %>% 
+  group_by(cat) %>% 
+  mutate(mu = mean(ESU_rec5n, na.rm=TRUE)) %>%
+  ungroup()
+
+human$cat = factor(human$cat, levels=c('hatch','harv'))
+
+ggplot(human, aes(x = ESU_rec5n, color = cat, fill = cat)) + 
+  geom_histogram(position = "identity", binwidth = 0.02, alpha = 0.7) +
+  scale_color_manual(values = c("#FFDA60", "#FFC300")) +
+  scale_fill_manual(values = c("#FFDA60", "#FFC300")) +
+  geom_vline(aes(xintercept = mu, color = cat),
+             linetype = "dashed") +
+  geom_density(alpha = 0.4) + facet_grid(cat ~ .) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()) +
+  ylab("Frequency") + xlab("Rho (correlation coefficient, obs vs pred)") +
+  xlim(c(0, 1))
+```
+### For rec5, harvest remains higher than hatchery and both show mean magnitudes > those of rec4
+
+
+## Next steps --> explore MPGs and compare with ESU 

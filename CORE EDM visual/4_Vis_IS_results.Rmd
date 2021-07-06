@@ -10,18 +10,792 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+
+rm(list = ls())
+
 library(here)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
+library(fmsb)
+library(forcats)
+library(RColorBrewer)
 
 ```
 
 ```{r}
-load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Upper Salmon_rec4n.RData"))
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_ESU_rec4n.RData")) 
+rec4_ESU <- out_results
+rm(out_results)
 
-data.frame(out_results)
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Imnaha_rec4n.RData")) 
+rec4_IMN <- out_results
+rm(out_results)
+
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Middle Fork Salmon_rec4n.RData")) 
+rec4_MFS <- out_results
+rm(out_results)
+
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Upper Salmon_rec4n.RData")) 
+rec4_UPS <- out_results
+rm(out_results)
+
+```
+
+## create domains (Ocean, Human, Predator)
+```{r}
+
+rec4_ESU<-  rec4_ESU %>% 
+  mutate(domain = case_when(
+    grepl("npgo", FP) ~ "ocean",
+    grepl("pdo", FP) ~ "ocean",
+    grepl("arc", FP) ~ "ocean",
+    grepl("upw", FP) ~ "ocean", 
+    grepl("hatch", FP) ~ "human",
+    grepl("harv", FP) ~ "human",
+    grepl("hseal", FP) ~ "pred",
+    grepl("orca", FP) ~ "pred",
+    grepl("csl", FP) ~ "pred", 
+    grepl("ssl", FP) ~ "pred", 
+    TRUE ~"other"))
+
+
+rec4_IMN<-  rec4_IMN %>% 
+  mutate(domain = case_when(
+    grepl("npgo", FP) ~ "ocean",
+    grepl("pdo", FP) ~ "ocean",
+    grepl("arc", FP) ~ "ocean",
+    grepl("upw", FP) ~ "ocean", 
+    grepl("hatch", FP) ~ "human",
+    grepl("harv", FP) ~ "human",
+    grepl("hseal", FP) ~ "pred",
+    grepl("orca", FP) ~ "pred",
+    grepl("csl", FP) ~ "pred", 
+    grepl("ssl", FP) ~ "pred", 
+    TRUE ~"other"))
+
+rec4_MFS <-  rec4_MFS %>% 
+  mutate(domain = case_when(
+    grepl("npgo", FP) ~ "ocean",
+    grepl("pdo", FP) ~ "ocean",
+    grepl("arc", FP) ~ "ocean",
+    grepl("upw", FP) ~ "ocean", 
+    grepl("hatch", FP) ~ "human",
+    grepl("harv", FP) ~ "human",
+    grepl("hseal", FP) ~ "pred",
+    grepl("orca", FP) ~ "pred",
+    grepl("csl", FP) ~ "pred", 
+    grepl("ssl", FP) ~ "pred", 
+    TRUE ~"other"))
+
+rec4_UPS <-  rec4_UPS %>% 
+  mutate(domain = case_when(
+    grepl("npgo", FP) ~ "ocean",
+    grepl("pdo", FP) ~ "ocean",
+    grepl("arc", FP) ~ "ocean",
+    grepl("upw", FP) ~ "ocean", 
+    grepl("hatch", FP) ~ "human",
+    grepl("harv", FP) ~ "human",
+    grepl("hseal", FP) ~ "pred",
+    grepl("orca", FP) ~ "pred",
+    grepl("csl", FP) ~ "pred", 
+    grepl("ssl", FP) ~ "pred", 
+    TRUE ~"other"))
+
+
+
+```
+
+# ESU 
+
+# 2a. What variables are in the top models? In what frequency?
+### To do that right, we need to actually through ALL the vars in the SMAP hopper, not just the top ones
+### But I can get an highest and average rank model that each var shows up in
+
+
+```{r}
+ 
+unique(rec4_ESU$FP)  
+unique(rec4_ESU$embedding) 
+
+rec4_mods <- rec4_ESU %>%
+  group_by(embedding, FP) %>% 
+  summarise() %>% 
+  group_by(FP) %>% 
+  mutate(
+    best_mod = min(embedding), # lowest number (highest rank) model
+    scale_mod = 1 / best_mod, # above expressed as 0-1
+    rank_mod = mean(embedding)/54, # average rank of model that that they are in
+    total_num = length(embedding), # number of models that they are in
+    prop_mod = total_num/54, # proportion of model that they are in 
+    weight = 54-embedding, # reverse of rank
+    integrated = sum(weight)/(54*55/2)) %>% # integrate rank and weight 
+  slice(1) %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  arrange(prop_mod) %>% 
+  ungroup()
+
+
+# organize vars by Ocean, People, Biol
+
+levels(rec4_mods$FP)
+
+
+```
+```{r}
+
+rec4_spider <- data.frame(rbind(rep(1,4), rep(0,4), 
+                              rec4_mods $rank_mod, rec4_mods $prop_mod, rec4_mods $scale_mod 
+                                ))
+colnames(rec4_spider) <- rec4_mods$FP
+
+trans.pal <- c("#7BCAE44D", "#E47BCA4D", "#CAE47B4D")
+pal <- c("#7BCAE4", "#E47BCA", "#CAE47B")
+
+# op <- par(mar = c(1, 1, 1, 1))
+# par(mar = c(1, 0, 1, 5))
+
+radarchart(rec4_spider, axistype=0,
+           #custom polygon
+           pcol=pal, pfcol=trans.pal,  plwd=2, plty=1, seg = 3,
+           #custom the grid
+           cglcol="grey", cglty=1, cglwd=0.8,
+           #custom labels
+           vlcex=.9, vlabels = c("ARC", "PDO", "NPGO", "UPW"), 
+           title="What variables are found in top models?")
+
+# legend(x=.9, y=.8, legend = c("Ave Rank", "No. Models", "Highest Rank"), bty = "n", pch=20 , col=pal, text.col = "grey", cex=1, pt.cex=2)
+
+
+# par(op)
+
+
 
 ```
 
 
+# 2b. How do predator interaction strengths compared to variables from other domains (ocean, human)?
+### Distribution of partial derivatives, averaged across stocks, and across years, for each var
+
+```{r}
+
+
+rec4_ESU <-  rec4_ESU %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  group_by(FP) %>% 
+  mutate(mu = mean(value, na.rm=TRUE)) %>%
+  ungroup()
+
+ggplot(rec4_ESU, aes(x = FP, y = value)) + 
+  geom_violin()
+
+ggplot(rec4_ESU, aes(x = value, color = FP, fill = FP)) +
+  geom_density(alpha = 0.4) +
+  geom_vline(aes(xintercept = mu, color = FP),
+             linetype = "dashed")
+
+# Tough to see differences in this style
+unique(rec4_ESU$FP)
+rec4_ESU$FP = factor(rec4_ESU$FP, levels=c('upw.tdmi.5',
+                                                           'pdo.spr.2',
+                                                           'arc.win.2',
+                                                           'npgo.win.3'))
+
+
+
+ggplot(rec4_ESU, aes(x = value, color = FP, fill = FP)) +
+  geom_histogram(position = "identity", alpha = 0.4) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+    geom_vline(aes(xintercept = mu, color = FP),
+             linetype = "dashed")+ 
+  facet_grid(FP ~ .)
+
+ggplot(rec4_ESU, aes(x = value, color = FP, fill = FP)) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+    geom_vline(aes(xintercept = mu, color = FP),
+             linetype = "dashed")+ 
+  facet_grid(FP ~ .)
+
+```
+
+# 3. How do predator interaction strengths (and vars from other domains) vary through time?
+### Times series of partial Derivatives, averaged across stocks, for each var 
+
+```{r}
+ggplot(rec4_ESU, aes(x = year, y = value, fill = FP, color = FP)) +
+  geom_smooth() +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+    geom_hline(aes(yintercept = 0),
+             linetype = "dashed") + 
+  facet_grid(FP ~ .)
+
+rec4_ESU_ts <- rec4_ESU %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP) %>% 
+  summarise(IS = mean(value, na.rm = TRUE), 
+            sd = sd(value, na.rm = TRUE),
+            n = n()) %>%
+  mutate(se = sd / sqrt(n),
+         lower = IS - qt(1 - (0.05 / 2), n - 1) * se,
+         upper = IS + qt(1 - (0.05 / 2), n - 1) * se) %>% 
+  mutate(year = as.integer(year)) %>% 
+ungroup() %>% ungroup() 
+  
+ggplot(rec4_ESU_ts, aes(x = year, color = FP, fill = FP)) +
+  geom_line(aes(y = IS)) +
+  geom_line(aes(y = upper), alpha = 0.5) +
+  geom_line(aes(y = lower), alpha = 0.5) +
+  geom_hline(aes(yintercept = 0),
+             linetype = "dashed") +
+    scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+     facet_grid(FP ~ .)
+ 
+```
+
+```{r}
+rec4_ESU_lines <- rec4_ESU %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP, embedding) %>% 
+  mutate(IS = mean(value)) %>% 
+  mutate(year = as.integer(year))
+
+
+ggplot() +
+  geom_line(rec4_ESU_lines, mapping = aes(x=year, y=IS, col=FP, group=embedding)) +    
+  geom_hline(rec4_ESU_lines, mapping = aes(yintercept = 0),linetype = "dashed", color = "red") +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(9, "Blues"))(8)[4:7]) +
+  geom_line(rec4_ESU_ts, mapping = aes(x=year, y=IS), color = "black") +
+  facet_grid(FP ~ ., scales = "free") +
+  theme_bw()
+
+```
+
+
+#######
+# IMN # 
+#######
+
+# 2a. What variables are in the top models? In what frequency?
+
+```{r}
+ 
+unique(rec4_IMN$FP)  
+
+unique(rec4_IMN$embedding)# 54
+
+rec4_mods <- rec4_IMN %>%
+  group_by(embedding, FP) %>% 
+  summarise() %>% 
+  group_by(FP) %>% 
+  mutate(
+    best_mod = min(embedding), # lowest number (highest rank) model
+    scale_mod = 1 / best_mod, # above expressed as 0-1
+    rank_mod = mean(embedding)/54, # average rank of model that that they are in
+    total_num = length(embedding), # number of models that they are in
+    prop_mod = total_num/54, # proportion of model that they are in 
+    weight = 54-embedding, # reverse of rank
+    integrated = sum(weight)/(54*55/2)) %>% # integrate rank and weight 
+  slice(1) %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  filter(!FP == "flow.gageht.4") %>%
+  ungroup()
+
+unique(rec4_mods$FP)
+
+# organize vars by Ocean, People, Biol
+
+
+```
+
+
+```{r}
+
+trans.pal <- c("#7BCAE44D", "#E47BCA4D", "#CAE47B4D")
+pal <- c("#7BCAE4", "#E47BCA", "#CAE47B")
+
+temp <- rec4_mods %>% 
+  select(FP,prop_mod, scale_mod, rank_mod) %>% 
+  mutate(ord = c(1,5,6,2,7,3,4)) %>% 
+  arrange(ord) 
+
+rec4_spider <- data.frame(rbind(rep(1,7), rep(0,7), 
+                              temp$rank_mod, temp$prop_mod, temp$scale_mod 
+                                ))
+colnames(rec4_spider) <- temp$FP
+
+radarchart(rec4_spider, axistype=0,
+           #custom polygon
+           pcol=pal, pfcol=trans.pal,  plwd=2, plty=1, seg = 3,
+           #custom the grid
+           cglcol="grey", cglty=1, cglwd=0.8,
+           #custom labels
+           vlcex=.9, vlabels = c("CSL", "NPGO", "PDO", "UPW",  "Harvest",
+                                 "Hatchery", "ORCA"), 
+           title="What variables are found in top models?")
+
+```
+
+# 2b. How do predator interaction strengths compared to variables from other domains (ocean, human)?
+### Distribution of partial derivatives, averaged across stocks, and across years, for each var
+
+```{r}
+rec4_IMN<-  rec4_IMN  %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  filter(!grepl("flow", FP)) %>% 
+  group_by(FP) %>% 
+  mutate(mu = mean(value, na.rm=TRUE)) %>%
+  ungroup()
+
+ggplot(rec4_IMN, aes(x = FP, y = value)) + 
+  geom_violin()
+
+rec4_IMN$domain = factor(rec4_IMN$domain, levels = c( "ocean" , "human", "pred"))
+unique(rec4_IMN$FP)
+
+rec4_IMN$FP = factor(rec4_IMN$FP, 
+                levels=c('upw.tdmi.4', 
+                         'pdo.spr.4',
+                         'npgo.yrsum.3',
+                           'hatch.all.1', 
+                         "harv.COL.4",
+                          "csl.males6.5",
+                        "orca.SRKWpodJKL.4"
+                       
+                        ))
+
+ggplot(rec4_IMN, aes(x = value, color = domain, fill = domain)) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+    geom_vline(aes(xintercept = mu, color = domain),
+             linetype = "dashed") + 
+  facet_grid(FP ~ .)
+```
+
+# 3. How do predator interaction strengths (and vars from other domains) vary through time?
+### Times series of partial Derivatives, averaged across stocks, for each var 
+```{r}
+ggplot(rec4_IMN, aes(x = year, y = value, fill = domain, color = domain)) +
+  geom_smooth() +
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+    geom_hline(aes(yintercept = 0),
+             linetype = "dashed") + 
+  facet_grid(FP ~ ., scales = "free")
+```
+
+```{r}
+
+rec4_IMN_ts <- rec4_IMN %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP) %>% 
+  mutate(IS = mean(value, na.rm = TRUE), 
+            sd = sd(value, na.rm = TRUE),
+            n = n()) %>% 
+  mutate(se = sd / sqrt(n),
+         lower = IS - qt(1 - (0.05 / 2), n - 1) * se,
+         upper = IS + qt(1 - (0.05 / 2), n - 1) * se) %>% 
+  mutate(year = as.integer(year))
+  
+ggplot(rec4_IMN_ts, aes(x = year, color = domain, fill = domain)) +
+  geom_line(aes(y = IS)) +
+  geom_line(aes(y = upper), alpha = 0.5) +
+  geom_line(aes(y = lower), alpha = 0.5) +
+  geom_hline(aes(yintercept = 0),
+             linetype = "dashed") +
+    scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+     facet_wrap(~ FP + domain, scales = "free")
+ 
+```
+
+```{r}
+rec4_IMN_lines <- rec4_IMN %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP, embedding) %>% 
+  mutate(IS = mean(value)) %>% 
+  mutate(year = as.integer(year))
+
+
+ggplot() +
+  geom_line(rec4_IMN_lines, mapping = aes(x=year, y=IS, col=domain, group=embedding)) + 
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+  geom_hline(rec4_IMN_lines, mapping = aes(yintercept = 0),linetype = "dashed", color = "red") +
+  geom_line(rec4_IMN_ts, mapping = aes(x=year, y=IS), color = "black") +
+  facet_wrap(FP + domain ~ ., scales = "free") +
+  theme_bw()
+
+```
+
+
+#######
+# MFS # 
+#######
+
+
+```{r}
+ 
+unique(rec4_MFS$FP) 
+unique(rec4_MFS$embedding)
+
+rec4_mods <- rec4_MFS %>%
+  group_by(embedding, FP) %>% 
+  summarise() %>% 
+  group_by(FP) %>% 
+  mutate(
+    best_mod = min(embedding), # lowest number (highest rank) model
+    scale_mod = 1 / best_mod, # above expressed as 0-1
+    rank_mod = mean(embedding)/44, # average rank of model that that they are in
+    total_num = length(embedding), # number of models that they are in
+    prop_mod = total_num/44, # proportion of model that they are in 
+    weight = 44-embedding, # reverse of rank
+    integrated = sum(weight)/(44*45/2)) %>% # integrate rank and weight 
+  slice(1) %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  arrange(prop_mod) %>% 
+  ungroup()
+
+unique(rec4_mods$FP)
+
+```
+
+
+```{r}
+temp <- rec4_mods %>% 
+  select(FP, prop_mod, scale_mod, rank_mod) %>% 
+  mutate(ord = c(1,2,4,3,5,6)) %>% 
+  arrange(ord) 
+
+rec4_spider <- data.frame(rbind(rep(1,6), rep(0,6), 
+                              temp$rank_mod, temp$prop_mod, temp$scale_mod 
+                                ))
+colnames(rec4_spider) <- temp$FP
+
+trans.pal <- c("#7BCAE44D", "#E47BCA4D", "#CAE47B4D")
+pal <- c("#7BCAE4", "#E47BCA", "#CAE47B")
+
+# op <- par(mar = c(1, 1, 1, 1))
+# par(mar = c(1, 0, 1, 5))
+
+radarchart(rec4_spider, axistype=0,
+           #custom polygon
+           pcol=pal, pfcol=trans.pal,  plwd=2, plty=1, seg = 3,
+           #custom the grid
+           cglcol="grey", cglty=1, cglwd=0.8,
+           #custom labels
+           vlcex=.9, vlabels = c("Hatchery", "NPGO", "PDO", "UPW", "ARC", "Harvest"), 
+           title="What variables are found in top models?")
+
+# legend(x=.9, y=.8, legend = c("Ave Rank", "No. Models", "Highest Rank"), bty = "n", pch=20 , col=pal, text.col = "grey", cex=1, pt.cex=2)
+
+
+# par(op)
+
+
+
+```
+# 2b. How do predator interaction strengths compared to variables from other domains (ocean, human)?
+
+### Partial Derivatives, averaged across stocks, and across years, for each 
+
+
+
+```{r}
+rec4_MFS<-  rec4_MFS  %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  filter(!grepl("flow", FP)) %>% 
+  group_by(FP) %>% 
+  mutate(mu = mean(value, na.rm=TRUE)) %>%
+  ungroup()
+
+ggplot(rec4_MFS, aes(x = FP, y = value)) + 
+  geom_violin()
+
+rec4_MFS$domain = factor(rec4_MFS$domain, levels = c( "ocean", "pred", "human"))
+unique(rec4_MFS$FP) 
+rec4_MFS$FP = factor(rec4_MFS$FP, 
+                levels=c('arc.win.5',
+                         'upw.tdmi.4', 
+                         'pdo.sum.2',
+                         'npgo.spr.3',
+                         'hatch.SNAK.3', 
+                         "harv.CRsport.4"
+                        ))
+
+ggplot(rec4_MFS, aes(x = year, y = value, fill = domain, color = domain)) +
+  geom_smooth() +
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+    geom_hline(aes(yintercept = 0),
+             linetype = "dashed") + 
+  facet_grid(FP ~ ., scales = "free")
+
+# distribution
+
+ggplot(rec4_MFS, aes(x = value, color = domain, fill = domain)) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+    geom_vline(aes(xintercept = mu, color = domain),
+             linetype = "dashed") + 
+  facet_grid(FP ~ .)
+```
+# 3. How do predator interaction strengths (and vars from other domains) vary through time?
+### Times series of partial Derivatives, averaged across stocks, for each var 
+
+```{r}
+
+rec4_MFS_ts <- rec4_MFS %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP) %>% 
+  mutate(IS = mean(value, na.rm = TRUE), 
+            sd = sd(value, na.rm = TRUE),
+            n = n()) %>% 
+  mutate(se = sd / sqrt(n),
+         lower = IS - qt(1 - (0.05 / 2), n - 1) * se,
+         upper = IS + qt(1 - (0.05 / 2), n - 1) * se) %>% 
+  mutate(year = as.integer(year))
+  
+ggplot(rec4_MFS_ts, aes(x = year, color = domain, fill = domain)) +
+  geom_line(aes(y = IS)) +
+  geom_line(aes(y = upper), alpha = 0.5) +
+  geom_line(aes(y = lower), alpha = 0.5) +
+  geom_hline(aes(yintercept = 0),
+             linetype = "dashed") +
+    scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+     facet_wrap(~ FP + domain, scales = "free")
+ 
+```
+
+```{r}
+rec4_MFS_lines <- rec4_MFS %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP, embedding) %>% 
+  mutate(IS = mean(value)) %>% 
+  mutate(year = as.integer(year))
+
+
+ggplot() +
+  geom_line(rec4_MFS_lines, mapping = aes(x=year, y=IS, col=domain, group=embedding)) + 
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+  geom_hline(rec4_MFS_lines, mapping = aes(yintercept = 0),linetype = "dashed", color = "red") +
+  geom_line(rec4_MFS_ts, mapping = aes(x=year, y=IS), color = "black") +
+  facet_wrap(FP + domain ~ ., scales = "free") +
+  theme_bw()
+
+```
+
+
+
+#######
+# UPS # 
+#######
+
+# 2a. What variables are in the top models? In what frequency?
+### To do that right, we need to actually through ALL the vars in the SMAP hopper, not just the top ones
+### But I can get an highest and average rank model that each var shows up in
+
+
+```{r}
+ 
+unique(rec4_UPS$FP)     
+
+rec4_mods <- rec4_UPS %>%
+  group_by(embedding, FP) %>% 
+  summarise() %>% 
+  group_by(FP) %>% 
+  mutate(
+    best_mod = min(embedding), # lowest number (highest rank) model
+    scale_mod = 1 / best_mod, # above expressed as 0-1
+    rank_mod = mean(embedding)/16, # average rank of model that that they are in
+    total_num = length(embedding), # number of models that they are in
+    prop_mod = total_num/12, # proportion of model that they are in 
+    weight = 17-embedding, # reverse of rank
+    integrated = sum(weight)/(16*17/2)) %>% # integrate rank and weight 
+  slice(1) %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  arrange(prop_mod) %>% 
+  filter(!FP == "flow.mean.1") %>% 
+  filter(!FP == "hseal.COL.3") %>%
+  ungroup()
+
+rec4_mods$FP <- factor(rec4_mods$FP, levels = c("npgo.spr.2", 
+                                                "pdo.sum.5", 
+                                                "upw.tdmi.5",
+                                                "harv.PACtot.5",
+                                                "hatch.total.1", 
+                                                "csl.Dpups.0",
+                                                "orca.SRKWdeathsJKL.5", 
+                                                "ssl.COL.4"))
+
+
+# organize vars by Ocean, People, Biol
+
+levels(rec4_mods$FP)
+
+
+```
+
+
+
+```{r}
+temp <- rec4_mods %>% 
+  select(FP, prop_mod, scale_mod, rank_mod) %>% 
+  mutate(ord = c(2,1,7,3,4,5,6,8)) %>% 
+  arrange(ord) 
+
+rec4_spider <- data.frame(rbind(rep(1,8), rep(0,8), 
+                              temp$rank_mod, temp$prop_mod, temp$scale_mod 
+                                ))
+colnames(rec4_spider) <- temp$FP
+
+trans.pal <- c("#7BCAE44D", "#E47BCA4D", "#CAE47B4D")
+pal <- c("#7BCAE4", "#E47BCA", "#CAE47B")
+
+# op <- par(mar = c(1, 1, 1, 1))
+# par(mar = c(1, 0, 1, 5))
+
+radarchart(rec4_spider, axistype=0,
+           #custom polygon
+           pcol=pal, pfcol=trans.pal,  plwd=2, plty=1, seg = 3,
+           #custom the grid
+           cglcol="grey", cglty=1, cglwd=0.8,
+           #custom labels
+           vlcex=.9, vlabels = c("CSL", "NPGO", "PDO", "UPW",  "Harvest",
+                                 "Hatchery", "ORCA", "SSL"), 
+           title="What variables are found in top models?")
+
+# legend(x=.9, y=.8, legend = c("Ave Rank", "No. Models", "Highest Rank"), bty = "n", pch=20 , col=pal, text.col = "grey", cex=1, pt.cex=2)
+
+
+# par(op)
+
+
+
+```
+
+
+# 2b. How do predator interaction strengths compared to variables from other domains (ocean, human)?
+
+### Partial Derivatives, averaged across stocks, and across years, for each 
+
+
+
+```{r}
+rec4_UPS<-  rec4_UPS  %>% 
+  filter(!grepl("rec4", FP)) %>% 
+  filter(!grepl("flow", FP)) %>% 
+  group_by(FP) %>% 
+  mutate(mu = mean(value, na.rm=TRUE)) %>%
+  ungroup()
+
+ggplot(rec4_UPS, aes(x = FP, y = value)) + 
+  geom_violin()
+
+rec4_UPS$domain = factor(rec4_UPS$domain, levels = c( "ocean", "pred", "human"))
+
+rec4_UPS$FP = factor(rec4_UPS$FP, 
+                levels=c('upw.tdmi.5', 
+                         'pdo.sum.5',
+                         'npgo.spr.2',
+                         'hatch.total.1', 
+                         "harv.PACtot.5",
+                         "hseal.COL.3",
+                        "csl.Dpups.0",
+                        "ssl.COL.4",
+                        "orca.SRKWdeathsJKL.5"
+                        ))
+
+ggplot(rec4_UPS, aes(x = value, color = domain, fill = domain)) +
+  geom_density(alpha = 0.4) +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+    geom_vline(aes(xintercept = mu, color = domain),
+             linetype = "dashed") + 
+  facet_grid(FP ~ .)
+
+
+```
+
+# 3. How do predator interaction strengths (and vars from other domains) vary through time?
+### Times series of partial Derivatives, averaged across stocks, for each var 
+
+```{r}
+
+ggplot(rec4_UPS, aes(x = year, y = value, fill = domain, color = domain)) +
+  geom_smooth() +
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+    geom_hline(aes(yintercept = 0),
+             linetype = "dashed") + 
+  facet_grid(FP ~ ., scales = "free")
+
+rec4_UPS_ts <- rec4_UPS %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP) %>% 
+  mutate(IS = mean(value, na.rm = TRUE), 
+            sd = sd(value, na.rm = TRUE),
+            n = n()) %>% 
+  mutate(se = sd / sqrt(n),
+         lower = IS - qt(1 - (0.05 / 2), n - 1) * se,
+         upper = IS + qt(1 - (0.05 / 2), n - 1) * se) %>% 
+  mutate(year = as.integer(year))
+  
+ggplot(rec4_UPS_ts, aes(x = year, color = domain, fill = domain)) +
+  geom_line(aes(y = IS)) +
+  geom_line(aes(y = upper), alpha = 0.5) +
+  geom_line(aes(y = lower), alpha = 0.5) +
+  geom_hline(aes(yintercept = 0),
+             linetype = "dashed") +
+    scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+     facet_wrap(~ FP + domain, scales = "free")
+ 
+```
+
+```{r}
+rec4_UPS_lines <- rec4_UPS %>% 
+  filter(year > 1957) %>%
+  filter(year < 2016) %>% 
+  mutate(year = factor(year)) %>% 
+  group_by(year, FP, embedding) %>% 
+  mutate(IS = mean(value)) %>% 
+  mutate(year = as.integer(year))
+
+
+ggplot() +
+  geom_line(rec4_UPS_lines, mapping = aes(x=year, y=IS, col=domain, group=embedding)) + 
+  scale_fill_manual(values = pal) +
+  scale_color_manual(values = pal) +
+  geom_hline(rec4_UPS_lines, mapping = aes(yintercept = 0),linetype = "dashed", color = "red") +
+  geom_line(rec4_UPS_ts, mapping = aes(x=year, y=IS), color = "black") +
+  facet_wrap(FP + domain ~ ., scales = "free") +
+  theme_bw()
+
+```
+
+
+# Fin
