@@ -1,0 +1,127 @@
+---
+title: "5_Vis_Env_gradients"
+author: "Kurt Ingeman"
+date: "9/29/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+```{r, include=FALSE}
+
+library(here)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(RColorBrewer)
+library(kableExtra)
+
+```
+
+## load data
+```{r}
+load(here("CORE EDM analysis", "Output", "Rdata", "4_IS", "SMAP_best_embeddings_Imnaha_rec4n.RData")) 
+rec4_IMN <- out_results
+rm(out_results)
+
+```
+
+## select models
+```{r}
+
+unique(rec4_IMN$FP)
+
+pdo_mods <- rec4_IMN %>% 
+  group_by(embedding) %>% 
+  summarise(vars = unique(FP)) %>% 
+  group_by(vars) %>% 
+  summarise(mods = unique(embedding)) %>% 
+  filter(vars == "pdo.spr.4")
+
+pdo_vec <- pdo_mods$mods
+
+srkw_mods <- rec4_IMN %>% 
+  group_by(embedding) %>% 
+  summarise(vars = unique(FP)) %>% 
+  group_by(vars) %>% 
+  summarise(mods = unique(embedding)) %>% 
+  filter(vars == "orca.SRKWpodJKL.4")
+
+srkw_vec <- srkw_mods$mods
+
+comb_vec <- intersect(srkw_vec, pdo_vec)
+
+mods_pdo_srkw <- rec4_IMN %>% 
+  filter(embedding %in% comb_vec) %>% 
+  filter(FP == "orca.SRKWpodJKL.4" |FP == "pdo.spr.4")
+
+unique(mods_pdo_srkw$embedding)
+
+
+```
+
+```{r}
+
+mods_pdo_srkw <- mods_pdo_srkw %>% 
+  select(-FP)
+
+partdiffs<-  mods_pdo_srkw %>% 
+  pivot_wider(names_from = name, values_from = value) %>% 
+  select(3, 10:11, 13:14)
+
+names(partdiffs)
+
+colnames(partdiffs) <-c('emb','stk','year','dSrkw', 'dPdo')
+
+```
+
+
+```{r}
+
+qL <- rq(partdiffs$dSrkw ~ partdiffs$dPdo,.01) 
+qU <- rq(partdiffs$dSrkw ~ partdiffs$dPdo,.99)
+
+plot(partdiffs$dPdo, partdiffs$dSrkw, xlim=c(-.25,.2), ylim=c(-.4,.25),pch=8)
+abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col= 'red', lwd = 2)
+abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red', lwd = 2) 
+```
+
+```{r}
+
+load(here("CORE EDM analysis", "Data", "Rdata", "norm_block_data.Rdata")) 
+
+target_vars <- norm_block_data %>% 
+  select(year, pdo.spr.4) %>% 
+  group_by(year) %>% 
+  slice(1)
+
+coeffs <- left_join(partdiffs, target_vars, by = "year")
+
+qL <- rq(coeffs$dSrkw ~ coeffs$pdo.spr.4,.01) 
+qU <- rq(coeffs$dSrkw ~ coeffs$pdo.spr.4,.99)
+
+plot(coeffs$pdo.spr.4, partdiffs$dSrkw, xlim=c(-2,2), ylim=c(-.6,.3),pch=8)
+abline(a=qL$coefficients[1],b=qL$coefficients[2],lty=2,col= 'red', lwd = 2)
+abline(a=qU$coefficients[1],b=qU$coefficients[2],lty=2,col='red', lwd = 2) 
+
+```
+
+
+
+```{r}
+mods_pdo_srkw
+
+coeffs <- left_join(mods_pdo_srkw, target_vars, by = "year")
+
+ggplot(coeffs, aes(x = pdo.spr.4, y = value, color = stk)) +
+  geom_point(pch = 8) +
+  theme_classic()
+
+
+```
+
